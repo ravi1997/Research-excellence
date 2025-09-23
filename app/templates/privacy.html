@@ -1,0 +1,57 @@
+{% extends "layout.html" %}
+
+{% block title %}Privacy Policy - Research Excellence{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="legal-container">
+        <h1>Privacy Policy</h1>
+        <p class="effective-date">Effective Date: {{ effective_date.strftime('%B %d, %Y') }}</p>
+        
+        <section class="legal-section">
+            <h2>1. Information We Collect</h2>
+            <p>We collect information you provide directly to us, such as when you create an account, update your profile, or communicate with us. This may include your name, email address, employee ID, mobile number, and research-related information.</p>
+        </section>
+        
+        <section class="legal-section">
+            <h2>2. How We Use Information</h2>
+            <p>We use the information we collect to provide, maintain, and improve our services, to communicate with you, and to comply with legal obligations.</p>
+        </section>
+        
+        <section class="legal-section">
+            <h2>3. Information Sharing</h2>
+            <p>We do not share your personal information with third parties except as necessary to provide our services, comply with the law, or protect our rights and property.</p>
+        </section>
+        
+        <section class="legal-section">
+            <h2>4. Data Security</h2>
+            <p>We implement appropriate technical and organizational measures to protect your personal information against unauthorized or unlawful processing and against accidental loss, destruction, or damage.</p>
+        </section>
+        
+        <section class="legal-section">
+            <h2>5. Data Retention</h2>
+            <p>We retain your personal information for as long as necessary to provide our services and comply with legal obligations.</p>
+        </section>
+        
+        <section class="legal-section">
+            <h2>6. Your Rights</h2>
+            <p>You have the right to access, correct, or delete your personal information. You may also have the right to object to or restrict certain processing activities.</p>
+        </section>
+        
+        <section class="legal-section">
+            <h2>7. Cookies and Tracking</h2>
+            <p>We use cookies and similar tracking technologies to collect information about your browsing activities. You can control cookies through your browser settings.</p>
+        </section>
+        
+        <section class="legal-section">
+            <h2>8. Changes to This Policy</h2>
+            <p>We may update this Privacy Policy from time to time. We will notify you of any material changes by posting the new policy on this page.</p>
+        </section>
+        
+        <section class="legal-section">
+            <h2>9. Contact Us</h2>
+            <p>If you have any questions about this Privacy Policy, please contact our Data Protection Officer at dpo@aiims.edu.</p>
+        </section>
+    </div>
+</div>
+{% endblock %}

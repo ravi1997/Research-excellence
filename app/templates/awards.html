@@ -1,0 +1,70 @@
+{% extends "layout.html" %}
+
+{% block title %}Awards - Research Excellence{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="research-container">
+        <h2>Research Awards</h2>
+        
+        <div class="research-filters">
+            <div class="filter-group">
+                <label for="year-filter">Year:</label>
+                <select id="year-filter">
+                    <option value="all">All Years</option>
+                    <!-- Years will be populated by JavaScript -->
+                </select>
+            </div>
+            
+            <div class="filter-group">
+                <label for="category-filter">Category:</label>
+                <select id="category-filter">
+                    <option value="all">All Categories</option>
+                    <!-- Categories will be populated by JavaScript -->
+                </select>
+            </div>
+            
+            <div class="filter-group">
+                <label for="status-filter">Status:</label>
+                <select id="status-filter">
+                    <option value="all">All Statuses</option>
+                    <option value="pending">Pending</option>
+                    <option value="under_review">Under Review</option>
+                    <option value="accepted">Accepted</option>
+                    <option value="rejected">Rejected</option>
+                </select>
+            </div>
+            
+            <button id="apply-filters" class="btn btn-primary">Apply Filters</button>
+        </div>
+        
+        <div class="awards-list">
+            <div class="award-item" id="award-template" style="display: none;">
+                <div class="award-header">
+                    <h3 class="award-title"></h3>
+                    <span class="award-recipient"></span>
+                </div>
+                <div class="award-details">
+                    <p class="award-category"></p>
+                    <p class="award-date"></p>
+                    <p class="award-description"></p>
+                </div>
+                <div class="award-status">
+                    <span class="status-badge"></span>
+                </div>
+            </div>
+            <!-- Awards will be populated by JavaScript -->
+        </div>
+        
+        <div class="pagination">
+            <button id="prev-page" class="btn btn-secondary">Previous</button>
+            <span id="page-info">Page 1 of 1</span>
+            <button id="next-page" class="btn btn-secondary">Next</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/awards.js') }}"></script>
+{% endblock %}

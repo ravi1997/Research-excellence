@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:13
+    environment:
+      POSTGRES_DB: research_excellence
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: mypassword
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  app:
+    build: .
+    environment:
+      - FLASK_ENV=development
+      - DATABASE_URI=postgresql://postgres:mypassword@db:5432/research_excellence
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=supersecret
+      - JWT_SECRET_KEY=superjwtsecret
+    ports:
+      - "5500:5500"
+    volumes:
+      - .:/app
+    depends_on:
+      - db
+      - redis
+    command: flask run --host=0.0.0.0 --port=5500
+
+volumes:
+  postgres_data:

@@ -1,0 +1,118 @@
+{% extends "layout.html" %}
+
+{% block title %}Admin Dashboard - Research Excellence{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="admin-container">
+        <div class="mb-6">
+            <h2 class="text-2xl font-bold text-gradient">Admin Dashboard</h2>
+            <p class="text-gray-600">Manage users and monitor system activity</p>
+        </div>
+        
+        <div class="dashboard-stats mb-8">
+            <div class="stat-card">
+                <div class="stat-card-header">
+                    <h3>Total Users</h3>
+                </div>
+                <div class="stat-card-body">
+                    <p id="total-users">0</p>
+                    <div class="trend up">
+                        <span>+5% from last month</span>
+                    </div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-card-header">
+                    <h3>Active Users</h3>
+                </div>
+                <div class="stat-card-body">
+                    <p id="active-users">0</p>
+                    <div class="trend up">
+                        <span>+12% from last week</span>
+                    </div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-card-header">
+                    <h3>Unverified Users</h3>
+                </div>
+                <div class="stat-card-body">
+                    <p id="unverified-users">0</p>
+                    <div class="trend down">
+                        <span>-3% from last week</span>
+                    </div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-card-header">
+                    <h3>Research Projects</h3>
+                </div>
+                <div class="stat-card-body">
+                    <p id="research-projects">0</p>
+                    <div class="trend up">
+                        <span>+8% from last month</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Quick Actions</h3>
+                </div>
+                <div class="card-body">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <a href="{{ url_for('view_bp.superadmin_users_management_page') }}" class="btn btn-secondary">Manage Users</a>
+                        <a href="{{ url_for('view_bp.admin_unverified_page') }}" class="btn btn-secondary">Verify Users</a>
+                        <a href="{{ url_for('view_bp.super_audit_page') }}" class="btn btn-secondary">View Logs</a>
+                        <button class="btn btn-outline">System Reports</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Recent Activity</h3>
+                </div>
+                <div class="card-body">
+                    <div class="space-y-3">
+                        <div class="flex items-start">
+                            <div class="bg-blue-100 p-2 rounded-lg mr-3">
+                                <span class="text-blue-600">👤</span>
+                            </div>
+                            <div>
+                                <p class="font-medium">New user registered</p>
+                                <p class="text-sm text-gray-600">Dr. John Smith registered 2 hours ago</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start">
+                            <div class="bg-green-100 p-2 rounded-lg mr-3">
+                                <span class="text-green-600">✅</span>
+                            </div>
+                            <div>
+                                <p class="font-medium">User verified</p>
+                                <p class="text-sm text-gray-600">Dr. Jane Johnson verified 4 hours ago</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start">
+                            <div class="bg-amber-100 p-2 rounded-lg mr-3">
+                                <span class="text-amber-600">📝</span>
+                            </div>
+                            <div>
+                                <p class="font-medium">Research submitted</p>
+                                <p class="text-sm text-gray-600">New abstract submitted 1 day ago</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/admin_dashboard.js') }}"></script>
+{% endblock %}

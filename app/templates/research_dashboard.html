@@ -1,0 +1,151 @@
+{% extends "layout.html" %}
+
+{% block title %}Research Dashboard - Research Excellence{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="research-container">
+        <div class="mb-6">
+            <h2 class="text-2xl font-bold text-gradient">Research Dashboard</h2>
+            <p class="text-gray-600">Track your research activities and achievements</p>
+        </div>
+        
+        <div class="dashboard-stats mb-8">
+            <div class="stat-card">
+                <div class="stat-card-header">
+                    <h3>Active Projects</h3>
+                </div>
+                <div class="stat-card-body">
+                    <p id="active-projects">0</p>
+                    <div class="trend up">
+                        <span>+2 from last month</span>
+                    </div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-card-header">
+                    <h3>Publications</h3>
+                </div>
+                <div class="stat-card-body">
+                    <p id="publications">0</p>
+                    <div class="trend up">
+                        <span>+1 this quarter</span>
+                    </div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-card-header">
+                    <h3>Awards</h3>
+                </div>
+                <div class="stat-card-body">
+                    <p id="awards">0</p>
+                    <div class="trend">
+                        <span>No change</span>
+                    </div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-card-header">
+                    <h3>Citations</h3>
+                </div>
+                <div class="stat-card-body">
+                    <p id="citations">0</p>
+                    <div class="trend up">
+                        <span>+15 from last month</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <div class="lg:col-span-2">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Quick Actions</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <button id="new-project-btn" class="btn btn-primary">New Research Project</button>
+                            <button id="submit-abstract-btn" class="btn btn-secondary">Submit Abstract</button>
+                            <button id="submit-award-btn" class="btn btn-secondary">Submit Award</button>
+                            <button id="view-reports-btn" class="btn btn-outline">View Reports</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Upcoming Deadlines</h3>
+                </div>
+                <div class="card-body">
+                    <div class="space-y-3">
+                        <div class="research-item">
+                            <h4 class="font-medium">Abstract Submission</h4>
+                            <p class="text-sm text-gray-600">Due: Sep 30, 2025</p>
+                            <span class="status-badge status-pending">15 days left</span>
+                        </div>
+                        <div class="research-item">
+                            <h4 class="font-medium">Annual Report</h4>
+                            <p class="text-sm text-gray-600">Due: Oct 15, 2025</p>
+                            <span class="status-badge status-warning">30 days left</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Ongoing Research</h3>
+                </div>
+                <div class="card-body">
+                    <div class="space-y-4" id="ongoing-research">
+                        <div class="research-item">
+                            <h4>Cancer Research Initiative</h4>
+                            <p class="text-sm text-gray-600 mb-2">Status: In Progress</p>
+                            <div class="progress-bar">
+                                <div class="progress" style="width: 75%"></div>
+                            </div>
+                            <p class="text-sm text-gray-600 mt-1">75% Complete</p>
+                        </div>
+                        <div class="research-item">
+                            <h4>Cardiovascular Disease Study</h4>
+                            <p class="text-sm text-gray-600 mb-2">Status: In Progress</p>
+                            <div class="progress-bar">
+                                <div class="progress" style="width: 40%"></div>
+                            </div>
+                            <p class="text-sm text-gray-600 mt-1">40% Complete</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Recent Publications</h3>
+                </div>
+                <div class="card-body">
+                    <div class="space-y-4" id="recent-publications">
+                        <div class="publication-item">
+                            <h4>Novel Approaches to Cancer Treatment</h4>
+                            <p class="text-sm text-gray-600">Dr. Smith, Dr. Johnson</p>
+                            <p class="text-sm text-gray-500">Nature Medicine • Aug 15, 2025</p>
+                        </div>
+                        <div class="publication-item">
+                            <h4>Advances in Cardiovascular Surgery</h4>
+                            <p class="text-sm text-gray-600">Dr. Williams, Dr. Brown</p>
+                            <p class="text-sm text-gray-500">The Lancet • Jul 22, 2025</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/research_dashboard.js') }}"></script>
+{% endblock %}

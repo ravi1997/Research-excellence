@@ -1,0 +1,68 @@
+{% extends "layout.html" %}
+
+{% block title %}Profile - Research Excellence{% endblock %}
+{% block content %}
+<!-- Page header -->
+<div class="flex flex-col justify-between items-center">
+    <div class="w-1/2">
+
+        <section class="mb-6">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div class="flex items-center gap-4">
+                    <div id="avatarWrap"
+                        class="w-16 h-16 rounded-full bg-[color:var(--brand-100)] overflow-hidden flex items-center justify-center">
+                        <img id="avatarImg" class="w-full h-full object-cover hidden" alt="Avatar" />
+                        <span id="avatarFallback" class="text-xl font-bold text-[color:var(--brand-700)]">U</span>
+                    </div>
+                    <div>
+                        <h1 id="profName" class="text-2xl font-extrabold text-[color:var(--text)]">Your Profile</h1>
+                        <p id="profSub" class="muted text-sm">Loading account details…</p>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- Main content -->
+        <section class="grid grid-cols-1 lg:grid-cols-[2fr,1fr] gap-6">
+            <!-- Right: profile card -->
+            <aside class="card p-4 space-y-4">
+                <h3 class="text-lg font-bold text-[color:var(--text)]">Account</h3>
+
+                <div class="space-y-2 text-sm">
+                    <div class="flex items-center justify-between">
+                        <span class="muted">Email</span>
+                        <span id="infoEmail" class="font-medium text-[color:var(--text)]">—</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="muted">Username</span>
+                        <span id="infoUsername" class="font-medium text-[color:var(--text)]">—</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="muted">Mobile</span>
+                        <span id="infoMobile" class="font-medium text-[color:var(--text)]">—</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="muted">Roles</span>
+                        <span id="infoRoles" class="font-medium text-[color:var(--text)]">—</span>
+                    </div>
+                </div>
+
+                <hr class="hr" />
+
+                <div class="space-y-2">
+                    <button id="logoutBtn"
+                        class="btn-ghost w-full text-center px-3 py-2 rounded-lg border border-[color:var(--border)]">Logout</button>
+                    <a class="hidden btn-ghost w-full text-center px-3 py-2 rounded-lg border border-[color:var(--danger)] text-[color:var(--danger)] no-underline"
+                        href="/video/delete-account">Delete account</a>
+                </div>
+            </aside>
+        </section>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/profile.js') }}"></script>
+{% endblock %}

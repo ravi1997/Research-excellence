@@ -1,0 +1,70 @@
+{% extends "layout.html" %}
+
+{% block title %}Audit Logs - Super Admin{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="admin-container">
+        <h2>Audit Logs</h2>
+        <p>System activity and security events</p>
+        
+        <div class="audit-filters">
+            <div class="filter-group">
+                <label for="date-range">Date Range:</label>
+                <select id="date-range">
+                    <option value="today">Today</option>
+                    <option value="week" selected>Last Week</option>
+                    <option value="month">Last Month</option>
+                    <option value="custom">Custom Range</option>
+                </select>
+            </div>
+            
+            <div class="filter-group">
+                <label for="event-type">Event Type:</label>
+                <select id="event-type">
+                    <option value="all">All Events</option>
+                    <option value="login">Login/Logout</option>
+                    <option value="user">User Management</option>
+                    <option value="admin">Admin Actions</option>
+                    <option value="security">Security Events</option>
+                </select>
+            </div>
+            
+            <div class="filter-group">
+                <label for="user-filter">User:</label>
+                <input type="text" id="user-filter" placeholder="Filter by username">
+            </div>
+            
+            <button id="apply-filters" class="btn btn-primary">Apply Filters</button>
+            <button id="export-logs" class="btn btn-secondary">Export Logs</button>
+        </div>
+        
+        <div class="audit-table-container">
+            <table class="audit-table">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Event</th>
+                        <th>User</th>
+                        <th>IP Address</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody id="audit-table-body">
+                    <!-- Logs will be populated by JavaScript -->
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="pagination">
+            <button id="prev-page" class="btn btn-secondary">Previous</button>
+            <span id="page-info">Page 1 of 1</span>
+            <button id="next-page" class="btn btn-secondary">Next</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/super_audit.js') }}"></script>
+{% endblock %}

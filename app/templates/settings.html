@@ -1,0 +1,108 @@
+{% extends "layout.html" %}
+
+{% block title %}Settings - Research Excellence{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="settings-container">
+        <h2>Account Settings</h2>
+        
+        <div class="settings-tabs">
+            <button class="tab-button active" data-tab="preferences">Preferences</button>
+            <button class="tab-button" data-tab="notifications">Notifications</button>
+            <button class="tab-button" data-tab="security">Security</button>
+            <button class="tab-button" data-tab="privacy">Privacy</button>
+        </div>
+        
+        <div class="tab-content active" id="preferences-tab">
+            <h4>Preferences</h4>
+            <form id="preferences-form">
+                <div class="form-group">
+                    <label for="theme">Theme</label>
+                    <select id="theme" name="theme">
+                        <option value="light">Light</option>
+                        <option value="dark">Dark</option>
+                        <option value="system">System Default</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="language">Language</label>
+                    <select id="language" name="language">
+                        <option value="en">English</option>
+                        <option value="hi">Hindi</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="timezone">Timezone</label>
+                    <select id="timezone" name="timezone">
+                        <option value="UTC">UTC</option>
+                        <option value="Asia/Kolkata">Asia/Kolkata</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <button type="submit" class="btn btn-primary">Save Preferences</button>
+                </div>
+            </form>
+        </div>
+        
+        <div class="tab-content" id="notifications-tab">
+            <h4>Notification Settings</h4>
+            <form id="notifications-form">
+                <div class="form-group checkbox-group">
+                    <input type="checkbox" id="email_updates" name="email_updates">
+                    <label for="email_updates">Receive email updates</label>
+                </div>
+                
+                <div class="form-group checkbox-group">
+                    <input type="checkbox" id="weekly_digest" name="weekly_digest">
+                    <label for="weekly_digest">Weekly research digest</label>
+                </div>
+                
+                <div class="form-group checkbox-group">
+                    <input type="checkbox" id="deadline_reminders" name="deadline_reminders">
+                    <label for="deadline_reminders">Research deadline reminders</label>
+                </div>
+                
+                <div class="form-group">
+                    <button type="submit" class="btn btn-primary">Save Notification Settings</button>
+                </div>
+            </form>
+        </div>
+        
+        <div class="tab-content" id="security-tab">
+            <h4>Security</h4>
+            <div class="security-actions">
+                <button class="btn btn-warning" id="change-password-btn">Change Password</button>
+                <button class="btn btn-secondary">Two-Factor Authentication</button>
+                <button class="btn btn-secondary">Active Sessions</button>
+            </div>
+        </div>
+        
+        <div class="tab-content" id="privacy-tab">
+            <h4>Privacy Settings</h4>
+            <form id="privacy-form">
+                <div class="form-group checkbox-group">
+                    <input type="checkbox" id="private_profile" name="private_profile">
+                    <label for="private_profile">Make profile private</label>
+                </div>
+                
+                <div class="form-group checkbox-group">
+                    <input type="checkbox" id="hide_email" name="hide_email">
+                    <label for="hide_email">Hide email from public</label>
+                </div>
+                
+                <div class="form-group">
+                    <button type="submit" class="btn btn-primary">Save Privacy Settings</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/settings.js') }}"></script>
+{% endblock %}

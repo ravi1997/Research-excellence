@@ -1,0 +1,84 @@
+{% extends "layout.html" %}
+
+{% block title %}Super Admin Overview - Research Excellence{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="admin-container">
+        <h2>Super Admin Overview</h2>
+        
+        <div class="overview-sections">
+            <div class="overview-section">
+                <h3>System Status</h3>
+                <div class="status-grid">
+                    <div class="status-item">
+                        <span class="status-label">Database:</span>
+                        <span class="status-value" id="db-status">Connected</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Application:</span>
+                        <span class="status-value" id="app-status">Running</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Last Restart:</span>
+                        <span class="status-value" id="last-restart">-</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="overview-section">
+                <h3>User Statistics</h3>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <span class="stat-label">Total Users:</span>
+                        <span class="stat-value" id="total-users">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Super Admins:</span>
+                        <span class="stat-value" id="super-admins">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Admins:</span>
+                        <span class="stat-value" id="admins">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Researchers:</span>
+                        <span class="stat-value" id="researchers">0</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="overview-section">
+                <h3>Research Metrics</h3>
+                <div class="metrics-grid">
+                    <div class="metric-item">
+                        <span class="metric-label">Active Projects:</span>
+                        <span class="metric-value" id="active-projects">0</span>
+                    </div>
+                    <div class="metric-item">
+                        <span class="metric-label">Publications:</span>
+                        <span class="metric-value" id="publications">0</span>
+                    </div>
+                    <div class="metric-item">
+                        <span class="metric-label">Citations:</span>
+                        <span class="metric-value" id="citations">0</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="system-actions">
+            <h3>System Management</h3>
+            <div class="action-buttons">
+                <button id="backup-btn" class="btn btn-secondary">Backup Database</button>
+                <button id="maintenance-btn" class="btn btn-warning">Maintenance Mode</button>
+                <button id="restart-btn" class="btn btn-danger">Restart Application</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/super_overview.js') }}"></script>
+{% endblock %}

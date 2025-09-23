@@ -1,0 +1,70 @@
+{% extends "layout.html" %}
+
+{% block title %}User Activity - Research Excellence{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="admin-container">
+        <h2>User Activity Report</h2>
+        <p>Activity history for user ID: {{ user_id }}</p>
+        
+        <div class="activity-filters">
+            <div class="filter-group">
+                <label for="date-range">Date Range:</label>
+                <select id="date-range">
+                    <option value="week">Last Week</option>
+                    <option value="month" selected>Last Month</option>
+                    <option value="quarter">Last Quarter</option>
+                    <option value="year">Last Year</option>
+                </select>
+            </div>
+            
+            <div class="filter-group">
+                <label for="activity-type">Activity Type:</label>
+                <select id="activity-type">
+                    <option value="all">All Activities</option>
+                    <option value="login">Login/Logout</option>
+                    <option value="research">Research Activities</option>
+                    <option value="publication">Publications</option>
+                    <option value="profile">Profile Updates</option>
+                </select>
+            </div>
+            
+            <button id="apply-filters" class="btn btn-primary">Apply Filters</button>
+        </div>
+        
+        <div class="activity-timeline">
+            <h3>Activity Timeline</h3>
+            <div id="timeline-container">
+                <!-- Activity items will be populated by JavaScript -->
+            </div>
+        </div>
+        
+        <div class="activity-summary">
+            <h3>Activity Summary</h3>
+            <div class="summary-stats">
+                <div class="stat-card">
+                    <h4>Total Activities</h4>
+                    <p id="total-activities">0</p>
+                </div>
+                <div class="stat-card">
+                    <h4>Login Count</h4>
+                    <p id="login-count">0</p>
+                </div>
+                <div class="stat-card">
+                    <h4>Research Activities</h4>
+                    <p id="research-activities">0</p>
+                </div>
+                <div class="stat-card">
+                    <h4>Publications</h4>
+                    <p id="publications-count">0</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/user_activity.js') }}"></script>
+{% endblock %}
