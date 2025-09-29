@@ -55,14 +55,6 @@
         }
     }
 
-    // Hide Accept/Reject buttons if status is not PENDING
-    function updateVerifyActionBtns(status) {
-        var btns = sQ('verifyActionBtns');
-        if (!btns) return;
-        if ((status || '').toUpperCase() === 'STATUS.PENDING') btns.classList.remove('hidden');
-        else btns.classList.add('hidden');
-    }
-
     function applySortStyles(groupEl, currentKey, dir) {
         groupEl.querySelectorAll('.sort-btn').forEach(btn => {
             const key = btn.dataset.key;
@@ -129,7 +121,6 @@
             if (type === 'abstract') {
                 li.innerHTML = `
                     <span class="flex items-center gap-3 w-full">
-                        <input type="checkbox" class="bulkChk accent-[color:var(--brand-600)] rounded h-5 w-5" data-id="${it.id}" ${selected ? 'checked' : ''}/>
                         <div class="flex-1 min-w-0">
                             <div class="font-medium text-gray-900 dark:text-white truncate">${escapeHtml(it.title || 'Untitled Abstract')}</div>
                             <div class="flex flex-wrap gap-2 mt-1">
@@ -179,11 +170,11 @@
                 chk.addEventListener('change', e => {
                     const id = e.target.getAttribute('data-id');
                     if (e.target.checked) bulk.abstractIds.add(id); else bulk.abstractIds.delete(id);
-                    syncMasterChk();
-                    updateBulkStatus();
+                    
+                   
                 });
             });
-            syncMasterChk();
+            
         }
     }
     
@@ -196,39 +187,6 @@
         }
     }
     
-    function syncMasterChk() {
-        const master = sQ('abstractMasterChk');
-        if (!master) return;
-        const boxes = abstractList.querySelectorAll('.bulkChk');
-        const total = boxes.length;
-        const checked = Array.from(boxes).filter(b => b.checked).length;
-        master.indeterminate = checked > 0 && checked < total;
-        master.checked = total > 0 && checked === total;
-    }
-    
-    function selectAllPage() {
-        abstractList.querySelectorAll('.bulkChk').forEach(chk => { chk.checked = true; bulk.abstractIds.add(chk.dataset.id); });
-        syncMasterChk(); updateBulkStatus();
-    }
-    
-    function clearAllPage() {
-        abstractList.querySelectorAll('.bulkChk').forEach(chk => { chk.checked = false; bulk.abstractIds.delete(chk.dataset.id); });
-        syncMasterChk(); updateBulkStatus();
-    }
-    
-    function invertSelection() {
-        abstractList.querySelectorAll('.bulkChk').forEach(chk => {
-            const id = chk.dataset.id;
-            if (chk.checked) { chk.checked = false; bulk.abstractIds.delete(id); }
-            else { chk.checked = true; bulk.abstractIds.add(id); }
-        });
-        syncMasterChk(); updateBulkStatus();
-    }
-    
-    function updateBulkStatus() {
-        const el = sQ('bulkStatus');
-        if (el) el.textContent = bulk.abstractIds.size ? `${bulk.abstractIds.size} selected` : '';
-    }
     
     function highlightSelection() {
         // Clear previous highlight
@@ -262,10 +220,12 @@
         // Get category name
         const categoryName = selAbstract.category?.name || 'No Category';
 
-        updateVerifyActionBtns(selAbstract.status);
         // Update summary card info
         sQ('summaryTitle') && (sQ('summaryTitle').textContent = selAbstract.title || 'Untitled Abstract');
+        
         sQ('summaryCategory') && (sQ('summaryCategory').textContent = categoryName);
+        sQ('summaryAbstractNumber') && (sQ('summaryAbstractNumber').textContent = selAbstract.abstract_number || 'Unknown ID');
+        
         sQ('summaryStatus') && (sQ('summaryStatus').textContent = selAbstract.status || 'PENDING');
         sQ('summaryStatus') && (sQ('summaryStatus').className = 'badge ' + getStatusClass(selAbstract.status));
         sQ('summaryAuthor') && (sQ('summaryAuthor').textContent = selAbstract.created_by?.username || 'Unknown User');
@@ -444,7 +404,7 @@
     async function searchAbstracts() {
         state.abstracts.q = (sQ('abstractSearch').value || '').trim();
         const { q, filter, page, pageSize, sort, dir } = state.abstracts;
-        const url = `${BASE}/abstracts?q=${encodeURIComponent(q)}&status=${filter}&page=${page}&page_size=${pageSize}&sort_by=${sort}&sort_dir=${dir}&verifier=true`;
+        const url = `${BASE}/abstracts?q=${encodeURIComponent(q)}&status=${filter}&page=${page}&page_size=${pageSize}&sort_by=${sort}&sort_dir=${dir}`;
         try {
             const data = await fetchJSON(url);
             renderList(abstractList, data.items || data || [], 'abstract');
@@ -455,542 +415,7 @@
         }
     }
     
-    // Function to open grading modal
-    let gradingModalLastFocus = null; // track focus to restore
-    let gradingModalKeyHandler = null;
-    async function openGradingModal() {
-        if (!selAbstract) {
-            toast('Please select an abstract first', 'warn');
-            return;
-        }
 
-        // Set the abstract title in the modal
-        sQ('gradingAbstractTitle').textContent = selAbstract.title || 'Untitled Abstract';
-        
-        // Fetch grading types for abstracts
-        try {
-            const gradingTypes = await fetchJSON(`${BASE}/grading-types?grading_for=abstract`);
-            populateGradingForm(gradingTypes);
-
-            const modal = sQ('gradingModal');
-            if (!modal) return;
-            gradingModalLastFocus = document.activeElement;
-            modal.classList.remove('hidden');
-            setupModalAccessibility(modal);
-            // Wire rubric toggle (idempotent)
-            const toggle = modal.querySelector('[data-toggle-rubric]');
-            const body = modal.querySelector('[data-rubric-body]');
-            if (toggle && body && !toggle.__bound) {
-                toggle.addEventListener('click', () => {
-                    const hidden = body.classList.toggle('hidden');
-                    toggle.textContent = hidden ? 'Show' : 'Hide';
-                });
-                toggle.__bound = true;
-            }
-        } catch (e) {
-            console.error('Error fetching grading types:', e);
-            toast('Failed to load grading criteria: ' + (e.message || 'Unknown error'), 'error');
-        }
-    }
-
-    function setupModalAccessibility(modal){
-        // Overlay click closes
-        if (!modal.__overlayBound){
-            modal.addEventListener('click', e => {
-                if (e.target === modal) {
-                    closeGradingModal();
-                }
-            });
-            modal.__overlayBound = true;
-        }
-        // Focus trap
-        const focusableSelector = 'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
-        const focusables = Array.from(modal.querySelectorAll(focusableSelector)).filter(el => el.offsetParent !== null);
-        if (focusables.length){
-            // focus first scoring input if possible
-            const firstScore = modal.querySelector('#gradingFieldsContainer input');
-            (firstScore || focusables[0]).focus({preventScroll:true});
-        } else {
-            modal.setAttribute('tabindex', '-1');
-            modal.focus({preventScroll:true});
-        }
-        // Key handler
-        gradingModalKeyHandler = function(e){
-            if (e.key === 'Escape'){ e.preventDefault(); closeGradingModal(); return; }
-            if (e.key === 'Tab'){
-                const currentFocusables = Array.from(modal.querySelectorAll(focusableSelector)).filter(el => el.offsetParent !== null);
-                if (!currentFocusables.length) return;
-                const first = currentFocusables[0];
-                const last = currentFocusables[currentFocusables.length -1];
-                if (e.shiftKey && document.activeElement === first){
-                    e.preventDefault();
-                    last.focus();
-                } else if (!e.shiftKey && document.activeElement === last){
-                    e.preventDefault();
-                    first.focus();
-                }
-            }
-        };
-        document.addEventListener('keydown', gradingModalKeyHandler, true);
-    }
-
-    function closeGradingModal(){
-        const modal = sQ('gradingModal');
-        sQ('gradingSkeleton').classList.remove('hidden');
-        if (modal) modal.classList.add('hidden');
-        if (gradingModalKeyHandler){
-            document.removeEventListener('keydown', gradingModalKeyHandler, true);
-            gradingModalKeyHandler = null;
-        }
-        if (gradingModalLastFocus && document.contains(gradingModalLastFocus)) {
-            try { gradingModalLastFocus.focus({preventScroll:true}); } catch(_){}
-        }
-
-    }
-
-    // Function to populate the grading form with grading types
-    function populateGradingForm(gradingTypes) {
-        const container = sQ('gradingFieldsContainer');
-        container.innerHTML = '';  // Clear existing fields
-
-        if (!gradingTypes || gradingTypes.length === 0) {
-            container.innerHTML = '<p class="text-gray-500 dark:text-gray-400 p-4 text-center">No grading criteria available.</p>';
-            return;
-        }
-
-        // Summary footer (will fill live)
-        let aggregateFooter = sQ('gradingAggregateSummary');
-          if (!aggregateFooter) {
-                aggregateFooter = document.createElement('div');
-                aggregateFooter.id = 'gradingAggregateSummary';
-                aggregateFooter.className = 'mt-6 rounded-xl border border-[color:var(--border)]/60 bg-gray-50 dark:bg-gray-800/60 p-4 text-xs flex flex-col gap-2 relative';
-                aggregateFooter.innerHTML = `
-                     <div class="flex flex-wrap gap-4">
-                         <span><strong>Total:</strong> <span data-total-score>-</span></span>
-                         <span><strong>Average:</strong> <span data-average-score>-</span></span>
-                         <span><strong>Filled:</strong> <span data-filled-count>0</span>/<span data-total-count>0</span></span>
-                     </div>
-                     <div class="relative h-2 bg-gray-200 dark:bg-gray-700 rounded overflow-hidden">
-                         <div class="absolute inset-y-0 left-0 bg-gradient-to-r from-[color:var(--brand-600)] to-[color:var(--brand-400)] transition-all" data-filled-bar style="width:0%"></div>
-                     </div>
-                     <div id="gradingAggregateLive" role="status" aria-live="polite" class="absolute w-px h-px -m-px overflow-hidden whitespace-nowrap border-0 p-0">No scores yet.</div>`;
-          }
-
-        const gradingStateKey = selAbstract ? `grading_state_${selAbstract.id}` : null;
-        let persistedState = {};
-        if (gradingStateKey) {
-            try { persistedState = JSON.parse(localStorage.getItem(gradingStateKey) || '{}'); } catch (_) { persistedState = {}; }
-        }
-
-        const fieldsMeta = []; // track for summary
-
-        // Create input fields for each grading type with enhanced UI (numeric + synchronized range slider + scale + validation badge + tooltip)
-        gradingTypes.forEach(type => {
-                        const min = Number(type.min_score);
-                        const max = Number(type.max_score);
-                        const span = max - min;
-                        const safeId = `grading_${type.id}`;
-                        const fieldDiv = document.createElement('div');
-                        fieldDiv.className = 'mb-4 p-4 bg-gray-50 dark:bg-gray-800/60 rounded-xl border border-[color:var(--border)]/60 shadow-sm hover:shadow transition-shadow';
-                        fieldDiv.innerHTML = `
-                                <div class="flex items-start justify-between gap-3 mb-2">
-                                    <label for="${safeId}_number" class="group block text-sm font-semibold text-gray-800 dark:text-gray-200 relative">
-                                        <span class="inline-flex items-center gap-1">
-                                          <span>${escapeHtml(type.criteria)}</span>
-                                          <span class="ml-1 text-[color:var(--text-muted)] font-normal">(${min} - ${max})</span>
-                                          <span class="inline-flex items-center justify-center w-4 h-4 text-[10px] rounded-full bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 cursor-help" data-tooltip="Score range: ${min}-${max}. Use consistent rubric.">i</span>
-                                          <span class="ml-1" data-validity-badge aria-hidden="true"></span>
-                                        </span>
-                                        <span class="invisible opacity-0 group-hover:opacity-100 group-hover:visible transition pointer-events-none absolute z-10 top-full left-0 mt-1 w-48 text-[10px] leading-snug bg-black/80 text-white rounded px-2 py-1" role="tooltip">${escapeHtml(type.description || 'Provide a fair score based on the rubric.')}</span>
-                                    </label>
-                                    <div class="text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 bg-[color:var(--brand-50)] dark:bg-[color:var(--brand-900)]/40 text-[color:var(--brand-600)] dark:text-[color:var(--brand-300)] font-medium" data-range-pill>${span} range</div>
-                                </div>
-                                <div class="grid grid-cols-5 gap-3 items-center">
-                                     <div class="col-span-2 flex flex-col gap-1">
-                                            <input 
-                                                id="${safeId}_number"
-                                                type="number" 
-                                                name="${safeId}" 
-                                                min="${min}" 
-                                                max="${max}" 
-                                                inputmode="numeric"
-                                                class="input w-full text-sm font-medium" 
-                                                placeholder="${min} - ${max}"
-                                                aria-describedby="${safeId}_help"
-                                                required
-                                            />
-                                            <div class="relative h-2 mt-1 bg-gray-200 dark:bg-gray-700 rounded overflow-hidden" aria-hidden="true">
-                                                <div class="absolute inset-y-0 left-0 bg-gradient-to-r from-[color:var(--brand-500)] to-[color:var(--brand-300)] transition-all" data-progress style="width:0%"></div>
-                                                <div class="absolute inset-0 flex justify-between text-[8px] leading-none text-gray-500 dark:text-gray-400 pt-2 select-none">
-                                                    <span>${min}</span><span>${Math.round(min + span * 0.25)}</span><span>${Math.round(min + span * 0.5)}</span><span>${Math.round(min + span * 0.75)}</span><span>${max}</span>
-                                                </div>
-                                            </div>
-                                     </div>
-                                     <div class="col-span-3 flex flex-col gap-1">
-                                            <input 
-                                                id="${safeId}_range"
-                                                type="range" 
-                                                min="${min}" 
-                                                max="${max}" 
-                                                step="1" 
-                                                class="w-full accent-[color:var(--brand-600)] cursor-pointer" 
-                                                aria-label="${escapeHtml(type.criteria)} score slider"
-                                            />
-                                            <div class="flex justify-between text-[10px] text-gray-500 dark:text-gray-400 font-medium">
-                                                <span>Low</span><span class="text-[color:var(--brand-600)] dark:text-[color:var(--brand-400)]">Score</span><span>High</span>
-                                            </div>
-                                     </div>
-                                </div>
-                                <button type="button" data-toggle-comment class="mt-3 text-[11px] font-medium inline-flex items-center gap-1 text-[color:var(--brand-600)] hover:underline focus:outline-none">
-                                     <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" /></svg>
-                                     Add Comment
-                                </button>
-                                <textarea 
-                                        name="comment_${type.id}" 
-                                        class="hidden mt-2 input w-full text-xs" 
-                                        placeholder="Comment on ${escapeHtml(type.criteria)} (optional)..." 
-                                        rows="2"
-                                        data-comment-box
-                                ></textarea>
-                                <p id="${safeId}_help" class="mt-2 text-[10px] leading-relaxed text-gray-500 dark:text-gray-400">
-                                     Use either the number box or slider. Progress bar shows relative score.
-                                </p>
-                        `;
-                        container.appendChild(fieldDiv);
-
-                        // Metadata for summary & validation
-                        fieldsMeta.push({ id: safeId, min, max, numberSelector: `#${safeId}_number` });
-
-                        // Wiring interactions & validation
-                        const numberInput = fieldDiv.querySelector(`#${safeId}_number`);
-                        const rangeInput = fieldDiv.querySelector(`#${safeId}_range`);
-                        const progress = fieldDiv.querySelector('[data-progress]');
-                        const toggleBtn = fieldDiv.querySelector('[data-toggle-comment]');
-                        const commentBox = fieldDiv.querySelector('[data-comment-box]');
-                        const validityBadge = fieldDiv.querySelector('[data-validity-badge]');
-
-                        // Restore persisted value if exists
-                        if (persistedState[safeId]?.score != null) {
-                            const v = persistedState[safeId].score;
-                            numberInput.value = v;
-                            rangeInput.value = v;
-                        }
-                        if (persistedState[safeId]?.comment) {
-                            commentBox.classList.remove('hidden');
-                            commentBox.value = persistedState[safeId].comment;
-                            toggleBtn.innerHTML = '<svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M18 12H6" /></svg> Remove Comment';
-                        }
-
-                        function updateProgress(val) {
-                                const num = Number(val);
-                                if (isNaN(num)) { progress.style.width = '0%'; return; }
-                                const pct = ((num - min) / (max - min)) * 100;
-                                progress.style.width = `${Math.min(Math.max(pct, 0), 100)}%`;
-                                updateValidity();
-                                updateAggregate();
-                                persist();
-                        }
-
-                        function updateValidity() {
-                            const val = Number(numberInput.value);
-                            if (!isNaN(val) && val >= min && val <= max) {
-                                validityBadge.innerHTML = '<svg class="w-4 h-4 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>';
-                            } else if (numberInput.value !== '') {
-                                validityBadge.innerHTML = '<svg class="w-4 h-4 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>';
-                            } else {
-                                validityBadge.innerHTML = '';
-                            }
-                        }
-
-                        numberInput.addEventListener('input', (e) => {
-                                let val = numberInput.value;
-                                if (val === '') { updateProgress(null); return; }
-                                let num = Number(val);
-                                if (num < min) num = min; if (num > max) num = max;
-                                numberInput.value = String(num);
-                                rangeInput.value = String(num);
-                                updateProgress(num);
-                        });
-                        rangeInput.addEventListener('input', () => {
-                            numberInput.value = rangeInput.value;
-                            updateProgress(rangeInput.value);
-                        });
-
-                        // Keyboard shortcuts (Up/Down) on number or range
-                        function stepValue(delta) {
-                            let current = numberInput.value === '' ? min : Number(numberInput.value);
-                            if (isNaN(current)) current = min;
-                            current += delta;
-                            if (current < min) current = min; if (current > max) current = max;
-                            numberInput.value = String(current);
-                            rangeInput.value = String(current);
-                            updateProgress(current);
-                        }
-                        numberInput.addEventListener('keydown', e => {
-                            if (e.key === 'ArrowUp') { e.preventDefault(); stepValue(1); }
-                            else if (e.key === 'ArrowDown') { e.preventDefault(); stepValue(-1); }
-                        });
-                        rangeInput.addEventListener('keydown', e => {
-                            if (e.key === 'ArrowUp') { e.preventDefault(); stepValue(1); }
-                            else if (e.key === 'ArrowDown') { e.preventDefault(); stepValue(-1); }
-                        });
-                        toggleBtn.addEventListener('click', () => {
-                                const hidden = commentBox.classList.contains('hidden');
-                                commentBox.classList.toggle('hidden');
-                                toggleBtn.innerHTML = hidden
-                                    ? '<svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M18 12H6" /></svg> Remove Comment'
-                                    : '<svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" /></svg> Add Comment';
-                                if (!hidden) commentBox.value = '';
-                                if (!hidden) commentBox.blur(); else commentBox.focus();
-                                persist();
-                        });
-
-                        commentBox.addEventListener('input', persist);
-                        updateProgress(numberInput.value || null);
-                        updateValidity();
-                });
-
-        // Append footer (after fields) & initialize counters
-        if (aggregateFooter.parentElement !== container.parentElement) {
-            // place after container
-            container.parentElement.appendChild(aggregateFooter);
-        }
-        aggregateFooter.querySelector('[data-total-count]').textContent = String(fieldsMeta.length);
-        updateAggregate();
-
-        hideSkeletons();
-
-        // Inject reset button if not exists
-        if (!aggregateFooter.querySelector('[data-reset-grading]')) {
-            const controls = document.createElement('div');
-            controls.className = 'flex flex-wrap items-center gap-2 pt-3 border-t border-[color:var(--border)]/50 mt-2';
-            controls.innerHTML = `
-               <button type="button" data-reset-grading class="px-3 py-1.5 text-xs font-medium rounded-md bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/50 border border-red-200 dark:border-red-800 focus:outline-none focus:ring-2 focus:ring-red-400/60">Reset All Scores</button>
-               <span class="text-[10px] text-gray-500 dark:text-gray-400">(Clears scores, comments & draft)</span>
-            `;
-            aggregateFooter.appendChild(controls);
-            controls.querySelector('[data-reset-grading]').addEventListener('click', () => {
-                // Clear inputs & comments
-                fieldsMeta.forEach(m => {
-                    const numEl = container.querySelector(m.numberSelector);
-                    const rangeEl = container.querySelector(`#${m.id}_range`);
-                    const commentEl = container.querySelector(`textarea[name='comment_${m.id.replace('grading_','')}']`);
-                    const toggleBtn = commentEl ? commentEl.parentElement.querySelector('[data-toggle-comment]') : null;
-                    if (numEl) numEl.value = '';
-                    if (rangeEl) rangeEl.value = String(m.min);
-                    if (commentEl) {
-                        commentEl.value = '';
-                        if (!commentEl.classList.contains('hidden')) {
-                            commentEl.classList.add('hidden');
-                            if (toggleBtn) toggleBtn.innerHTML = '<svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" /></svg> Add Comment';
-                        }
-                    }
-                    const fieldValidityBadge = container.querySelector(`#${m.id}_number`)?.closest('.mb-4')?.querySelector('[data-validity-badge]');
-                    if (fieldValidityBadge) fieldValidityBadge.innerHTML='';
-                    const progressEl = container.querySelector(`#${m.id}_number`)?.closest('.flex.flex-col')?.querySelector('[data-progress]');
-                    if (progressEl) progressEl.style.width='0%';
-                });
-                // Ensure all remaining badges cleared (fallback)
-                container.querySelectorAll('[data-validity-badge]').forEach(b => b.innerHTML='');
-                if (gradingStateKey) localStorage.removeItem(gradingStateKey);
-                updateAggregate();
-                persist(); // will write empty snapshot
-                toast('Draft cleared','info');
-            });
-        }
-
-        function updateAggregate() {
-            const scores = fieldsMeta.map(m => {
-                const el = container.querySelector(m.numberSelector);
-                const val = Number(el?.value);
-                return isNaN(val) ? null : val;
-            }).filter(v => v != null);
-            const filled = scores.length;
-            const total = scores.reduce((a,b)=>a+b,0);
-            const avg = filled ? (total / filled) : 0;
-            aggregateFooter.querySelector('[data-filled-count]').textContent = String(filled);
-            aggregateFooter.querySelector('[data-total-score]').textContent = filled ? total.toFixed(2).replace(/\.00$/,'') : '-';
-            aggregateFooter.querySelector('[data-average-score]').textContent = filled ? avg.toFixed(2) : '-';
-            const pct = fieldsMeta.length ? (filled / fieldsMeta.length) * 100 : 0;
-            aggregateFooter.querySelector('[data-filled-bar]').style.width = pct + '%';
-            const live = aggregateFooter.querySelector('#gradingAggregateLive');
-            if (live) {
-                live.textContent = filled ? `Filled ${filled} of ${fieldsMeta.length}. Total ${total.toFixed(2)}. Average ${avg.toFixed(2)}.` : 'No scores yet.';
-            }
-
-            // Side panel metrics (if present due to revamped UI)
-            const sideTotal = document.querySelector('[data-score-total]');
-            const sideAvg = document.querySelector('[data-score-average]');
-            const sideAvgBig = document.querySelector('[data-score-avg]');
-            const sideFilled = document.querySelector('[data-score-filled]');
-            const sideProgress = document.querySelector('[data-score-progress]');
-            const ring = document.querySelector('[data-score-ring]');
-            if (sideTotal) sideTotal.textContent = filled ? total.toFixed(2).replace(/\.00$/,'') : '-';
-            if (sideAvg) sideAvg.textContent = filled ? avg.toFixed(2) : '-';
-            if (sideAvgBig) sideAvgBig.textContent = filled ? avg.toFixed(1) : '-';
-            if (sideFilled) sideFilled.textContent = `${filled}/${fieldsMeta.length}`;
-            if (sideProgress) sideProgress.style.width = pct + '%';
-            if (ring) {
-                const circumference = 2 * Math.PI * 54; // r=54
-                const ratio = fieldsMeta.length ? (avg - Math.min(...scores, 0)) / (Math.max(...scores, 1) - Math.min(...scores, 0) || 1) : 0;
-                // fallback: simple proportion of average vs max possible score
-                const maxPossibleAvg = fieldsMeta.length ? Math.max(...fieldsMeta.map(m=>m.max)) : 1;
-                const normalized = filled ? Math.min(Math.max(avg / maxPossibleAvg, 0), 1) : 0;
-                ring.style.strokeDashoffset = String(circumference - (circumference * normalized));
-            }
-        }
-
-        function persist() {
-            if (!gradingStateKey) return;
-            const snapshot = {};
-            fieldsMeta.forEach(m => {
-                const scoreEl = container.querySelector(m.numberSelector);
-                const commentEl = container.querySelector(`textarea[name='comment_${m.id.replace('grading_','')}']`);
-                const val = scoreEl?.value;
-                const comment = commentEl?.classList.contains('hidden') ? '' : (commentEl?.value || '');
-                if (val || comment) {
-                    snapshot[m.id] = { score: val === '' ? null : Number(val), comment };
-                }
-            });
-            try { localStorage.setItem(gradingStateKey, JSON.stringify(snapshot)); } catch (_) {}
-        }
-
-
-        function hideSkeletons(){
-            sQ('gradingSkeleton').classList.add('hidden');
-        }
-
-        // Clear persistence when modal closed & submitted (handled elsewhere on success)
-    }
-
-    // Function to submit grading and accept the abstract
-    async function submitGrading() {
-        const form = sQ('gradingForm');
-        
-        // Validate form inputs
-        const gradingInputs = form.querySelectorAll('input[name^="grading_"]');
-        let isValid = true;
-        
-        gradingInputs.forEach(input => {
-            const value = parseInt(input.value);
-            const min = parseInt(input.min);
-            const max = parseInt(input.max);
-            
-            if (isNaN(value) || value < min || value > max) {
-                input.classList.add('border-red-500');
-                isValid = false;
-            } else {
-                input.classList.remove('border-red-500');
-            }
-        });
-        
-        if (!isValid) {
-            toast('Please ensure all scores are within the valid range', 'error');
-            return;
-        }
-        
-        try {
-            // Prepare grading data
-            const gradingData = [];
-            gradingInputs.forEach(input => {
-                const gradingTypeId = input.name.replace('grading_', '');
-                const score = parseInt(input.value);
-                const commentInput = form.querySelector(`textarea[name="comment_${gradingTypeId}"]`);
-                const comments = commentInput ? commentInput.value : '';
-                
-                if (!isNaN(score)) {
-                    gradingData.push({
-                        grading_type_id: gradingTypeId,
-                        score: score,
-                        comments: comments,
-                        abstract_id: selAbstract.id
-                    });
-                }
-            });
-            
-            // Submit each grading individually
-            for (const grade of gradingData) {
-                await fetchJSON(`${BASE}/gradings`, {
-                    method: 'POST',
-                    headers: { ...headers(), 'Content-Type': 'application/json' },
-                    body: JSON.stringify(grade)
-                });
-            }
-            
-            // After grading is submitted, accept the abstract
-            await acceptAbstract(selAbstract.id);
-            
-            // Close the modal
-            // Clear persisted draft for this abstract (scores committed)
-            try { localStorage.removeItem(`grading_state_${selAbstract.id}`); } catch(_){}
-            closeGradingModal();
-            sQ('overallComments').value = '';  // Clear overall comments
-            
-            toast('Abstract graded and accepted successfully!', 'success');
-        } catch (e) {
-            console.error('Error submitting grading:', e);
-            toast('Failed to submit grading: ' + (e.message || 'Unknown error'), 'error');
-        }
-    }
-
-    // Function to cancel grading
-    function cancelGrading() {
-        closeGradingModal();
-        sQ('overallComments').value = '';  // Clear overall comments
-    }
-
-    async function acceptAbstract(abstractId) {
-        // This function will only update the status without grading since grading is now separate
-        try {
-            // In our new approach, the status is updated when grading is submitted,
-            // but we'll still need to update the status here if grading isn't required
-            const body = {
-                status: 'ACCEPTED',
-            };
-            const r = await fetch(`${BASE}/abstracts/` + abstractId, {
-                method: 'PUT',
-                headers: { ...headers(), 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
-            });
-            if (!r.ok) throw new Error(await r.text() || r.status);
-            toast('Abstract accepted successfully!', 'success');
-            await searchAbstracts();
-            if (selAbstract && selAbstract.id === abstractId) {
-                selAbstract = null;
-                updatePanel();
-                highlightSelection();
-            }
-            updateVerifyActionBtns('ACCEPTED');
-        } catch (e) {
-            toast('Failed to accept abstract: ' + (e.message || 'Unknown error'), 'error');
-        }
-    }
-    
-    async function rejectAbstract(abstractId) {
-        if (!confirm('Are you sure you want to reject this abstract?')) return;
-        
-        try {
-            const body = {
-                status: 'REJECTED'
-            };
-            const r = await fetch(`${BASE}/abstracts/` + abstractId, {
-                method: 'PUT',
-                headers: { ...headers(), 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
-            });
-            if (!r.ok) throw new Error(await r.text() || r.status);
-            toast('Abstract rejected successfully!', 'success');
-            await searchAbstracts();
-            if (selAbstract && selAbstract.id === abstractId) {
-                selAbstract = null;
-                updatePanel();
-                highlightSelection();
-            }
-            updateVerifyActionBtns('REJECTED');
-        } catch (e) {
-            toast('Failed to reject abstract: ' + (e.message || 'Unknown error'), 'error');
-        }
-    }
     
     function updateAbstractMeta(data) {
         state.abstracts.pages = data.pages || 1;
@@ -1054,19 +479,7 @@
         sQ('abstractSearch')?.addEventListener('keypress', (e) => { if (e.key === 'Enter') { state.abstracts.page = 1; searchAbstracts(); } });
         sQ('abstractPrev')?.addEventListener('click', () => changeAbstractPage(-1));
         sQ('abstractNext')?.addEventListener('click', () => changeAbstractPage(1));
-        sQ('acceptBtn')?.addEventListener('click', openGradingModal);  // Changed to open grading modal
-        sQ('rejectBtn')?.addEventListener('click', () => {
-            if (selAbstract) {
-                rejectAbstract(selAbstract.id);
-            } else {
-                toast('Please select an abstract first', 'warn');
-            }
-        });
-
-        // Grading modal events
-        sQ('closeGradingModal')?.addEventListener('click', cancelGrading);
-        sQ('cancelGrading')?.addEventListener('click', cancelGrading);
-        sQ('submitGrading')?.addEventListener('click', submitGrading);
+        
 
         const master = sQ('abstractMasterChk');
         master?.addEventListener('change', e => { e.target.checked ? selectAllPage() : clearAllPage(); });
@@ -1132,8 +545,8 @@
                     }
                 }
                 
-                updateBulkStatus();
-                syncMasterChk();
+               
+                
                 
                 if (successCount > 0) {
                     toast(`Successfully accepted ${successCount} abstract(s)`, 'success');
@@ -1207,8 +620,8 @@
                     }
                 }
                 
-                updateBulkStatus();
-                syncMasterChk();
+               
+                
                 
                 if (successCount > 0) {
                     toast(`Successfully rejected ${successCount} abstract(s)`, 'success');
@@ -1267,9 +680,8 @@
     }
 
     if(document.readyState === 'loading'){
-        document.addEventListener('DOMContentLoaded', () => { initSidePanelCollapse(); initCriteriaFilter(); });
+        document.addEventListener('DOMContentLoaded', () => {initCriteriaFilter(); });
     } else {
-        initSidePanelCollapse();
         initCriteriaFilter();
     }
 })();

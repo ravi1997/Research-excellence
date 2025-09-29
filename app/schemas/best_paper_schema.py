@@ -1,14 +1,14 @@
 from marshmallow import fields
 from marshmallow_enum import EnumField
 
-from app.models.Cycle import Awards, Status
+from app.models.Cycle import BestPaper, Status
 from app.extensions import ma
-from .grading_schema import GradingSchema  # retained import if needed elsewhere
+from .grading_schema import GradingSchema  # keep import if needed elsewhere
 
 
-class AwardsSchema(ma.SQLAlchemyAutoSchema):
+class BestPaperSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
-        model = Awards
+        model = BestPaper
         load_instance = True
         include_fk = True
 
@@ -23,5 +23,5 @@ class AwardsSchema(ma.SQLAlchemyAutoSchema):
     status = EnumField(Status, required=False)
     created_at = fields.DateTime(dump_only=True)
     updated_at = fields.DateTime(dump_only=True)
-    # Removed to avoid recursion: grading -> award -> gradings -> grading ...
+    # Removed to avoid recursion cycles
     # gradings = fields.Nested(GradingSchema, many=True, dump_only=True)

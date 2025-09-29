@@ -38,6 +38,7 @@
                 <div class="flex flex-wrap gap-2 mb-4">
                     <a id="abstract-apply" href="{{ url_for('view_bp.submit_abstract') }}" class="btn btn-primary text-sm px-4 py-2">Submit Abstract</a>
                     <a id="abstract-verify" href="{{ url_for('view_bp.verify_abstract') }}" class="btn btn-secondary text-sm px-4 py-2">Verify Submissions</a>
+                    <a id="abstract-list" href="{{ url_for('view_bp.list_abstracts') }}" class="btn btn-secondary text-sm px-4 py-2" title="View full list of submitted abstracts">My Abstracts</a>
                 </div>
                 
                 <div class="pt-4 border-t border-gray-100 dark:border-gray-700">
@@ -91,10 +92,12 @@
                 
                 <div class="flex flex-wrap gap-2 mb-4">
                     <a id="award-apply" href="{{ url_for('view_bp.submit_award') }}" class="btn btn-primary text-sm px-4 py-2">Submit
-                        Abstract</a>
+                        Paper</a>
                     <a id="award-verify" href="{{ url_for('view_bp.verify_award') }}"
                         class="btn btn-secondary text-sm px-4 py-2">Verify Submissions</a>
-                </div>
+                    <a id="award-list" href="{{ url_for('view_bp.list_award') }}" class="btn btn-secondary text-sm px-4 py-2"
+                        title="View full list of submitted awards">My Awards</a>
+                    </div>
                 
                 <div class="pt-4 border-t border-gray-100 dark:border-gray-700">
                     <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Application Status</h4>
@@ -134,7 +137,7 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                             </svg>
                         </div>
-                        <h3 class="text-lg font-bold text-gray-900 dark:text-white">Best Paper Award</h3>
+                        <h3 class="text-lg font-bold text-gray-900 dark:text-white">Best Paper Award Oncology</h3>
                     </div>
                     <span class="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300">
                         Oncology
@@ -146,7 +149,11 @@
                 </p>
                 
                 <div class="flex flex-wrap gap-2 mb-4">
-                    <a href="/apply" class="btn btn-primary text-sm px-4 py-2">Submit Paper</a>
+                    <a id="paper-apply" href="{{ url_for('view_bp.submit_best_paper') }}" class="btn btn-primary text-sm px-4 py-2">Submit
+                        Paper</a>
+                    <a id="paper-verify" href="{{ url_for('view_bp.verify_best_paper') }}" class="btn btn-secondary text-sm px-4 py-2">Verify
+                        Submissions</a>
+                    <a id="paper-list" href="{{ url_for('view_bp.list_best_paper') }}" class="btn btn-secondary text-sm px-4 py-2" title="View full list of submitted abstracts">My Papers</a>
                 </div>
                 
                 <div class="pt-4 border-t border-gray-100 dark:border-gray-700">
@@ -187,20 +194,20 @@
         
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div class="bg-white dark:bg-gray-800 rounded-xl p-4 text-center shadow-sm border border-gray-100 dark:border-gray-700">
-                <div class="text-2xl font-bold text-blue-600 dark:text-blue-400">12</div>
+                <div id="pending" class="text-2xl font-bold text-blue-600 dark:text-blue-400">12</div>
                 <div class="text-sm text-gray-600 dark:text-gray-300 mt-1">Submissions</div>
             </div>
             <div class="bg-white dark:bg-gray-800 rounded-xl p-4 text-center shadow-sm border border-gray-100 dark:border-gray-700">
-                <div class="text-2xl font-bold text-yellow-600 dark:text-yellow-400">5</div>
+                <div id="under-review" class="text-2xl font-bold text-yellow-600 dark:text-yellow-400">5</div>
                 <div class="text-sm text-gray-600 dark:text-gray-300 mt-1">Under Review</div>
             </div>
             <div class="bg-white dark:bg-gray-800 rounded-xl p-4 text-center shadow-sm border border-gray-100 dark:border-gray-700">
-                <div class="text-2xl font-bold text-green-600 dark:text-green-400">7</div>
+                <div id="accepted" class="text-2xl font-bold text-green-600 dark:text-green-400">7</div>
                 <div class="text-sm text-gray-600 dark:text-gray-300 mt-1">Accepted</div>
             </div>
             <div class="bg-white dark:bg-gray-800 rounded-xl p-4 text-center shadow-sm border border-gray-100 dark:border-gray-700">
-                <div class="text-2xl font-bold text-purple-600 dark:text-purple-400">3</div>
-                <div class="text-sm text-gray-600 dark:text-gray-300 mt-1">Awards Won</div>
+                <div id="rejected" class="text-2xl font-bold text-purple-600 dark:text-purple-400">3</div>
+                <div class="text-sm text-gray-600 dark:text-gray-300 mt-1">Rejected</div>
             </div>
         </div>
     </div>

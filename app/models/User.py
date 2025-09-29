@@ -119,7 +119,13 @@ class User(db.Model):
     roles = association_proxy("role_associations", "role")
     
     # Relationship to abstracts that this user can verify
-    abstracts_to_verify = db.relationship("Abstracts", secondary="abstract_verifiers", back_populates="verifiers")
+    abstracts_to_verify = db.relationship(
+        "Abstracts", secondary="abstract_verifiers", back_populates="verifiers")
+
+    awards_to_verify = db.relationship(
+        "Awards", secondary="award_verifiers", back_populates="verifiers")
+    best_papers_to_verify = db.relationship(
+        "BestPaper", secondary="best_paper_verifiers", back_populates="verifiers")
 
     category_id = db.Column(UUID(as_uuid=True), db.ForeignKey(
         'categories.id'), nullable=True)

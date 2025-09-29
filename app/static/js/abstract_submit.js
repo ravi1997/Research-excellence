@@ -779,6 +779,9 @@ function collectFormData() {
         data.verifier_id = verifierSelect.value;
     }
     
+
+    data.consent = document.getElementById('consent-checkbox').checked || false;
+
     return data;
 }
 

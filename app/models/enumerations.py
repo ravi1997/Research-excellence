@@ -23,3 +23,8 @@ class Status(str, Enum):
     UNDER_REVIEW = 'under_review'
     ACCEPTED = 'accepted'
     REJECTED = 'rejected'
+
+class GradingFor(str, Enum):
+    ABSTRACT = 'abstract'
+    BEST_PAPER = 'best_paper'
+    AWARD = 'award'

@@ -1,6 +1,6 @@
 {% extends "layout.html" %}
 
-{% block title %}Submit Award - Research Excellence{% endblock %}
+{% block title %}Submit Best Paper - Research Excellence{% endblock %}
 
 {% block content %}
 <!-- Ambient background (mirrors register) -->
@@ -24,10 +24,10 @@
             </svg>
         </div>
         <div>
-            <h1 class="mt-4 text-3xl md:text-4xl font-extrabold tracking-tight text-[color:var(--text)]">Submit Award
+            <h1 class="mt-4 text-3xl md:text-4xl font-extrabold tracking-tight text-[color:var(--text)]">Submit Best Paper
             </h1>
-            <p class="muted mt-3 max-w-md">Share your achievements with the community. Complete all steps to submit
-                your award nomination for review.</p>
+            <p class="muted mt-3 max-w-md">Share your research achievement. Complete all steps to submit
+                your best paper nomination for review.</p>
         </div>
         <div class="hidden md:block mt-6 text-xs opacity-70">
             <span>Peer review · Academic recognition</span>
@@ -78,10 +78,10 @@
                 </div>
             </div>
 
-            <form id="award-form" class="auth-form">
+            <form id="best-paper-form" class="auth-form">
                 <!-- Step 1 -->
                 <div id="step1" class="form-step active space-y-4">
-                    <h2 class="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-200">Award Details</h2>
+                    <h2 class="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-200">Best Paper Details</h2>
                     <div class="form-col space-y-2">
                         <div class="form-group">
                             <label for="title" class="block text-sm font-medium mb-1">Title *</label>
@@ -90,6 +90,7 @@
                             <p class="text-xs text-gray-500">Max 50 words. Current count is: <span
                                     id="title_count">0</span></p>
                         </div>
+
                         <div class="form-group">
                             <label for="paper_category" class="block text-sm font-medium mb-1">Paper Category *</label>
                             <select id="paper_category" name="paper_category_id" required class="form-input input w-full">
@@ -193,14 +194,14 @@
 
                 <!-- Step 4: PDF Upload -->
                 <div id="step4" class="form-step hidden space-y-4">
-                    <h2 class="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-200">Upload PDF</h2>
+                    <h2 class="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-200">Upload Full Paper PDF</h2>
                     <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">Upload a PDF version of your submission.</p>
 
                     <div class="form-group mb-6">
-                        <label for="award_pdf" class="block text-sm font-medium mb-1">PDF File</label>
+                        <label for="bestpaper_pdf" class="block text-sm font-medium mb-1">PDF File</label>
                         <div id="pdf-dropzone"
                             class="relative group border-2 border-dashed rounded-lg p-4 sm:p-6 text-center transition hover:border-blue-400 focus-within:border-blue-500 bg-blue-50/40 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
-                            <input type="file" id="award_pdf" name="award_pdf" accept=".pdf" data-max-size-mb="5"
+                            <input type="file" id="bestpaper_pdf" name="bestpaper_pdf" accept=".pdf" data-max-size-mb="5"
                                 class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                                 aria-describedby="pdf-hint">
                             <div class="pointer-events-none flex flex-col items-center">
@@ -249,7 +250,7 @@
                 <div id="step5" class="form-step hidden space-y-6">
                     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div>
-                            <h2 class="text-2xl font-bold text-gray-800 dark:text-gray-100">Preview Award</h2>
+                            <h2 class="text-2xl font-bold text-gray-800 dark:text-gray-100">Preview Best Paper</h2>
                             <p class="text-gray-600 dark:text-gray-300 mt-1">Please review all details carefully before
                                 submitting.</p>
                         </div>
@@ -291,7 +292,7 @@
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="M5 13l4 4L19 7" />
                                 </svg>
-                                Submit Award
+                                Submit Best Paper
                             </button>
                         </div>
                     </div>
@@ -309,5 +310,5 @@
 <script src="{{ url_for('static', filename='js/ckeditor.js') }}"></script>
 <script src="{{ url_for('static', filename='js/purify.min.js') }}"></script>
 <script src="{{ url_for('static', filename='js/pdf.min.js') }}"></script>
-<script src="{{ url_for('static', filename='js/award_submit.js') }}"></script>
+<script src="{{ url_for('static', filename='js/best_paper_submit.js') }}"></script>
 {% endblock %}

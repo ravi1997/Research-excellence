@@ -5,20 +5,21 @@ import uuid
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.models.User import User
 from app.routes.v1.research import research_bp
-from app.models.Cycle import AwardVerifiers, Awards, Author, Category, PaperCategory, Cycle
-from app.schemas.awards_schema import AwardsSchema
+from app.models.Cycle import BestPaperVerifiers, BestPaper, Author
+from app.schemas.best_paper_schema import BestPaperSchema
 from app.extensions import db
 from app.utils.decorator import require_roles
 from app.models.enumerations import Role, Status
 from werkzeug.utils import secure_filename
 
-award_schema = AwardsSchema()
-awards_schema = AwardsSchema(many=True)
+# NOTE: Underlying model/schema still named BestPaper for now; outward API renamed to best_papers
+best_paper_schema = BestPaperSchema()
+best_papers_schema = BestPaperSchema(many=True)
 
-@research_bp.route('/awards', methods=['POST'])
+@research_bp.route('/best-papers', methods=['POST'])
 @jwt_required()
-def create_award():
-    """Create a new research award."""
+def create_best_paper():
+    """Create a new Best Paper submission."""
     try:
         # Handle both JSON and multipart form-data (for file uploads)
         if request.is_json:
@@ -44,8 +45,8 @@ def create_award():
             full_paper_path = None
             forwarding_letter_path = None
 
-            # Main award PDF (frontend key: award_pdf; maintain compatibility with abstract_pdf if provided)
-            pdf_file = request.files.get('award_pdf') or request.files.get('abstract_pdf')
+            # Main best paper PDF (frontend key: bestpaper_pdf; maintain compatibility with abstract_pdf if provided)
+            pdf_file = request.files.get('bestpaper_pdf') or request.files.get('abstract_pdf')
             if pdf_file:
                 upload_folder = current_app.config.get('UPLOAD_FOLDER', 'uploads')
                 os.makedirs(upload_folder, exist_ok=True)
@@ -53,7 +54,7 @@ def create_award():
                 unique_filename = f"{uuid.uuid4().hex}_{filename}"
                 file_path = os.path.join(upload_folder, unique_filename)
                 pdf_file.save(file_path)
-                current_app.logger.info(f"Award PDF saved to: {file_path}")
+                current_app.logger.info(f"Best paper PDF saved to: {file_path}")
                 # Store relative path like abstracts route (strip leading app/ if present)
                 full_paper_path = file_path.replace("app/", "", 1)
 
@@ -89,7 +90,7 @@ def create_award():
                 db.session.add(author)
                 db.session.flush()  # obtain author.id
                 author_id = str(author.id)
-                current_app.logger.info(f"Created author {author.name} with ID {author_id} for award")
+                current_app.logger.info(f"Created author {author.name} with ID {author_id} for best paper")
             else:
                 return jsonify({"error": "Author information is required"}), 400
 
@@ -102,114 +103,114 @@ def create_award():
         if forwarding_letter_path:
             data['forwarding_letter_path'] = forwarding_letter_path
 
-        # Load and persist award
-        award = award_schema.load(data)
-        db.session.add(award)
+        # Load and persist best paper
+        best_paper = best_paper_schema.load(data)
+        db.session.add(best_paper)
         db.session.commit()
-        return jsonify(award_schema.dump(award)), 201
+        return jsonify(best_paper_schema.dump(best_paper)), 201
     except Exception as e:
         db.session.rollback()
-        current_app.logger.exception("Error creating award")
+        current_app.logger.exception("Error creating best paper")
         return jsonify({"error": str(e)}), 400
 
-@research_bp.route('/awards', methods=['GET'])
+@research_bp.route('/best-papers', methods=['GET'])
 @jwt_required()
-def get_awards():
-    """Get all research awards."""
-    awards = Awards.query.all()
-    return jsonify(awards_schema.dump(awards)), 200
+def get_best_papers():
+    """Get all Best Paper submissions."""
+    best_papers = BestPaper.query.all()
+    return jsonify(best_papers_schema.dump(best_papers)), 200
 
-@research_bp.route('/awards/<award_id>', methods=['GET'])
+@research_bp.route('/best-papers/<best_paper_id>', methods=['GET'])
 @jwt_required()
-def get_award(award_id):
-    """Get a specific research award."""
-    award = Awards.query.get_or_404(award_id)
-    return jsonify(award_schema.dump(award)), 200
+def get_best_paper(best_paper_id):
+    """Get a specific Best Paper submission."""
+    best_paper = BestPaper.query.get_or_404(best_paper_id)
+    return jsonify(best_paper_schema.dump(best_paper)), 200
 
-@research_bp.route('/awards/<award_id>', methods=['PUT'])
+@research_bp.route('/best-papers/<best_paper_id>', methods=['PUT'])
 @jwt_required()
-def update_award(award_id):
-    """Update a research award."""
-    award = Awards.query.get_or_404(award_id)
+def update_best_paper(best_paper_id):
+    """Update a Best Paper submission."""
+    best_paper = BestPaper.query.get_or_404(best_paper_id)
     try:
-        # Check if user is authorized to update this award
+        # Check if user is authorized to update this best paper
         current_user_id = get_jwt_identity()
         # In a real implementation, you might want to check if the user
         # is the author or has admin privileges
         
         data = request.get_json()
-        award = award_schema.load(data, instance=award, partial=True)
+        best_paper = best_paper_schema.load(data, instance=best_paper, partial=True)
         db.session.commit()
-        return jsonify(award_schema.dump(award)), 200
+        return jsonify(best_paper_schema.dump(best_paper)), 200
     except Exception as e:
         db.session.rollback()
-        current_app.logger.exception("Error updating award")
+        current_app.logger.exception("Error updating best paper")
         return jsonify({"error": str(e)}), 400
 
-@research_bp.route('/awards/<award_id>', methods=['DELETE'])
+@research_bp.route('/best-papers/<best_paper_id>', methods=['DELETE'])
 @jwt_required()
 @require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
-def delete_award(award_id):
-    """Delete a research award."""
-    award = Awards.query.get_or_404(award_id)
+def delete_best_paper(best_paper_id):
+    """Delete a Best Paper submission."""
+    best_paper = BestPaper.query.get_or_404(best_paper_id)
     try:
-        db.session.delete(award)
+        db.session.delete(best_paper)
         db.session.commit()
-        return jsonify({"message": "Award deleted"}), 200
+        return jsonify({"message": "Best Paper deleted"}), 200
     except Exception as e:
         db.session.rollback()
-        current_app.logger.exception("Error deleting award")
+        current_app.logger.exception("Error deleting best paper")
         return jsonify({"error": str(e)}), 400
 
-@research_bp.route('/awards/<award_id>/submit', methods=['POST'])
+@research_bp.route('/best-papers/<best_paper_id>/submit', methods=['POST'])
 @jwt_required()
-def submit_award(award_id):
-    """Submit an award for review."""
-    award = Awards.query.get_or_404(award_id)
+def submit_best_paper(best_paper_id):
+    """Submit a Best Paper for review."""
+    best_paper = BestPaper.query.get_or_404(best_paper_id)
     try:
-        # Check if user is authorized to submit this award
+        # Check if user is authorized to submit this best paper
         current_user_id = get_jwt_identity()
         # In a real implementation, you might want to check if the user
-        # is the author of the award
-        
-        award.status = Status.UNDER_REVIEW
+        # is the author of the submission
+        best_paper.status = Status.UNDER_REVIEW
         db.session.commit()
-        return jsonify({"message": "Award submitted for review"}), 200
+        return jsonify({"message": "Best Paper submitted for review"}), 200
     except Exception as e:
         db.session.rollback()
-        current_app.logger.exception("Error submitting award")
+        current_app.logger.exception("Error submitting best paper")
         return jsonify({"error": str(e)}), 400
 
-
-@research_bp.route('/awards/status', methods=['GET'])
+@research_bp.route('/best-papers/status', methods=['GET'])
 @jwt_required()
-def get_award_submission_status():
-    """Get submission status of awards for the current user."""
+def get_best_paper_submission_status():
+    """Get submission status of Best Paper submissions for the current user."""
     current_user_id = get_jwt_identity()
     user = User.query.get_or_404(current_user_id)
 
     if user.has_role(Role.ADMIN.value) or user.has_role(Role.SUPERADMIN.value):
-        # Admins can see all awards
-        awards = Awards.query
+        # Admins can see all submissions
+        best_papers_query = BestPaper.query
     elif user.has_role(Role.VERIFIER.value):
-        # Verifiers can see awards assigned to them
-        awards = db.session.query(Awards).join(
-            AwardVerifiers, Awards.id == AwardVerifiers.award_id
+        # Verifiers can see submissions assigned to them
+        best_papers_query = db.session.query(BestPaper).join(
+            BestPaperVerifiers, BestPaper.id == BestPaperVerifiers.best_paper_id
         ).filter(
-            AwardVerifiers.user_id == current_user_id
+            BestPaperVerifiers.user_id == current_user_id
         )
     else:
-        awards = Awards.query.filter_by(created_by_id=current_user_id)
+        # NOTE: BestPaper model currently lacks created_by field; this filter may need adjustment if field added.
+        # fallback to all until ownership implemented
+        best_papers_query = BestPaper.query.filter_by(
+            created_by_id=current_user_id)
 
-    pending_awards = awards.filter_by(status=Status.PENDING).count()
-    under_review_awards = awards.filter_by(
-        status=Status.UNDER_REVIEW).count()
-    accepted_awards = awards.filter_by(status=Status.ACCEPTED).count()
-    rejected_awards = awards.filter_by(status=Status.REJECTED).count()
+    pending_count = best_papers_query.filter_by(status=Status.PENDING).count()
+    under_review_count = best_papers_query.filter_by(status=Status.UNDER_REVIEW).count()
+    accepted_count = best_papers_query.filter_by(status=Status.ACCEPTED).count()
+    rejected_count = best_papers_query.filter_by(status=Status.REJECTED).count()
 
     return jsonify({
-        "pending": pending_awards,
-        "under_review": under_review_awards,
-        "accepted": accepted_awards,
-        "rejected": rejected_awards
+        "pending": pending_count,
+        "under_review": under_review_count,
+        "accepted": accepted_count,
+        "rejected": rejected_count
     }), 200

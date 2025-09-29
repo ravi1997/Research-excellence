@@ -1,4 +1,5 @@
-// award_submit.js
+// best_paper_submit.js
+// NOTE: Fallback DOM IDs retained temporarily for backward compatibility; will be removed after backend cleanup.
 (function () {
     function setupFlow() {
         // Step navigation
@@ -17,13 +18,13 @@
         const prev4 = document.querySelector('.prev-step[data-step="4"]');
         const prev5 = document.querySelector('.prev-step[data-step="5"]');
 
-        const award_title = document.getElementById('title');
-        const award_title_count = document.getElementById('title_count');
+        const bestpaper_title = document.getElementById('title');
+        const bestpaper_title_count = document.getElementById('title_count');
 
-        if (award_title && award_title_count) {
-            award_title.addEventListener('input', function () {
+        if (bestpaper_title && bestpaper_title_count) {
+            bestpaper_title.addEventListener('input', function () {
                 const words = countWords(this.value);
-                award_title_count.textContent = words;
+                bestpaper_title_count.textContent = words;
             });
         }
 
@@ -50,16 +51,24 @@
 
         if (next1) next1.addEventListener('click', function () {
             const title = document.getElementById('title');
+            const category = document.getElementById('category');
             const paper_category = document.getElementById('paper_category');
             if (!title || !title.value.trim()) {
-                showToast('Please enter an award title.', 'error');
+                showToast('Please enter a Best Paper title.', 'error');
                 title && title.focus();
                 return;
             }
 
             if (title && countWords(title.value) > 50) {
-                showToast('Award title must be at most 50 words.', 'error');
+                showToast('Best Paper title must be at most 50 words.', 'error');
                 title && title.focus();
+                return;
+            }
+
+
+            if (!category || !category.value) {
+                showToast('Please select a category.', 'error');
+                category && category.focus();
                 return;
             }
 
@@ -106,8 +115,8 @@
         if (prev4) prev4.addEventListener('click', function () { hide(step4); show(step3); mark(3); });
         if (prev5) prev5.addEventListener('click', function () { hide(step5); show(step4); mark(4); });
 
-        // Handle PDF file selection (Award main PDF)
-        const pdfInput = document.getElementById('award_pdf');
+    // Handle PDF file selection (Best Paper main PDF) with backward-compatible IDs
+    const pdfInput = document.getElementById('bestpaper_pdf') || document.getElementById('best_paper_pdf');
         if (pdfInput) {
             pdfInput.addEventListener('change', function () {
                 const file = this.files && this.files[0];
@@ -133,7 +142,7 @@
         const removePdfBtn = document.getElementById('remove-pdf');
         if (removePdfBtn) {
             removePdfBtn.addEventListener('click', function () {
-                const pdfInput = document.getElementById('award_pdf');
+                const pdfInput = document.getElementById('best_paper_pdf');
                 const preview = document.getElementById('pdf-preview');
                 if (pdfInput) pdfInput.value = '';
                 if (preview) preview.classList.add('hidden');
@@ -153,14 +162,16 @@
     }
 
     function setupEvents() {
+        // Fetch categories for dropdown
+        fetchCategories();
         fetchPaperCategories();
         fetchLatestActiveCycle();
 
     // Single author form: no dynamic add author button
 
         // Form submission
-        var awardForm = document.getElementById('award-form');
-        if (awardForm) awardForm.addEventListener('submit', submitAward);
+    var bestPaperForm = document.getElementById('best-paper-form');
+        if (bestPaperForm) bestPaperForm.addEventListener('submit', submitBestPaper);
 
         // Save draft button
         var saveDraftBtn = document.getElementById('save-draft-btn');
@@ -277,6 +288,63 @@ function updatePdfPreview(file) {
 function hidePdfPreview() {
     const preview = document.getElementById('pdf-preview');
     if (preview) preview.classList.add('hidden');
+}
+
+// Fetch categories from the API
+async function fetchCategories() {
+    const select = document.getElementById('category');
+    if (!select) return;
+
+    try {
+        // Show loading state
+        select.innerHTML = '<option value="">Loading categories...</option>';
+        select.disabled = true;
+
+        const response = await fetch(`${BASE_API_URL}/categories`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+        const categories = Array.isArray(result) ? result : (result.categories || result.data || []);
+
+        // Clear and populate options
+        select.innerHTML = '<option value="">Select a category</option>';
+
+        categories.forEach(category => {
+            const option = document.createElement('option');
+            option.value = category.id || category.category_id;
+            option.textContent = category.name || category.category_name || 'Unnamed Category';
+            select.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error fetching categories:', error);
+        showToast('Failed to load categories. Using default options.', 'error');
+        // Fallback to mock data if API fails
+        select.innerHTML = '<option value="">Select a category</option>';
+        const categories = [
+            { id: 1, name: 'Medical Research' },
+            { id: 2, name: 'Clinical Research' },
+            { id: 3, name: 'Public Health' },
+            { id: 4, name: 'Biotechnology' }
+        ];
+
+        categories.forEach(category => {
+            const option = document.createElement('option');
+            option.value = category.id;
+            option.textContent = category.name;
+            select.appendChild(option);
+        });
+    } finally {
+        if (select) select.disabled = false;
+    }
 }
 
 // Fetch categories from the API
@@ -560,7 +628,7 @@ function updateAuthorNumbers() {
 
 // Collect form data with validation
 function collectFormData() {
-    const form = document.getElementById('award-form');
+    const form = document.getElementById('best-paper-form');
     if (!form) return {};
 
     const formData = new FormData(form);
@@ -568,6 +636,7 @@ function collectFormData() {
 
     // Basic fields (should already be validated in step navigation)
     data.title = formData.get('title') || '';
+    data.category_id = formData.get('category_id') || '';
     data.paper_category_id = formData.get('paper_category_id') || '';
     // Auto-select latest cycle
     if (!latestCycleId) {
@@ -606,8 +675,8 @@ function collectFormData() {
     return data;
 }
 
-// Submit award to the API
-async function submitAward(event) {
+// Submit Best Paper to the API
+async function submitBestPaper(event) {
     event.preventDefault();
 
     // Get submit button and show loading state
@@ -627,7 +696,7 @@ async function submitAward(event) {
         const jsonData = collectFormData();
 
         // Check if a PDF file is selected
-        const pdfInput = document.getElementById('award_pdf');
+    const pdfInput = document.getElementById('bestpaper_pdf') || document.getElementById('best_paper_pdf');
         const fwdPdfInput = document.getElementById('forwarding_pdf');
         if (pdfInput && pdfInput.files[0]) {
             // Validate again on submit to guard against edge cases
@@ -638,7 +707,7 @@ async function submitAward(event) {
             const formData = new FormData();
             formData.append('data', JSON.stringify(jsonData));
             // Add both keys for compatibility with current backend
-            formData.append('award_pdf', pdfInput.files[0]);
+            formData.append('bestpaper_pdf', pdfInput.files[0]);
             formData.append('abstract_pdf', pdfInput.files[0]);
             // Forwarding letter (optional)
             if (fwdPdfInput && fwdPdfInput.files[0]) {
@@ -648,12 +717,12 @@ async function submitAward(event) {
                 formData.append('forwarding_pdf', fwdPdfInput.files[0]);
             }
 
-            // Try awards endpoint first, then fallback to abstracts
-            let response = await fetch(`${BASE_API_URL}/awards`, { method: 'POST', body: formData });
+            // Submit to canonical best-papers endpoint
+            let response = await fetch(`${BASE_API_URL}/best-papers`, { method: 'POST', body: formData });
             
             if (!response.ok) {
                 const errorText = await response.text();
-                let errorMessage = `Failed to submit award: ${response.status} ${response.statusText}`;
+                let errorMessage = `Failed to submit Best Paper: ${response.status} ${response.statusText}`;
                 try {
                     const errorData = JSON.parse(errorText);
                     errorMessage = errorData.error || errorData.message || errorMessage;
@@ -663,25 +732,17 @@ async function submitAward(event) {
                 throw new Error(errorMessage);
             }
             await response.json();
-            showToast('Award submitted successfully!', 'success');
+            showToast('Best Paper submitted successfully!', 'success');
         } else {
             // No file selected, send as JSON
-            let response = await fetch(`${BASE_API_URL}/awards`, {
+            let response = await fetch(`${BASE_API_URL}/best-papers`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
                 body: JSON.stringify(jsonData)
             });
             if (!response.ok) {
-                // Fallback to abstracts if awards not available
-                response = await fetch(`${BASE_API_URL}/abstracts`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                    body: JSON.stringify(jsonData)
-                });
-            }
-            if (!response.ok) {
                 const errorText = await response.text();
-                let errorMessage = `Failed to submit award: ${response.status} ${response.statusText}`;
+                let errorMessage = `Failed to submit Best Paper: ${response.status} ${response.statusText}`;
                 try {
                     const errorData = JSON.parse(errorText);
                     errorMessage = errorData.error || errorData.message || errorMessage;
@@ -691,7 +752,7 @@ async function submitAward(event) {
                 throw new Error(errorMessage);
             }
             await response.json();
-            showToast('Award submitted successfully!', 'success');
+            showToast('Best Paper submitted successfully!', 'success');
         }
 
         // Redirect to research dashboard after a short delay
@@ -699,17 +760,17 @@ async function submitAward(event) {
             window.location.href = '/video/';
         }, 1500);
     } catch (error) {
-        console.error('Error submitting award:', error);
-        showToast(`Failed to submit award: ${error.message}`, 'error');
+    console.error('Error submitting Best Paper:', error);
+    showToast(`Failed to submit Best Paper: ${error.message}`, 'error');
     } finally {
         if (submitBtn) {
             submitBtn.disabled = false;
-            submitBtn.innerHTML = 'Submit Award';
+            submitBtn.innerHTML = 'Submit Best Paper';
         }
     }
 }
 
-// Save draft functionality
+// Save draft functionality (Best Paper)
 async function saveDraft() {
     // Get draft button and show loading state
     const draftBtn = document.getElementById('save-draft-btn');
@@ -727,7 +788,7 @@ async function saveDraft() {
         jsonData.status = 'draft';
 
         // Check if a PDF file is selected
-        const pdfInput = document.getElementById('award_pdf');
+    const pdfInput = document.getElementById('bestpaper_pdf') || document.getElementById('best_paper_pdf');
         const fwdPdfInput = document.getElementById('forwarding_pdf');
         if (pdfInput && pdfInput.files[0]) {
             // Validate again on save draft
@@ -738,7 +799,7 @@ async function saveDraft() {
             const formData = new FormData();
             formData.append('data', JSON.stringify(jsonData));
             // Add both keys for compatibility
-            formData.append('award_pdf', pdfInput.files[0]);
+            formData.append('bestpaper_pdf', pdfInput.files[0]);
             formData.append('abstract_pdf', pdfInput.files[0]);
                 if (fwdPdfInput && fwdPdfInput.files[0]) {
                     if (!validateForwardingPdf(fwdPdfInput.files[0], fwdPdfInput)) {
@@ -747,11 +808,8 @@ async function saveDraft() {
                     formData.append('forwarding_pdf', fwdPdfInput.files[0]);
                 }
 
-            // Save to API: try awards, fallback to abstracts
-            let response = await fetch(`${BASE_API_URL}/awards`, { method: 'POST', body: formData });
-            if (!response.ok) {
-                response = await fetch(`${BASE_API_URL}/abstracts`, { method: 'POST', body: formData });
-            }
+            // Save to API: canonical best-papers endpoint
+            let response = await fetch(`${BASE_API_URL}/best-papers`, { method: 'POST', body: formData });
 
             if (!response.ok) {
                 const errorText = await response.text();
@@ -774,7 +832,7 @@ async function saveDraft() {
             showToast('Draft saved successfully!', 'success');
         } else {
             // No file selected, send as JSON
-            let response = await fetch(`${BASE_API_URL}/awards`, {
+            let response = await fetch(`${BASE_API_URL}/best-papers`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -782,16 +840,6 @@ async function saveDraft() {
                 },
                 body: JSON.stringify(jsonData)
             });
-            if (!response.ok) {
-                response = await fetch(`${BASE_API_URL}/abstracts`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json'
-                    },
-                    body: JSON.stringify(jsonData)
-                });
-            }
 
             if (!response.ok) {
                 const errorText = await response.text();
@@ -811,11 +859,11 @@ async function saveDraft() {
             }
 
             const result = await response.json();
-            showToast('Draft saved successfully!', 'success');
+            showToast('Best Paper draft saved successfully!', 'success');
         }
     } catch (error) {
-        console.error('Error saving draft:', error);
-        showToast(`Failed to save draft: ${error.message}`, 'error');
+    console.error('Error saving Best Paper draft:', error);
+    showToast(`Failed to save Best Paper draft: ${error.message}`, 'error');
     } finally {
         if (draftBtn) {
             draftBtn.disabled = false;
@@ -844,6 +892,12 @@ function generatePreview() {
     // Collect all form data
     const formData = collectFormData();
 
+    // Get category name
+    let categoryName = 'Not selected';
+    const categorySelect = document.getElementById('category');
+    if (categorySelect && categorySelect.options[categorySelect.selectedIndex]) {
+        categoryName = categorySelect.options[categorySelect.selectedIndex].text;
+    }
 
     let paperCategoryName = 'Not selected';
     const paperCategorySelect = document.getElementById('paper_category');
@@ -857,7 +911,7 @@ function generatePreview() {
     let pdfPreview = '';
     let forpdfPreview = '';
 
-    const pdfInput = document.getElementById('award_pdf');
+    const pdfInput = document.getElementById('bestpaper_pdf') || document.getElementById('best_paper_pdf');
     const fwdPdfInput = document.getElementById('forwarding_pdf');
     if (pdfInput && pdfInput.files[0]) {
         const file = pdfInput.files[0];
@@ -880,10 +934,10 @@ function generatePreview() {
                         Ready
                     </span>
                 </div>
-                <div id="pdf-preview-container-award" class="border border-gray-300 dark:border-gray-600 rounded mt-3 bg-white dark:bg-gray-800">
-                    <canvas id="pdf-canvas-award" class="w-full"></canvas>
+                <div id="pdf-preview-container-bestpaper" class="border border-gray-300 dark:border-gray-600 rounded mt-3 bg-white dark:bg-gray-800">
+                    <canvas id="pdf-canvas-bestpaper" class="w-full"></canvas>
                 </div>
-                <p class="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">PDF file will be submitted with your award</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">PDF file will be submitted with your Best Paper submission</p>
             </div>
         `;
     }
@@ -910,7 +964,7 @@ function generatePreview() {
                 <div id="pdf-preview-container-forwarding" class="border border-gray-300 dark:border-gray-600 rounded mt-3 bg-white dark:bg-gray-800">
                     <canvas id="pdf-canvas-forwarding" class="w-full"></canvas>
                 </div>
-                <p class="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">PDF file will be submitted with your award</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">PDF file will be submitted with your Best Paper submission</p>
             </div>
         `;
     }
@@ -919,7 +973,7 @@ function generatePreview() {
     // Generate preview HTML with improved styling
     let previewHTML = `
         <div class="divide-y divide-gray-200 dark:divide-gray-700">
-            <!-- Award Details Section -->
+            <!-- Best Paper Details Section -->
             <div class="p-6">
                 <div class="flex items-center mb-4">
                     <div class="flex-shrink-0 h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
@@ -928,7 +982,7 @@ function generatePreview() {
                         </svg>
                     </div>
                     <div class="ml-4">
-                        <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Award Details</h3>
+                        <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Best Paper Details</h3>
                         <p class="text-sm text-gray-500 dark:text-gray-400">Title and category information</p>
                     </div>
                 </div>
@@ -937,6 +991,10 @@ function generatePreview() {
                     <div class="flex">
                         <dt class="text-sm font-medium text-gray-500 dark:text-gray-400 w-24">Title</dt>
                         <dd class="text-sm text-gray-900 dark:text-white">${escapeHtml(formData.title)}</dd>
+                    </div>
+                    <div class="flex">
+                        <dt class="text-sm font-medium text-gray-500 dark:text-gray-400 w-24">Category</dt>
+                        <dd class="text-sm text-gray-900 dark:text-white">${escapeHtml(categoryName)}</dd>
                     </div>
                     <div class="flex">
                         <dt class="text-sm font-medium text-gray-500 dark:text-gray-400 w-24">Paper Category</dt>
@@ -1035,7 +1093,7 @@ function generatePreview() {
 
     // Render PDF previews if files are selected
     if (pdfInput && pdfInput.files[0]) {
-        renderPdfPreview(pdfInput.files[0], 'pdf-preview-container-award', 'pdf-canvas-award');
+    renderPdfPreview(pdfInput.files[0], 'pdf-preview-container-bestpaper', 'pdf-canvas-bestpaper');
     }
     if (fwdPdfInput && fwdPdfInput.files[0]) {
         renderPdfPreview(fwdPdfInput.files[0], 'pdf-preview-container-forwarding', 'pdf-canvas-forwarding');
@@ -1215,7 +1273,7 @@ function showPdfPreviewError(message, containerId = 'pdf-preview-container', fil
                     <p class="text-lg font-medium text-gray-900 dark:text-white">PDF Preview Unavailable</p>
                     <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">${escapeHtml(message)}</p>
                     <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                        Don't worry - your file will still be submitted with your award
+                        Don't worry - your file will still be submitted with your Best Paper submission
                     </p>
                 </div>
                 <div class="mt-4">

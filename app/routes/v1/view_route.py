@@ -160,12 +160,13 @@ def submit_award():
     return render_template('award_submit.html')
 
 
-@view_bp.route('/research/awards/verify')
+@view_bp.route('/research/best-paper/submit')
 @jwt_required()
-@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value, Role.VERIFIER.value)
-def verify_award():
-    """Verify research awards."""
-    return render_template('verify_award.html')
+@require_roles(Role.USER.value, Role.ADMIN.value, Role.SUPERADMIN.value)
+def submit_best_paper():
+    """Submit a best paper award."""
+    return render_template('best_paper_submit.html')
+
 
 @view_bp.route('/research/projects')
 @jwt_required()
@@ -218,9 +219,39 @@ def verify_abstract():
     return render_template('verify_abstract.html')
 
 
-@view_bp.route('/research/best-paper/submit')
+@view_bp.route('/research/awards/verify')
+@jwt_required()
+@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value, Role.VERIFIER.value)
+def verify_award():
+    """Verify research awards."""
+    return render_template('verify_award.html')
+
+
+@view_bp.route('/research/best-paper/verify')
+@jwt_required()
+@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value, Role.VERIFIER.value)
+def verify_best_paper():
+    """Verify best paper submissions."""
+    return render_template('verify_best_paper.html')
+
+
+@view_bp.route('/research/abstracts/list')
 @jwt_required()
 @require_roles(Role.USER.value, Role.ADMIN.value, Role.SUPERADMIN.value)
-def submit_best_paper():
-    """Submit a best paper award."""
-    return render_template('award_submit.html')
+def list_abstracts():
+    """List research abstracts."""
+    return render_template('submitted_list_abstract.html')
+
+@view_bp.route('/research/awards/list')
+@jwt_required()
+@require_roles(Role.USER.value, Role.ADMIN.value, Role.SUPERADMIN.value)
+def list_award():
+    """List research awards."""
+    return render_template('submitted_list_award.html')
+
+@view_bp.route('/research/best-paper/list')
+@jwt_required()
+@require_roles(Role.USER.value, Role.ADMIN.value, Role.SUPERADMIN.value)
+def list_best_paper():
+    """List research best papers."""
+    return render_template('submitted_list_paper.html')

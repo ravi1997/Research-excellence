@@ -4,6 +4,7 @@ from marshmallow_enum import EnumField
 from app.models.User import User, Role
 from app.models.enumerations import UserType
 from app.extensions import ma
+from .grading_schema import GradingSchema  # retained import if needed for other operations
 
 
 class UserSchema(ma.SQLAlchemyAutoSchema):
@@ -48,6 +49,9 @@ class UserSchema(ma.SQLAlchemyAutoSchema):
     # Password reset fields
     reset_token_hash = fields.String(load_only=True, allow_none=True)
     reset_token_expires = fields.DateTime(load_only=True, allow_none=True)
+    
+    # Removed gradings nested relationship to prevent recursion depth during grading dumps
+    # gradings = fields.Nested(GradingSchema, many=True, dump_only=True)
 
     @post_load
     def make_user(self, data, **kwargs):

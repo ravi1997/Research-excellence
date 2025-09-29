@@ -57,15 +57,13 @@ def create_abstract():
         
         # Get the current user ID from JWT
         current_user_id = get_jwt_identity()
-        
-        # Ensure created_by is set to the current user
-        # Remove 'created_by' from data before schema load, set it on the model after
-        data_created_by = current_user_id
+    
 
         # Extract authors from data if present
         authors_data = data.pop('authors', [])
 
-        data['created_by_id'] = data_created_by  # Set created_by_id in data for schema load
+        # Set created_by_id in data for schema load
+        data['created_by_id'] = current_user_id
 
         # Load the abstract without authors
         abstract = abstract_schema.load(data)
@@ -232,11 +230,14 @@ def get_abstracts():
         # Build query for abstracts
         query = Abstracts.query
         
+        q_int = q.isdigit() and int(q) or None
+        
         # Apply search filter
         if q:
             search_filter = db.or_(
                 Abstracts.title.ilike(f'%{q}%'),
-                Abstracts.content.ilike(f'%{q}%')
+                Abstracts.content.ilike(f'%{q}%'),
+                Abstracts.abstract_number == q_int
             )
             query = query.filter(search_filter)
         
@@ -362,7 +363,7 @@ def get_abstract_submission_status():
             AbstractVerifiers.user_id == current_user_id
         )
     else:    
-        abstracts = Abstracts.query.filter_by(created_by=current_user_id)
+        abstracts = Abstracts.query.filter_by(created_by_id=current_user_id)
 
     pending_abstracts = abstracts.filter_by(status=Status.PENDING).count()
     under_review_abstracts = abstracts.filter_by(status=Status.UNDER_REVIEW).count()

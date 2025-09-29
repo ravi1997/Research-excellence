@@ -6,6 +6,7 @@ from app.extensions import ma
 from .category_schema import CategorySchema
 from .author_schema import AuthorSchema
 from .user_schema import UserSchema
+from .grading_schema import GradingSchema
 
 
 class AbstractSchema(ma.SQLAlchemyAutoSchema):
@@ -30,4 +31,5 @@ class AbstractSchema(ma.SQLAlchemyAutoSchema):
     category = fields.Nested(CategorySchema, dump_only=True)
     authors = fields.Nested(AuthorSchema, many=True, dump_only=True)
     verifiers = fields.Nested(UserSchema, many=True, dump_only=True)
+    gradings = fields.Nested(GradingSchema, many=True, dump_only=True)
     
