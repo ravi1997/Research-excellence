@@ -1,5 +1,5 @@
 (() => {
-    const BASE = '/video/api/v1/research';  // Fixed path
+    const BASE = '/api/v1/research';  // Fixed path
     const token = () => localStorage.getItem('token') || '';
     const headers = () => ({ 'Accept': 'application/json', 'Authorization': `Bearer ${token()}` });
     const sQ = id => document.getElementById(id);
@@ -349,7 +349,7 @@
             if (container) container.innerHTML = '<p class="text-red-600 dark:text-red-400 text-center p-4">PDF.js library not available. Cannot preview PDF.</p>';
             return;
         }
-        pdfjsLib.GlobalWorkerOptions.workerSrc = '/video/static/js/pdf.worker.min.js';
+        pdfjsLib.GlobalWorkerOptions.workerSrc = '/static/js/pdf.worker.min.js';
         fetch(`${BASE}/abstracts/${abstractId}/pdf`, {
             headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
         })
@@ -398,7 +398,21 @@
     function formatDate(dateString) {
         if (!dateString) return 'Unknown';
         const date = new Date(dateString);
-        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        
+        // Convert UTC to IST (UTC+5:30)
+        const istDate = new Date(date.getTime() + (5.5 * 60 * 60 * 1000));
+        
+        return istDate.toLocaleDateString('en-IN', { 
+            timeZone: 'Asia/Kolkata',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        }) + ' ' + istDate.toLocaleTimeString('en-IN', { 
+            timeZone: 'Asia/Kolkata',
+            hour: '2-digit', 
+            minute: '2-digit',
+            hour12: true
+        });
     }
 
     async function searchAbstracts() {

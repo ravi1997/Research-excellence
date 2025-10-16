@@ -1,5 +1,5 @@
 /* ==========================================================================
-   RPC Surgical Video Library — Layout & Theme Utilities (no dependencies)
+   Research Submission Portal — Layout & Theme Utilities (no dependencies)
    - Light/Dark theme toggle with persistence
    - Simple auth area rendering (progressively enhanced)
    - Tiny helpers + search handler stub
@@ -7,7 +7,7 @@
 
 (() => {
   // ------------------ Theme ------------------
-  const BASE = '/video';
+  const BASE = '';
   const THEME_KEY = "ui.theme"; // "light" | "dark"
   const htmlEl = document.documentElement;
   const bodyEl = document.body;
@@ -154,12 +154,12 @@
     // Grouped links for automatic divider insertion between sections
   const groups = [
       [ // Account
-        { href: BASE + '/settings', label: 'Settings' },
+        // { href: BASE + '/settings', label: 'Settings' },
         { href: BASE + '/change-password', label: 'Change Password' }
       ],
-      [ // Activity
-        { href: BASE + '/history', label: 'History' },
-      ],
+      // [ // Activity
+      //   { href: BASE + '/history', label: 'History' },
+      // ],
       [ // Legal
         { href: BASE + '/privacy', label: 'Privacy' },
         { href: BASE + '/terms', label: 'Terms' }
@@ -460,7 +460,7 @@
     showToast('Session expired. Redirecting to login…','warn',3500);
     clearAuthStorage();
     const ret = encodeURIComponent(path + window.location.search);
-    setTimeout(()=>{ try { window.location.replace(`/video/login?next=${ret}`); } catch { window.location.href = `/video/login?next=${ret}`; } }, 1200);
+    setTimeout(()=>{ try { window.location.replace(`/login?next=${ret}`); } catch { window.location.href = `/login?next=${ret}`; } }, 1200);
   }
 
   // Patch fetch once

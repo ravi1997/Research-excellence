@@ -1,5 +1,5 @@
 (() => {
-    const BASE = '/video/api/v1/research';  // Fixed path
+    const BASE = '/api/v1/research';  // Fixed path
     const token = () => localStorage.getItem('token') || '';
     const headers = () => ({ 'Accept': 'application/json', 'Authorization': `Bearer ${token()}` });
     const sQ = id => document.getElementById(id);
@@ -33,7 +33,7 @@
             state.awards.page = 1; searchAwards();
         });
     }
-    
+
     async function updateStatsBar() {
         try {
             const resp = await fetch(`${BASE}/awards/status`, {
@@ -103,7 +103,7 @@
             setTimeout(() => { bar && bar.classList.add('hidden'); }, 120); // slight delay for smoother perception
         }
     }
-    
+
     function renderList(el, items, type) {
         el.replaceChildren();
         if (!items.length) {
@@ -124,7 +124,7 @@
                         <div class="flex-1 min-w-0">
                             <div class="font-medium text-gray-900 dark:text-white truncate">${escapeHtml(it.title || 'Untitled Award')}</div>
                             <div class="flex flex-wrap gap-2 mt-1">
-                                <span class="text-xs text-gray-500 dark:text-gray-400 truncate">(${it.category?.name || 'No Category'})</span>
+                                <span class="text-xs text-gray-500 dark:text-gray-400 truncate">(${it.paper_category?.name || 'No Category'})</span>
                                 <span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded ${getStatusClass(it.status)}">${escapeHtml(it.status || 'PENDING')}</span>
                             </div>
                         </div>
@@ -156,11 +156,11 @@
                         </div>
                     </span>
                 `;
-                li.addEventListener('click', (e) => { 
-                    if (e.target.classList.contains('bulkChk')) return; 
-                    selAward = it; 
-                    updatePanel(); 
-                    highlightSelection(); 
+                li.addEventListener('click', (e) => {
+                    if (e.target.classList.contains('bulkChk')) return;
+                    selAward = it;
+                    updatePanel();
+                    highlightSelection();
                 });
             }
             el.appendChild(li);
@@ -170,14 +170,14 @@
                 chk.addEventListener('change', e => {
                     const id = e.target.getAttribute('data-id');
                     if (e.target.checked) bulk.awardIds.add(id); else bulk.awardIds.delete(id);
-                    
-                   
+
+
                 });
             });
-            
+
         }
     }
-    
+
     function getStatusClass(status) {
         switch ((status || '').toLowerCase()) {
             case 'accepted': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100';
@@ -186,8 +186,8 @@
             default: return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100';
         }
     }
-    
-    
+
+
     function highlightSelection() {
         // Clear previous highlight
         Array.from(awardList.children).forEach(li => li.classList.remove('ring', 'ring-[color:var(--brand-600)]', 'selected-row', 'bg-[color:var(--brand-200)]', 'dark:bg-[color:var(--brand-800)]'));
@@ -196,14 +196,14 @@
             if (el) el.classList.add('ring', 'ring-[color:var(--brand-600)]', 'selected-row', 'bg-[color:var(--brand-200)]', 'dark:bg-[color:var(--brand-800)]');
         }
     }
-    
+
     function updatePanel() {
         const noAwardSelected = sQ('noAwardSelected');
         const awardContent = sQ('awardContent');
         if (selAward) {
             noAwardSelected.classList.add('hidden');
             awardContent.classList.remove('hidden');
-            
+
             // Generate preview content
             generatePreview();
         } else {
@@ -211,51 +211,33 @@
             awardContent.classList.add('hidden');
         }
     }
-    
+
     // Generate preview of award details
     function generatePreview() {
         const previewContent = sQ('preview-content');
         if (!previewContent || !selAward) return;
-        
+
         // Get category name
-        const categoryName = selAward.category?.name || 'No Category';
+        const categoryName = selAward.paper_category?.name || 'No Category';
 
         // Update summary card info
         sQ('summaryTitle') && (sQ('summaryTitle').textContent = selAward.title || 'Untitled Award');
-        
+
         sQ('summaryCategory') && (sQ('summaryCategory').textContent = categoryName);
         sQ('summaryAwardNumber') && (sQ('summaryAwardNumber').textContent = selAward.award_number || 'Unknown ID');
-        
+
         sQ('summaryStatus') && (sQ('summaryStatus').textContent = selAward.status || 'PENDING');
         sQ('summaryStatus') && (sQ('summaryStatus').className = 'badge ' + getStatusClass(selAward.status));
         sQ('summaryAuthor') && (sQ('summaryAuthor').textContent = selAward.created_by?.username || 'Unknown User');
         sQ('summaryDate') && (sQ('summaryDate').textContent = formatDate(selAward.created_at));
 
+
+        let pdfPreview = '';
+        let forpdfPreview = '';
+
         // Generate preview HTML with improved styling
         let previewHTML = `
             <div class="divide-y divide-gray-200 dark:divide-gray-700">
-               
-                <!-- Award Content Section -->
-                <div class="p-5">
-                    <div class="hidden flex items-center mb-4">
-                        <div class="flex-shrink-0 h-10 w-10 rounded-full bg-purple-100 dark:bg-purple-900 flex items-center justify-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-purple-600 dark:text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                            </svg>
-                        </div>
-                        <div class="ml-4">
-                            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Award Content</h3>
-                            <p class="text-sm text-gray-500 dark:text-gray-400">Main body of the award</p>
-                        </div>
-                    </div>
-                    
-                    <div class="ml-2">
-                        <div class="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg border border-gray-200 dark:border-gray-600">
-                            <p class="whitespace-pre-wrap text-gray-800 dark:text-gray-200">${escapeHtml(selAward.content || '')}</p>
-                        </div>
-                    </div>
-                </div>
-                
                 <!-- Authors Section -->
                 <div class="p-5">
                     <div class="flex items-center mb-4">
@@ -272,19 +254,19 @@
                     
                     <div class="ml-2 space-y-4">
         `;
-        
-        if (selAward.authors && selAward.authors.length > 0) {
-            selAward.authors.forEach((author) => {
-                const roles = [];
-                if (author.is_presenter) roles.push('Presenter');
-                if (author.is_corresponding) roles.push('Corresponding');
-                
-                previewHTML += `
+
+        if (selAward.author) {
+            let author = selAward.author;
+            const roles = [];
+            if (author.is_presenter) roles.push('Presenter');
+            if (author.is_corresponding) roles.push('Corresponding');
+
+            previewHTML += `
                     <div class="border-l-4 border-blue-400 dark:border-blue-600 pl-4 py-2">
                         <div class="flex flex-wrap justify-between gap-2">
                             <p class="font-medium text-gray-900 dark:text-white">${escapeHtml(author.name)}</p>
-                            ${roles.length > 0 ? `<div class="flex flex-wrap gap-1">${roles.map(role => 
-                                `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100">
+                            ${roles.length > 0 ? `<div class="flex flex-wrap gap-1">${roles.map(role =>
+                `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100">
                                     ${role}
                                 </span>`).join('')}</div>` : ''}
                         </div>
@@ -292,14 +274,43 @@
                         ${author.affiliation ? `<p class="text-sm text-gray-500 dark:text-gray-400 mt-1">${escapeHtml(author.affiliation)}</p>` : ''}
                     </div>
                 `;
-            });
         } else {
             previewHTML += `
                 <p class="text-gray-500 dark:text-gray-400 italic">No authors listed</p>
             `;
         }
-        
+
         previewHTML += `
+                    </div>
+                </div>
+                 <!-- AIIMS & Forwarding Letter Section -->
+                <div class="p-5">
+                    <div class="flex items-center mb-4">
+                        <div class="flex-shrink-0 h-10 w-10 rounded-full bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-600 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 17V7a2 2 0 012-2h6a2 2 0 012 2v10m-2 4h-4a2 2 0 01-2-2V7a2 2 0 012-2h4a2 2 0 012 2v10a2 2 0 01-2 2z" />
+                            </svg>
+                        </div>
+                        <div class="ml-4">
+                            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Institution &amp; HOD Letter</h3>
+                            <p class="text-sm text-gray-500 dark:text-gray-400">AIIMS involvement and forwarding letter</p>
+                        </div>
+                    </div>
+                    <div class="ml-2">
+                        ${selAward.forwarding_letter_path ? `
+                            <div id="forwarding-pdf-preview-container" class="border border-gray-300 dark:border-gray-600 rounded mt-3 bg-white dark:bg-gray-800" style="max-height: 500px; overflow-y: auto;">
+                                <div class="p-4 text-center">
+                                    <div class="inline-flex items-center px-4 py-2 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
+                                        <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        <span class="text-blue-600 dark:text-blue-400">Loading PDF...</span>
+                                    </div>
+                                </div>
+                                <!-- Canvases for PDF pages will be rendered here -->
+                            </div>
+                        ` : `<p class="text-gray-500 dark:text-gray-400 italic p-4 text-center">No Forwarding Letter PDF uploaded for this award.</p>`}
                     </div>
                 </div>
 
@@ -317,7 +328,7 @@
                         </div>
                     </div>
                     <div class="ml-2">
-                        ${selAward.pdf_path ? `
+                        ${selAward.full_paper_path ? `
                             <div id="pdf-preview-container" class="border border-gray-300 dark:border-gray-600 rounded mt-3 bg-white dark:bg-gray-800" style="max-height: 500px; overflow-y: auto;">
                                 <div class="p-4 text-center">
                                     <div class="inline-flex items-center px-4 py-2 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
@@ -337,11 +348,17 @@
         `;
         previewContent.innerHTML = previewHTML;
         // After rendering, if PDF exists, render preview using PDF.js
-        if (selAward.pdf_path) {
+        if (selAward.full_paper_path) {
             renderVerifierPdfPreview(selAward.id);
         }
+
+
+        if (selAward.forwarding_letter_path) {
+            renderVerifierforwardingPdfPreview(selAward.id);
+        }
+
     }
-    
+
     // Render PDF preview for verifier using PDF.js
     function renderVerifierPdfPreview(awardId) {
         if (typeof pdfjsLib === 'undefined') {
@@ -349,7 +366,7 @@
             if (container) container.innerHTML = '<p class="text-red-600 dark:text-red-400 text-center p-4">PDF.js library not available. Cannot preview PDF.</p>';
             return;
         }
-        pdfjsLib.GlobalWorkerOptions.workerSrc = '/video/static/js/pdf.worker.min.js';
+        pdfjsLib.GlobalWorkerOptions.workerSrc = '/static/js/pdf.worker.min.js';
         fetch(`${BASE}/awards/${awardId}/pdf`, {
             headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
         })
@@ -360,7 +377,7 @@
             .then(buffer => {
                 const typedarray = new Uint8Array(buffer);
                 const loadingTask = pdfjsLib.getDocument({ data: typedarray, password: '' });
-                loadingTask.promise.then(function(pdf) {
+                loadingTask.promise.then(function (pdf) {
                     const container = document.getElementById('pdf-preview-container');
                     if (!container) return;
                     container.innerHTML = '';
@@ -369,7 +386,7 @@
                     let pagePromises = [];
                     for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
                         pagePromises.push(
-                            pdf.getPage(pageNum).then(function(page) {
+                            pdf.getPage(pageNum).then(function (page) {
                                 const viewport = page.getViewport({ scale: scale });
                                 const canvas = document.createElement('canvas');
                                 canvas.className = 'w-full mb-4 rounded shadow';
@@ -381,10 +398,10 @@
                             })
                         );
                     }
-                    Promise.all(pagePromises).catch(function(renderError) {
+                    Promise.all(pagePromises).catch(function (renderError) {
                         container.innerHTML = '<p class="text-red-600 dark:text-red-400 text-center p-4">Error rendering PDF pages.</p>';
                     });
-                }).catch(function(error) {
+                }).catch(function (error) {
                     const container = document.getElementById('pdf-preview-container');
                     if (container) container.innerHTML = '<p class="text-red-600 dark:text-red-400 text-center p-4">Unable to load PDF: ' + (error.message || 'Unknown error') + '</p>';
                 });
@@ -394,11 +411,77 @@
                 if (container) container.innerHTML = '<p class="text-red-600 dark:text-red-400 text-center p-4">Unable to fetch PDF file.</p>';
             });
     }
-    
+
+    function renderVerifierforwardingPdfPreview(awardId) {
+        if (typeof pdfjsLib === 'undefined') {
+            const container = document.getElementById('forwarding-pdf-preview-container');
+            if (container) container.innerHTML = '<p class="text-red-600 dark:text-red-400 text-center p-4">PDF.js library not available. Cannot preview PDF.</p>';
+            return;
+        }
+        pdfjsLib.GlobalWorkerOptions.workerSrc = '/static/js/pdf.worker.min.js';
+        fetch(`${BASE}/awards/${awardId}/forwarding_pdf`, {
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
+        })
+            .then(response => {
+                if (!response.ok) throw new Error('Network response was not ok');
+                return response.arrayBuffer();
+            })
+            .then(buffer => {
+                const typedarray = new Uint8Array(buffer);
+                const loadingTask = pdfjsLib.getDocument({ data: typedarray, password: '' });
+                loadingTask.promise.then(function (pdf) {
+                    const container = document.getElementById('forwarding-pdf-preview-container');
+                    if (!container) return;
+                    container.innerHTML = '';
+                    const scale = 1.5;
+                    // Render all pages
+                    let pagePromises = [];
+                    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                        pagePromises.push(
+                            pdf.getPage(pageNum).then(function (page) {
+                                const viewport = page.getViewport({ scale: scale });
+                                const canvas = document.createElement('canvas');
+                                canvas.className = 'w-full mb-4 rounded shadow';
+                                canvas.height = viewport.height;
+                                canvas.width = viewport.width;
+                                container.appendChild(canvas);
+                                const context = canvas.getContext('2d');
+                                return page.render({ canvasContext: context, viewport: viewport }).promise;
+                            })
+                        );
+                    }
+                    Promise.all(pagePromises).catch(function (renderError) {
+                        container.innerHTML = '<p class="text-red-600 dark:text-red-400 text-center p-4">Error rendering PDF pages.</p>';
+                    });
+                }).catch(function (error) {
+                    const container = document.getElementById('forwarding-pdf-preview-container');
+                    if (container) container.innerHTML = '<p class="text-red-600 dark:text-red-400 text-center p-4">Unable to load PDF: ' + (error.message || 'Unknown error') + '</p>';
+                });
+            })
+            .catch(() => {
+                const container = document.getElementById('forwarding-pdf-preview-container');
+                if (container) container.innerHTML = '<p class="text-red-600 dark:text-red-400 text-center p-4">Unable to fetch PDF file.</p>';
+            });
+    }
+
     function formatDate(dateString) {
         if (!dateString) return 'Unknown';
         const date = new Date(dateString);
-        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        // Convert UTC to IST (UTC+5:30)
+        const istDate = new Date(date.getTime() + (5.5 * 60 * 60 * 1000));
+
+        return istDate.toLocaleDateString('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        }) + ' ' + istDate.toLocaleTimeString('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
     }
 
     async function searchAwards() {
@@ -414,9 +497,9 @@
             toast('Failed to search awards: ' + (e.message || 'Unknown error'), 'error');
         }
     }
-    
 
-    
+
+
     function updateAwardMeta(data) {
         state.awards.pages = data.pages || 1;
         const info = sQ('awardPageInfo');
@@ -436,22 +519,22 @@
     function toast(msg, type = 'info') {
         // Create a toast notification
         const toastContainer = document.getElementById('toast-container') || createToastContainer();
-        
+
         const toastEl = document.createElement('div');
         toastEl.className = `mb-2 p-3 rounded-lg text-white font-medium text-sm flex items-center gap-2 transform transition-all duration-300 ${type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : type === 'warn' ? 'bg-yellow-500' : 'bg-blue-500'}`;
-        
+
         const icon = document.createElement('span');
-        icon.innerHTML = type === 'success' ? 
+        icon.innerHTML = type === 'success' ?
             '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>' :
-            type === 'error' ? 
-            '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>' :
-            '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>';
-        
+            type === 'error' ?
+                '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>' :
+                '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>';
+
         toastEl.appendChild(icon);
         toastEl.appendChild(document.createTextNode(msg));
-        
+
         toastContainer.appendChild(toastEl);
-        
+
         // Auto remove after 3 seconds
         setTimeout(() => {
             toastEl.classList.add('opacity-0', 'translate-y-2');
@@ -460,7 +543,7 @@
             }, 300);
         }, 3000);
     }
-    
+
     function createToastContainer() {
         const container = document.createElement('div');
         container.id = 'toast-container';
@@ -468,7 +551,7 @@
         document.body.appendChild(container);
         return container;
     }
-    
+
     function escapeHtml(s) {
         return String(s).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
     }
@@ -479,7 +562,7 @@
         sQ('awardSearch')?.addEventListener('keypress', (e) => { if (e.key === 'Enter') { state.awards.page = 1; searchAwards(); } });
         sQ('awardPrev')?.addEventListener('click', () => changeAwardPage(-1));
         sQ('awardNext')?.addEventListener('click', () => changeAwardPage(1));
-        
+
 
         const master = sQ('awardMasterChk');
         master?.addEventListener('change', e => { e.target.checked ? selectAllPage() : clearAllPage(); });
@@ -491,19 +574,19 @@
                 toast('Select awards to accept', 'warn');
                 return;
             }
-            
+
             if (!confirm(`Are you sure you want to accept ${bulk.awardIds.size} award(s)?`)) return;
-            
+
             // Show loading state
             const bulkStatus = sQ('bulkStatus');
             const originalText = bulkStatus.textContent;
             bulkStatus.textContent = 'Processing...';
-            
+
             try {
                 // Get only pending awards
                 const ids = Array.from(bulk.awardIds);
                 let pendingIds = [];
-                
+
                 for (const id of ids) {
                     try {
                         const data = await fetchJSON(`/api/v1/research/awards/${id}`);
@@ -515,17 +598,17 @@
                         console.warn(`Failed to fetch award ${id}:`, e);
                     }
                 }
-                
+
                 if (pendingIds.length === 0) {
                     toast('No selected awards are pending', 'warn');
                     return;
                 }
-                
+
                 if (pendingIds.length < ids.length) {
                     const skipped = ids.length - pendingIds.length;
                     toast(`${skipped} award(s) are not pending and will be skipped.`, 'warn');
                 }
-                
+
                 // Process pending awards
                 let successCount = 0;
                 for (const id of pendingIds) {
@@ -544,10 +627,10 @@
                         console.error(`Failed to accept award ${id}:`, e);
                     }
                 }
-                
-               
-                
-                
+
+
+
+
                 if (successCount > 0) {
                     toast(`Successfully accepted ${successCount} award(s)`, 'success');
                     await searchAwards(); // Refresh the list
@@ -560,25 +643,25 @@
                 bulkStatus.textContent = originalText;
             }
         });
-        
+
         sQ('bulkRejectBtn')?.addEventListener('click', async () => {
             if (bulk.awardIds.size === 0) {
                 toast('Select awards to reject', 'warn');
                 return;
             }
-            
+
             if (!confirm(`Are you sure you want to reject ${bulk.awardIds.size} award(s)?`)) return;
-            
+
             // Show loading state
             const bulkStatus = sQ('bulkStatus');
             const originalText = bulkStatus.textContent;
             bulkStatus.textContent = 'Processing...';
-            
+
             try {
                 // Get only pending awards
                 const ids = Array.from(bulk.awardIds);
                 let pendingIds = [];
-                
+
                 for (const id of ids) {
                     try {
                         const data = await fetchJSON(`/api/v1/research/awards/${id}`);
@@ -590,17 +673,17 @@
                         console.warn(`Failed to fetch award ${id}:`, e);
                     }
                 }
-                
+
                 if (pendingIds.length === 0) {
                     toast('No selected awards are pending', 'warn');
                     return;
                 }
-                
+
                 if (pendingIds.length < ids.length) {
                     const skipped = ids.length - pendingIds.length;
                     toast(`${skipped} award(s) are not pending and will be skipped.`, 'warn');
                 }
-                
+
                 // Process pending awards
                 let successCount = 0;
                 for (const id of pendingIds) {
@@ -619,10 +702,10 @@
                         console.error(`Failed to reject award ${id}:`, e);
                     }
                 }
-                
-               
-                
-                
+
+
+
+
                 if (successCount > 0) {
                     toast(`Successfully rejected ${successCount} award(s)`, 'success');
                     await searchAwards(); // Refresh the list
@@ -635,37 +718,37 @@
                 bulkStatus.textContent = originalText;
             }
         });
-        
+
         wireSortGroups();
         wireSegmentedControls();
         searchAwards();
     }
-    
+
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 
     // ==== EXTRA INITIALIZERS (CSP-safe) ====
-    function initSidePanelCollapse(){
+    function initSidePanelCollapse() {
         const sidePanel = document.querySelector('#gradingModal [data-side-panel]');
-        if(!sidePanel) return;
+        if (!sidePanel) return;
         const threshold = 640;
-        function adjust(){
-            if(window.innerHeight < threshold) sidePanel.classList.add('collapsed');
+        function adjust() {
+            if (window.innerHeight < threshold) sidePanel.classList.add('collapsed');
             else sidePanel.classList.remove('collapsed');
         }
         window.addEventListener('resize', adjust);
         adjust();
     }
 
-    function initCriteriaFilter(){
+    function initCriteriaFilter() {
         const input = document.getElementById('criteriaFilter');
-        if(!input) return;
-        function apply(){
+        if (!input) return;
+        function apply() {
             const q = input.value.trim().toLowerCase();
             const cards = document.querySelectorAll('#gradingFieldsContainer [data-criteria-card]');
             let shown = 0;
             cards.forEach(card => {
                 const label = card.getAttribute('data-label') || card.querySelector('[data-criteria-label]')?.textContent || '';
-                if(!q || label.toLowerCase().includes(q)){
+                if (!q || label.toLowerCase().includes(q)) {
                     card.classList.remove('hidden');
                     shown++;
                 } else {
@@ -673,14 +756,14 @@
                 }
             });
             const cont = document.getElementById('gradingFieldsContainer');
-            if(cont) cont.dataset.visibleCount = String(shown);
+            if (cont) cont.dataset.visibleCount = String(shown);
         }
         input.addEventListener('input', apply);
         document.addEventListener('gradingCriteriaPopulated', apply);
     }
 
-    if(document.readyState === 'loading'){
-        document.addEventListener('DOMContentLoaded', () => {initCriteriaFilter(); });
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => { initCriteriaFilter(); });
     } else {
         initCriteriaFilter();
     }

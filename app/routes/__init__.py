@@ -20,7 +20,7 @@ def register_blueprints(app):
     """
 
 
-    BASE = '/video'
+    BASE = ''
     app.register_blueprint(view_bp, url_prefix=BASE)
     app.register_blueprint(user_bp, url_prefix=f'{BASE}/api/v1/user')
     app.register_blueprint(auth_bp, url_prefix=f'{BASE}/api/v1/auth')

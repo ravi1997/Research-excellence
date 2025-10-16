@@ -8,7 +8,7 @@
     const $ = (s, r = document) => r.querySelector(s);
     const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 
-    const BASE = '/video';
+    const BASE = '';
 
     // ------------------ Init ------------------
     function init() {
@@ -98,7 +98,7 @@
     // ------------------ Abstract Status ------------------
     async function fetchAbstractStatus() {
         try {
-            const response = await fetch('/video/api/v1/research/abstracts/status', {
+            const response = await fetch('/api/v1/research/abstracts/status', {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',
@@ -133,7 +133,7 @@
     // ------------------ Award Status ------------------
     async function fetchAwardStatus() {
         try {
-            const response = await fetch('/video/api/v1/research/awards/status', {
+            const response = await fetch('/api/v1/research/awards/status', {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',
@@ -169,7 +169,7 @@
     // ------------------ Best Paper Status ------------------
     async function fetchBestPaperStatus() {
         try {
-            const response = await fetch('/video/api/v1/research/best-papers/status', {
+            const response = await fetch('/api/v1/research/best-papers/status', {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',
@@ -209,7 +209,7 @@
         const path = window.location.pathname;
 
         if (status === 401) {
-            window.location.replace(`/video/login`);
+            window.location.replace(`/login`);
         }
 
         // Special case: forced password change (403 with error=password_change_required)
@@ -244,7 +244,7 @@
         showToast('Session expired. Redirecting to login…', 'warn', 3500);
         clearAuthStorage();
         const ret = encodeURIComponent(path + window.location.search);
-        setTimeout(() => { try { window.location.replace(`/video/login?next=${ret}`); } catch { window.location.href = `/video/login?next=${ret}`; } }, 1200);
+        setTimeout(() => { try { window.location.replace(`/login?next=${ret}`); } catch { window.location.href = `/login?next=${ret}`; } }, 1200);
     }
 
     function clearAuthStorage() {
@@ -258,7 +258,7 @@
     async function checkUserRoles() {
         try {
             // Fetch user info to determine roles
-            const response = await fetch('/video/api/v1/auth/me', {
+            const response = await fetch('/api/v1/auth/me', {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',

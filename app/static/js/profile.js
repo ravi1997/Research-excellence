@@ -1,6 +1,6 @@
 // Profile page script extracted for CSP compliance
 (function () {
-  const BASE = '/video';
+  const BASE = '';
   const $ = (s, r = document) => r.querySelector(s);
   const getToken = () => localStorage.getItem("token") || "";
   const withAuth = (opts = {}) => ({
@@ -34,7 +34,7 @@
 
   const API = {
     me: BASE + "/api/v1/auth/me",
-    stats: BASE + "/api/v1/video/stats",
+    stats: BASE + "/api/v1/stats",
   };
 
   const profName = $("#profName");

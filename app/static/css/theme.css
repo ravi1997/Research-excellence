@@ -899,3 +899,281 @@ html.dark .range-switch .rs-btn { background:var(--bg-elev); }
 
 html.dark .dash-skeleton .sk-block, html.dark .dash-skeleton .sk-card { filter:brightness(.9); }
 
+/* ---------- Settings Page ---------- */
+.settings-container {
+    max-width: 800px;
+    margin: 2rem auto;
+    background: var(--bg-elev);
+    border-radius: 1rem;
+    box-shadow: 0 4px 20px var(--shadow);
+    overflow: hidden;
+    border: 1px solid var(--border);
+}
+
+.settings-container h2 {
+    color: var(--text);
+    font-size: 1.75rem;
+    font-weight: 700;
+    margin: 0;
+    padding: 2rem 2rem 1rem 2rem;
+    border-bottom: 1px solid var(--border);
+}
+
+/* Settings Tabs */
+.settings-tabs {
+    display: flex;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+}
+
+.tab-button {
+    flex: 1;
+    background: transparent;
+    border: none;
+    padding: 1rem 1.5rem;
+    color: var(--text-muted);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border-bottom: 3px solid transparent;
+    white-space: nowrap;
+    min-width: 120px;
+}
+
+.tab-button:hover {
+    background: color-mix(in oklab, var(--brand) 8%, transparent);
+    color: var(--text);
+}
+
+.tab-button.active {
+    color: var(--brand);
+    border-bottom-color: var(--brand);
+    background: color-mix(in oklab, var(--brand) 12%, transparent);
+    font-weight: 600;
+}
+
+/* Tab Content */
+.tab-content {
+    display: none;
+    padding: 2rem;
+    animation: fadeIn 0.3s ease;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+.tab-content h4 {
+    color: var(--text);
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin: 0 0 1.5rem 0;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid var(--border);
+}
+
+/* Form Styling */
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-group label {
+    display: block;
+    color: var(--text);
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.form-group select {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: 2px solid var(--input-border);
+    border-radius: 0.5rem;
+    background: var(--input-bg);
+    color: var(--input-text);
+    font-size: 1rem;
+    transition: all 0.3s ease;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 0.75rem center;
+    background-repeat: no-repeat;
+    background-size: 1rem;
+    padding-right: 2.5rem;
+}
+
+/* Dark mode select arrow */
+html.dark .form-group select,
+body.dark .form-group select,
+html[data-theme="dark"] .form-group select,
+body[data-theme="dark"] .form-group select {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23e5e7eb' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+}
+
+.form-group select:focus {
+    outline: none;
+    border-color: var(--brand);
+    box-shadow: 0 0 0 3px var(--input-focus);
+}
+
+/* Checkbox Groups */
+.checkbox-group {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    border-radius: 0.5rem;
+    background: color-mix(in oklab, var(--bg) 50%, transparent);
+    border: 1px solid var(--border);
+    transition: all 0.3s ease;
+}
+
+.checkbox-group:hover {
+    background: color-mix(in oklab, var(--brand) 5%, transparent);
+    border-color: color-mix(in oklab, var(--brand) 20%, var(--border));
+}
+
+.checkbox-group input[type="checkbox"] {
+    width: 1.25rem;
+    height: 1.25rem;
+    accent-color: var(--brand);
+    border-radius: 0.25rem;
+    border: 2px solid var(--input-border);
+    background: var(--input-bg);
+    cursor: pointer;
+}
+
+.checkbox-group label {
+    margin: 0;
+    font-weight: 500;
+    color: var(--text);
+    cursor: pointer;
+    text-transform: none;
+    letter-spacing: normal;
+    font-size: 1rem;
+}
+
+/* Security Actions */
+.security-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.security-actions .btn {
+    justify-self: flex-start;
+    min-width: 200px;
+    font-weight: 500;
+}
+
+/* Button Enhancements */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    border-radius: 0.5rem;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: 2px solid transparent;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, var(--brand) 0%, var(--brand-700) 100%);
+    color: white;
+    border-color: var(--brand);
+}
+
+.btn-primary:hover {
+    background: linear-gradient(135deg, var(--brand-700) 0%, var(--brand) 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px color-mix(in oklab, var(--brand) 30%, transparent);
+}
+
+.btn-warning {
+    background: linear-gradient(135deg, var(--warn) 0%, #ea580c 100%);
+    color: white;
+    border-color: var(--warn);
+}
+
+.btn-warning:hover {
+    background: linear-gradient(135deg, #ea580c 0%, var(--warn) 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px color-mix(in oklab, var(--warn) 30%, transparent);
+}
+
+.btn-secondary {
+    background: var(--bg-elev);
+    color: var(--text);
+    border-color: var(--border);
+}
+
+.btn-secondary:hover {
+    background: var(--bg);
+    border-color: var(--brand);
+    color: var(--brand);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px var(--shadow);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .settings-container {
+        margin: 1rem;
+        border-radius: 0.5rem;
+    }
+    
+    .settings-container h2 {
+        padding: 1.5rem 1.5rem 1rem 1.5rem;
+        font-size: 1.5rem;
+    }
+    
+    .tab-content {
+        padding: 1.5rem;
+    }
+    
+    .settings-tabs {
+        flex-wrap: wrap;
+    }
+    
+    .tab-button {
+        flex: none;
+        min-width: auto;
+        padding: 0.75rem 1rem;
+    }
+    
+    .security-actions {
+        gap: 0.75rem;
+    }
+    
+    .security-actions .btn {
+        min-width: auto;
+        width: 100%;
+    }
+}
+
+@media (max-width: 480px) {
+    .form-group select {
+        padding: 0.625rem 0.75rem;
+        padding-right: 2.25rem;
+    }
+    
+    .checkbox-group {
+        padding: 0.625rem;
+    }
+    
+    .btn {
+        padding: 0.625rem 1.25rem;
+        font-size: 0.8125rem;
+    }
+}
+

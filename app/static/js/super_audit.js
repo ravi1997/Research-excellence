@@ -1,5 +1,5 @@
 (function(){
-  const BASE = '/video';
+  const BASE = '';
   const exportBtn = document.getElementById('exportAudit');
   const auditForm = document.getElementById('auditFilter');
   const resetBtn = document.getElementById('resetAudit');

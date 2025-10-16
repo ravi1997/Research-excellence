@@ -181,7 +181,7 @@
 })();
 
 // Base API URL - using the correct prefix for the research API
-const BASE_API_URL = '/video/api/v1/research';
+const BASE_API_URL = '/api/v1/research';
 
 // Show a toast message
 function showToast(message, type = 'info') {
@@ -219,6 +219,19 @@ function stripHtmlToPlain(html) {
     const tmp = document.createElement('div');
     tmp.innerHTML = html || '';
     return (tmp.textContent || tmp.innerText || '').replace(/\u00A0/g, ' ').trim();
+}
+function isValidEmail(email) {
+    // Regular expression for basic email validation
+    // It checks for:
+    // - one or more characters (letters, numbers, periods, underscores, percent signs, plus/minus signs) before the '@'
+    // - an '@' symbol
+    // - one or more characters (letters, numbers, periods, hyphens) after the '@'
+    // - a period '.'
+    // - two or more letters after the last period (for the domain extension)
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+
+    // Test the email against the regular expression
+    return emailRegex.test(email);
 }
 
 // Single-author validation (name required, email optional)
@@ -643,7 +656,7 @@ async function submitAward(event) {
             // Forwarding letter (optional)
             if (fwdPdfInput && fwdPdfInput.files[0]) {
                 if (!validateForwardingPdf(fwdPdfInput.files[0], fwdPdfInput)) {
-                    throw new Error('Invalid forwarding letter PDF.');
+                    throw new Error('Invalid Convering letter PDF.');
                 }
                 formData.append('forwarding_pdf', fwdPdfInput.files[0]);
             }
@@ -696,7 +709,7 @@ async function submitAward(event) {
 
         // Redirect to research dashboard after a short delay
         setTimeout(() => {
-            window.location.href = '/video/';
+            window.location.href = '/';
         }, 1500);
     } catch (error) {
         console.error('Error submitting award:', error);
@@ -742,7 +755,7 @@ async function saveDraft() {
             formData.append('abstract_pdf', pdfInput.files[0]);
                 if (fwdPdfInput && fwdPdfInput.files[0]) {
                     if (!validateForwardingPdf(fwdPdfInput.files[0], fwdPdfInput)) {
-                        throw new Error('Invalid forwarding letter PDF.');
+                        throw new Error('Invalid convering letter PDF.');
                     }
                     formData.append('forwarding_pdf', fwdPdfInput.files[0]);
                 }
@@ -996,7 +1009,7 @@ function generatePreview() {
                     </div>
                     <div class="ml-4">
                         <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Institution &amp; HOD Letter</h3>
-                        <p class="text-sm text-gray-500 dark:text-gray-400">AIIMS involvement and forwarding letter</p>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">AIIMS involvement and Covering letter</p>
                     </div>
                 </div>
                 <div class="ml-2 space-y-3">
@@ -1099,7 +1112,7 @@ function renderPdfPreview(file, containerId = 'pdf-preview-container', canvasId 
     }
 
     // Set the worker URL for PDF.js to use the local worker
-    pdfjsLib.GlobalWorkerOptions.workerSrc = '/video/static/js/pdf.worker.min.js';
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '/static/js/pdf.worker.min.js';
 
     const fileReader = new FileReader();
 

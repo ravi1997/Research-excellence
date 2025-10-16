@@ -164,7 +164,7 @@
 })();
 
 // Base API URL - using the correct prefix for the research API
-const BASE_API_URL = '/video/api/v1/research';
+const BASE_API_URL = '/api/v1/research';
 
 // Show a toast message
 function showToast(message, type = 'info') {
@@ -876,7 +876,7 @@ async function submitAbstract(event) {
         
         // Redirect to research dashboard after a short delay
         setTimeout(() => {
-            window.location.href = '/video/';
+            window.location.href = '/';
         }, 1500);
     } catch (error) {
         console.error('Error submitting abstract:', error);
@@ -1227,7 +1227,7 @@ function renderPdfPreview(file) {
     }
 
     // Set the worker URL for PDF.js to use the local worker
-    pdfjsLib.GlobalWorkerOptions.workerSrc = '/video/static/js/pdf.worker.min.js';
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '/static/js/pdf.worker.min.js';
 
     const fileReader = new FileReader();
 

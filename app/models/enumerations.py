@@ -12,6 +12,7 @@ class Role(str, Enum):
     ADMIN = 'admin'
     USER = 'user'
     VERIFIER = 'verifier'
+    COORDINATOR = 'coordinator'
 
 class THEME_CHOICES(str, Enum):
     LIGHT = 'light'

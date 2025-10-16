@@ -19,6 +19,7 @@ from app.security_utils import rate_limit, ip_and_path_key, ip_key, audit_log
 from app.utils.audit_helpers import log_login_failed
 from app.extensions import db
 from werkzeug.utils import secure_filename
+from app.utils.services.mail import send_mail
 from app.utils.uploads import ALLOWED_ID_EXT, ALLOWED_ID_MIMES
 import os
 from sqlalchemy.exc import ProgrammingError, IntegrityError
@@ -650,6 +651,12 @@ def create_account():
         return jsonify({'msg': 'internal error'}), 500
 
     audit_log('create_account_success', actor_id=user.id)
+    send_sms(
+            user.mobile, f"You successfully registered into Research Section, ")
+    send_mail(
+            user.email, "Registration Successful",
+            f"Dear {user.username},\n\nYour account has been successfully created.\n\nRegards,\nResearch Section, AIIMS"
+        )
     return jsonify({'msg': 'account created', 'user_id': str(user.id)}), 200
 
 @auth_bp.route('/upload-temp-id', methods=['POST'])
@@ -821,6 +828,15 @@ def verify_user():
         return jsonify({'msg': 'internal error'}), 500
 
     audit_log('verify_user_success', target_user_id=target_id)
+    
+    send_sms(
+        target.mobile, f"Account has been verified successfully. You can register into Research Section, ")
+
+    send_mail(
+        target.email, "Account Verified",
+        f"Dear {target.username},\n\nYour account has been verified by the admin. You can now log in using your credentials.\n\nRegards,\nResearch Section, AIIMS"
+    )
+    
     return jsonify({'msg': 'verified', 'user': {
         'id': str(target.id),
         'username': target.username,

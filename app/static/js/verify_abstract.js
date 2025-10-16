@@ -1,5 +1,5 @@
 (() => {
-    const BASE = '/video/api/v1/research';  // Fixed path
+    const BASE = '/api/v1/research';  // Fixed path
     const token = () => localStorage.getItem('token') || '';
     const headers = () => ({ 'Accept': 'application/json', 'Authorization': `Bearer ${token()}` });
     const sQ = id => document.getElementById(id);
@@ -389,7 +389,7 @@
             if (container) container.innerHTML = '<p class="text-red-600 dark:text-red-400 text-center p-4">PDF.js library not available. Cannot preview PDF.</p>';
             return;
         }
-        pdfjsLib.GlobalWorkerOptions.workerSrc = '/video/static/js/pdf.worker.min.js';
+        pdfjsLib.GlobalWorkerOptions.workerSrc = '/static/js/pdf.worker.min.js';
         fetch(`${BASE}/abstracts/${abstractId}/pdf`, {
             headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
         })

@@ -11,7 +11,7 @@
     const wrap = document.getElementById('unverifiedContainer');
     if(!wrap) return;
     try {
-      const res = await fetch('/video/api/v1/auth/unverified', {
+      const res = await fetch('/api/v1/auth/unverified', {
         credentials: 'include',
         headers: { 'Accept': 'application/json', ...authHeaders() }
       });
@@ -65,7 +65,7 @@
     btn.disabled = true;
     btn.textContent = 'Verifying...';
     try {
-      const res = await fetch('/video/api/v1/auth/verify-user', {
+      const res = await fetch('/api/v1/auth/verify-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
         credentials: 'include',
@@ -95,7 +95,7 @@
     const orig = btn.textContent;
     btn.textContent = 'Granting...';
     try {
-      const res = await fetch('/video/api/v1/auth/grant-user', {
+      const res = await fetch('/api/v1/auth/grant-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
         credentials: 'include',
@@ -120,7 +120,7 @@
   async function viewDocument(id, btn){
     btn.disabled = true;
     try {
-      const win = window.open(`/video/api/v1/auth/user-document/${id}`, '_blank');
+      const win = window.open(`/api/v1/auth/user-document/${id}`, '_blank');
       if(!win){ alert('Popup blocked. Allow popups to view document.'); }
     } finally {
       btn.disabled = false;
@@ -132,7 +132,7 @@
     btn.disabled = true;
     btn.textContent = 'Discarding...';
     try {
-      const res = await fetch('/video/api/v1/auth/discard-user', {
+      const res = await fetch('/api/v1/auth/discard-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
         credentials: 'include',

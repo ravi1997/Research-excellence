@@ -3,6 +3,9 @@ from marshmallow_enum import EnumField
 
 from app.models.Cycle import BestPaper, Status
 from app.extensions import ma
+from app.schemas.author_schema import AuthorSchema
+from app.schemas.paper_category_schema import PaperCategorySchema
+from app.schemas.user_schema import UserSchema
 from .grading_schema import GradingSchema  # keep import if needed elsewhere
 
 
@@ -25,3 +28,10 @@ class BestPaperSchema(ma.SQLAlchemyAutoSchema):
     updated_at = fields.DateTime(dump_only=True)
     # Removed to avoid recursion cycles
     # gradings = fields.Nested(GradingSchema, many=True, dump_only=True)
+    
+    author = fields.Nested(AuthorSchema, dump_only=True)
+    verifiers = fields.Nested(UserSchema, many=True, dump_only=True)
+    gradings = fields.Nested(GradingSchema, many=True, dump_only=True)
+    paper_category = fields.Nested(PaperCategorySchema, dump_only=True)
+    created_by = fields.Nested(UserSchema, dump_only=True)
+    updated_by = fields.Nested(UserSchema, dump_only=True)

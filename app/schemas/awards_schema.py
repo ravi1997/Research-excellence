@@ -3,8 +3,11 @@ from marshmallow_enum import EnumField
 
 from app.models.Cycle import Awards, Status
 from app.extensions import ma
+from app.schemas.author_schema import AuthorSchema
+from app.schemas.category_schema import CategorySchema
+from app.schemas.user_schema import UserSchema
 from .grading_schema import GradingSchema  # retained import if needed elsewhere
-
+from .paper_category_schema import PaperCategorySchema
 
 class AwardsSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
@@ -25,3 +28,10 @@ class AwardsSchema(ma.SQLAlchemyAutoSchema):
     updated_at = fields.DateTime(dump_only=True)
     # Removed to avoid recursion: grading -> award -> gradings -> grading ...
     # gradings = fields.Nested(GradingSchema, many=True, dump_only=True)
+    category = fields.Nested(CategorySchema, dump_only=True)
+    author = fields.Nested(AuthorSchema, dump_only=True)
+    verifiers = fields.Nested(UserSchema, many=True, dump_only=True)
+    gradings = fields.Nested(GradingSchema, many=True, dump_only=True)
+    paper_category = fields.Nested(PaperCategorySchema, dump_only=True)
+    created_by = fields.Nested(UserSchema, dump_only=True)
+    updated_by = fields.Nested(UserSchema, dump_only=True)

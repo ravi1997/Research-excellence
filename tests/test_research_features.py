@@ -4,7 +4,7 @@ from app.models.User import User, Role
 from app.extensions import db
 
 class TestResearchFeatures:
-    """Test research excellence specific features."""
+    """Test research Submission specific features."""
 
     def test_create_cycle(self, client, create_admin_user):
         """Test creating a research cycle."""

@@ -14,6 +14,9 @@ from app.models.enumerations import Role, Status
 import json
 import uuid
 
+from app.utils.services.mail import send_mail
+from app.utils.services.sms import send_sms
+
 abstract_schema = AbstractSchema()
 abstracts_schema = AbstractSchema(many=True)
 
@@ -69,6 +72,11 @@ def create_abstract():
         abstract = abstract_schema.load(data)
 
 
+        user = User.query.get(current_user_id)
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        
+
         # Set pdf_path if file was uploaded
         if pdf_path and hasattr(abstract, 'pdf_path'):
             abstract.pdf_path = pdf_path
@@ -99,6 +107,19 @@ def create_abstract():
                 current_app.logger.info(f"Added author {author.name} with ID {author.id} to abstract {abstract.id}")
 
         db.session.commit()
+        
+        
+        
+        send_sms(
+            user.mobile, f"Your abstract id : {abstract.id} has been created successfully and is pending submission for review."
+        )
+        
+        send_mail(
+            user.email,
+            "Abstract Created Successfully",
+            f"Dear {user.username},\n\nYour abstract with ID {abstract.id} has been created successfully and is pending submission for review.\n Details:\nTitle: {abstract.title}\nAbstract ID: {abstract.id}\n\nBest regards,\nResearch Section,AIIMS"
+        )
+        
         return jsonify(abstract_schema.dump(abstract)), 201
     except Exception as e:
         db.session.rollback()
@@ -308,7 +329,7 @@ def get_abstract(abstract_id):
     data = abstract_schema.dump(abstract)
     # Add PDF URL if available
     if abstract.pdf_path:
-        data['pdf_url'] = f"/video/api/v1/research/abstracts/{abstract_id}/pdf"
+        data['pdf_url'] = f"/api/v1/research/abstracts/{abstract_id}/pdf"
     return jsonify(data), 200
 @research_bp.route('/abstracts/<abstract_id>', methods=['DELETE'])
 @jwt_required()
@@ -356,6 +377,9 @@ def get_abstract_submission_status():
         # Admins can see all abstracts
         abstracts = Abstracts.query
     elif user.has_role(Role.VERIFIER.value):
+        
+        current_app.logger.info(f"Fetching abstracts for verifier user ID: {current_user_id}")
+        
         # Verifiers can see abstracts assigned to them
         abstracts = db.session.query(Abstracts).join(
             AbstractVerifiers, Abstracts.id == AbstractVerifiers.abstract_id
@@ -365,10 +389,10 @@ def get_abstract_submission_status():
     else:    
         abstracts = Abstracts.query.filter_by(created_by_id=current_user_id)
 
-    pending_abstracts = abstracts.filter_by(status=Status.PENDING).count()
-    under_review_abstracts = abstracts.filter_by(status=Status.UNDER_REVIEW).count()
-    accepted_abstracts = abstracts.filter_by(status=Status.ACCEPTED).count()
-    rejected_abstracts = abstracts.filter_by(status=Status.REJECTED).count()
+    pending_abstracts = abstracts.filter(Abstracts.status==Status.PENDING).count()
+    under_review_abstracts = abstracts.filter(Abstracts.status==Status.UNDER_REVIEW).count()
+    accepted_abstracts = abstracts.filter(Abstracts.status==Status.ACCEPTED).count()
+    rejected_abstracts = abstracts.filter(Abstracts.status==Status.REJECTED).count()
 
     return jsonify({
         "pending": pending_abstracts,

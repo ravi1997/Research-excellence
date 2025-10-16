@@ -1,7 +1,7 @@
 // Lightweight bootstrap previously in inline <script> of index.html (CSP compliant)
 // Handles initial tab switching before heavy index.js logic executes.
 (function () {
-  const BASE = '/video';
+  const BASE = '';
   const tabs = document.querySelectorAll('.tab-btn');
   const panels = document.querySelectorAll('.tab-panel');
   function switchTab(id) {

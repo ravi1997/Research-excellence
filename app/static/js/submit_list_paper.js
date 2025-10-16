@@ -1,5 +1,5 @@
 (() => {
-    const BASE = '/video/api/v1/research';  // Fixed path
+    const BASE = '/api/v1/research';  // Fixed path
     const token = () => localStorage.getItem('token') || '';
     const headers = () => ({ 'Accept': 'application/json', 'Authorization': `Bearer ${token()}` });
     const sQ = id => document.getElementById(id);
@@ -109,22 +109,22 @@
         if (!items.length) {
             const empty = document.createElement('li');
             empty.className = 'py-8 text-center text-xs uppercase tracking-wide text-[color:var(--muted)]';
-            empty.textContent = type === 'best paper' ? 'No papers found' : 'No items found';
+            empty.textContent = type === 'paper' ? 'No papers found' : 'No items found';
             el.appendChild(empty);
             return;
         }
         items.forEach(it => {
             const li = document.createElement('li');
-            const selected = bulk.paperIds.has(it.id) && type === 'best paper';
+            const selected = bulk.paperIds.has(it.id) && type === 'paper';
             li.className = 'group py-3 px-3 hover:bg-[color:var(--brand-50)] dark:hover:bg-[color:var(--brand-900)]/40 cursor-pointer flex justify-between items-center transition-colors rounded-lg ' + (selected ? 'bg-[color:var(--brand-100)] dark:bg-[color:var(--brand-900)]' : '');
             li.dataset.id = it.id;
-            if (type === 'best paper') {
+            if (type === 'paper') {
                 li.innerHTML = `
                     <span class="flex items-center gap-3 w-full">
                         <div class="flex-1 min-w-0">
                             <div class="font-medium text-gray-900 dark:text-white truncate">${escapeHtml(it.title || 'Untitled Best Paper')}</div>
                             <div class="flex flex-wrap gap-2 mt-1">
-                                <span class="text-xs text-gray-500 dark:text-gray-400 truncate">(${it.category?.name || 'No Category'})</span>
+                                <span class="text-xs text-gray-500 dark:text-gray-400 truncate">(${it.paper_category?.name || 'No Category'})</span>
                                 <span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded ${getStatusClass(it.status)}">${escapeHtml(it.status || 'PENDING')}</span>
                             </div>
                         </div>
@@ -165,16 +165,14 @@
             }
             el.appendChild(li);
         });
-        if (type === 'best paper') {
+        if (type === 'paper') {
             el.querySelectorAll('.bulkChk').forEach(chk => {
                 chk.addEventListener('change', e => {
                     const id = e.target.getAttribute('data-id');
                     if (e.target.checked) bulk.paperIds.add(id); else bulk.paperIds.delete(id);
-                    
-                   
+                    updateBulkStatus();
                 });
             });
-            
         }
     }
     
@@ -218,44 +216,26 @@
         if (!previewContent || !selPaper) return;
         
         // Get category name
-        const categoryName = selPaper.category?.name || 'No Category';
+        const categoryName = selPaper.paper_category?.name || 'No Category';
 
         // Update summary card info
         sQ('summaryTitle') && (sQ('summaryTitle').textContent = selPaper.title || 'Untitled Best Paper');
         
         sQ('summaryCategory') && (sQ('summaryCategory').textContent = categoryName);
-        sQ('summaryPaperNumber') && (sQ('summaryPaperNumber').textContent = selPaper.paper_number || 'Unknown ID');
+        sQ('summaryPaperNumber') && (sQ('summaryPaperNumber').textContent = selPaper.bestpaper_number || 'Unknown ID');
         
         sQ('summaryStatus') && (sQ('summaryStatus').textContent = selPaper.status || 'PENDING');
         sQ('summaryStatus') && (sQ('summaryStatus').className = 'badge ' + getStatusClass(selPaper.status));
         sQ('summaryAuthor') && (sQ('summaryAuthor').textContent = selPaper.created_by?.username || 'Unknown User');
         sQ('summaryDate') && (sQ('summaryDate').textContent = formatDate(selPaper.created_at));
 
+
+        let pdfPreview = '';
+        let forpdfPreview = '';
+
         // Generate preview HTML with improved styling
         let previewHTML = `
             <div class="divide-y divide-gray-200 dark:divide-gray-700">
-               
-                <!-- Best Paper Content Section -->
-                <div class="p-5">
-                    <div class="hidden flex items-center mb-4">
-                        <div class="flex-shrink-0 h-10 w-10 rounded-full bg-purple-100 dark:bg-purple-900 flex items-center justify-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-purple-600 dark:text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                            </svg>
-                        </div>
-                        <div class="ml-4">
-                            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Best Paper Content</h3>
-                            <p class="text-sm text-gray-500 dark:text-gray-400">Main body of the best paper</p>
-                        </div>
-                    </div>
-                    
-                    <div class="ml-2">
-                        <div class="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg border border-gray-200 dark:border-gray-600">
-                            <p class="whitespace-pre-wrap text-gray-800 dark:text-gray-200">${escapeHtml(selPaper.content || '')}</p>
-                        </div>
-                    </div>
-                </div>
-                
                 <!-- Authors Section -->
                 <div class="p-5">
                     <div class="flex items-center mb-4">
@@ -272,19 +252,19 @@
                     
                     <div class="ml-2 space-y-4">
         `;
-        
-        if (selPaper.authors && selPaper.authors.length > 0) {
-            selPaper.authors.forEach((author) => {
-                const roles = [];
-                if (author.is_presenter) roles.push('Presenter');
-                if (author.is_corresponding) roles.push('Corresponding');
-                
-                previewHTML += `
+
+        if (selPaper.author) {
+            let author = selPaper.author;
+            const roles = [];
+            if (author.is_presenter) roles.push('Presenter');
+            if (author.is_corresponding) roles.push('Corresponding');
+
+            previewHTML += `
                     <div class="border-l-4 border-blue-400 dark:border-blue-600 pl-4 py-2">
                         <div class="flex flex-wrap justify-between gap-2">
                             <p class="font-medium text-gray-900 dark:text-white">${escapeHtml(author.name)}</p>
-                            ${roles.length > 0 ? `<div class="flex flex-wrap gap-1">${roles.map(role => 
-                                `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100">
+                            ${roles.length > 0 ? `<div class="flex flex-wrap gap-1">${roles.map(role =>
+                `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100">
                                     ${role}
                                 </span>`).join('')}</div>` : ''}
                         </div>
@@ -292,14 +272,43 @@
                         ${author.affiliation ? `<p class="text-sm text-gray-500 dark:text-gray-400 mt-1">${escapeHtml(author.affiliation)}</p>` : ''}
                     </div>
                 `;
-            });
         } else {
             previewHTML += `
                 <p class="text-gray-500 dark:text-gray-400 italic">No authors listed</p>
             `;
         }
-        
+
         previewHTML += `
+                    </div>
+                </div>
+                 <!-- AIIMS & Forwarding Letter Section -->
+                <div class="p-5">
+                    <div class="flex items-center mb-4">
+                        <div class="flex-shrink-0 h-10 w-10 rounded-full bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-600 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 17V7a2 2 0 012-2h6a2 2 0 012 2v10m-2 4h-4a2 2 0 01-2-2V7a2 2 0 012-2h4a2 2 0 012 2v10a2 2 0 01-2 2z" />
+                            </svg>
+                        </div>
+                        <div class="ml-4">
+                            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Institution &amp; HOD Letter</h3>
+                            <p class="text-sm text-gray-500 dark:text-gray-400">AIIMS involvement and forwarding letter</p>
+                        </div>
+                    </div>
+                    <div class="ml-2">
+                        ${selPaper.forwarding_letter_path ? `
+                            <div id="forwarding-pdf-preview-container" class="border border-gray-300 dark:border-gray-600 rounded mt-3 bg-white dark:bg-gray-800" style="max-height: 500px; overflow-y: auto;">
+                                <div class="p-4 text-center">
+                                    <div class="inline-flex items-center px-4 py-2 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
+                                        <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        <span class="text-blue-600 dark:text-blue-400">Loading PDF...</span>
+                                    </div>
+                                </div>
+                                <!-- Canvases for PDF pages will be rendered here -->
+                            </div>
+                        ` : `<p class="text-gray-500 dark:text-gray-400 italic p-4 text-center">No Forwarding Letter PDF uploaded for this award.</p>`}
                     </div>
                 </div>
 
@@ -313,11 +322,11 @@
                         </div>
                         <div class="ml-4">
                             <h3 class="text-lg font-semibold text-gray-900 dark:text-white">PDF Document</h3>
-                            <p class="text-sm text-gray-500 dark:text-gray-400">Uploaded best paper PDF</p>
+                            <p class="text-sm text-gray-500 dark:text-gray-400">Uploaded award PDF</p>
                         </div>
                     </div>
                     <div class="ml-2">
-                        ${selPaper.pdf_path ? `
+                        ${selPaper.full_paper_path ? `
                             <div id="pdf-preview-container" class="border border-gray-300 dark:border-gray-600 rounded mt-3 bg-white dark:bg-gray-800" style="max-height: 500px; overflow-y: auto;">
                                 <div class="p-4 text-center">
                                     <div class="inline-flex items-center px-4 py-2 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
@@ -330,27 +339,33 @@
                                 </div>
                                 <!-- Canvases for PDF pages will be rendered here -->
                             </div>
-                        ` : `<p class="text-gray-500 dark:text-gray-400 italic p-4 text-center">No PDF uploaded for this best paper.</p>`}
+                        ` : `<p class="text-gray-500 dark:text-gray-400 italic p-4 text-center">No PDF uploaded for this award.</p>`}
                     </div>
                 </div>
             </div>
         `;
         previewContent.innerHTML = previewHTML;
         // After rendering, if PDF exists, render preview using PDF.js
-        if (selPaper.pdf_path) {
+        if (selPaper.full_paper_path) {
             renderVerifierPdfPreview(selPaper.id);
+        }
+
+
+        if (selPaper.forwarding_letter_path) {
+            renderVerifierforwardingPdfPreview(selPaper.id);
         }
     }
     
+
     // Render PDF preview for verifier using PDF.js
-    function renderVerifierPdfPreview(paperId) {
+    function renderVerifierPdfPreview(awardId) {
         if (typeof pdfjsLib === 'undefined') {
             const container = document.getElementById('pdf-preview-container');
             if (container) container.innerHTML = '<p class="text-red-600 dark:text-red-400 text-center p-4">PDF.js library not available. Cannot preview PDF.</p>';
             return;
         }
-        pdfjsLib.GlobalWorkerOptions.workerSrc = '/video/static/js/pdf.worker.min.js';
-        fetch(`${BASE}/best-papers/${paperId}/pdf`, {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = '/static/js/pdf.worker.min.js';
+        fetch(`${BASE}/best-papers/${awardId}/pdf`, {
             headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
         })
             .then(response => {
@@ -360,7 +375,7 @@
             .then(buffer => {
                 const typedarray = new Uint8Array(buffer);
                 const loadingTask = pdfjsLib.getDocument({ data: typedarray, password: '' });
-                loadingTask.promise.then(function(pdf) {
+                loadingTask.promise.then(function (pdf) {
                     const container = document.getElementById('pdf-preview-container');
                     if (!container) return;
                     container.innerHTML = '';
@@ -369,7 +384,7 @@
                     let pagePromises = [];
                     for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
                         pagePromises.push(
-                            pdf.getPage(pageNum).then(function(page) {
+                            pdf.getPage(pageNum).then(function (page) {
                                 const viewport = page.getViewport({ scale: scale });
                                 const canvas = document.createElement('canvas');
                                 canvas.className = 'w-full mb-4 rounded shadow';
@@ -381,10 +396,10 @@
                             })
                         );
                     }
-                    Promise.all(pagePromises).catch(function(renderError) {
+                    Promise.all(pagePromises).catch(function (renderError) {
                         container.innerHTML = '<p class="text-red-600 dark:text-red-400 text-center p-4">Error rendering PDF pages.</p>';
                     });
-                }).catch(function(error) {
+                }).catch(function (error) {
                     const container = document.getElementById('pdf-preview-container');
                     if (container) container.innerHTML = '<p class="text-red-600 dark:text-red-400 text-center p-4">Unable to load PDF: ' + (error.message || 'Unknown error') + '</p>';
                 });
@@ -394,20 +409,87 @@
                 if (container) container.innerHTML = '<p class="text-red-600 dark:text-red-400 text-center p-4">Unable to fetch PDF file.</p>';
             });
     }
-    
+
+    function renderVerifierforwardingPdfPreview(awardId) {
+        if (typeof pdfjsLib === 'undefined') {
+            const container = document.getElementById('forwarding-pdf-preview-container');
+            if (container) container.innerHTML = '<p class="text-red-600 dark:text-red-400 text-center p-4">PDF.js library not available. Cannot preview PDF.</p>';
+            return;
+        }
+        pdfjsLib.GlobalWorkerOptions.workerSrc = '/static/js/pdf.worker.min.js';
+        fetch(`${BASE}/best-papers/${awardId}/forwarding_pdf`, {
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
+        })
+            .then(response => {
+                if (!response.ok) throw new Error('Network response was not ok');
+                return response.arrayBuffer();
+            })
+            .then(buffer => {
+                const typedarray = new Uint8Array(buffer);
+                const loadingTask = pdfjsLib.getDocument({ data: typedarray, password: '' });
+                loadingTask.promise.then(function (pdf) {
+                    const container = document.getElementById('forwarding-pdf-preview-container');
+                    if (!container) return;
+                    container.innerHTML = '';
+                    const scale = 1.5;
+                    // Render all pages
+                    let pagePromises = [];
+                    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                        pagePromises.push(
+                            pdf.getPage(pageNum).then(function (page) {
+                                const viewport = page.getViewport({ scale: scale });
+                                const canvas = document.createElement('canvas');
+                                canvas.className = 'w-full mb-4 rounded shadow';
+                                canvas.height = viewport.height;
+                                canvas.width = viewport.width;
+                                container.appendChild(canvas);
+                                const context = canvas.getContext('2d');
+                                return page.render({ canvasContext: context, viewport: viewport }).promise;
+                            })
+                        );
+                    }
+                    Promise.all(pagePromises).catch(function (renderError) {
+                        container.innerHTML = '<p class="text-red-600 dark:text-red-400 text-center p-4">Error rendering PDF pages.</p>';
+                    });
+                }).catch(function (error) {
+                    const container = document.getElementById('forwarding-pdf-preview-container');
+                    if (container) container.innerHTML = '<p class="text-red-600 dark:text-red-400 text-center p-4">Unable to load PDF: ' + (error.message || 'Unknown error') + '</p>';
+                });
+            })
+            .catch(() => {
+                const container = document.getElementById('forwarding-pdf-preview-container');
+                if (container) container.innerHTML = '<p class="text-red-600 dark:text-red-400 text-center p-4">Unable to fetch PDF file.</p>';
+            });
+    }
+
     function formatDate(dateString) {
         if (!dateString) return 'Unknown';
         const date = new Date(dateString);
-        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        // Convert UTC to IST (UTC+5:30)
+        const istDate = new Date(date.getTime() + (5.5 * 60 * 60 * 1000));
+
+        return istDate.toLocaleDateString('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        }) + ' ' + istDate.toLocaleTimeString('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
     }
 
+    
     async function searchPapers() {
         state.papers.q = (sQ('paperSearch').value || '').trim();
         const { q, filter, page, pageSize, sort, dir } = state.papers;
         const url = `${BASE}/best-papers?q=${encodeURIComponent(q)}&status=${filter}&page=${page}&page_size=${pageSize}&sort_by=${sort}&sort_dir=${dir}`;
         try {
             const data = await fetchJSON(url);
-            renderList(paperList, data.items || data || [], 'best paper');
+            renderList(paperList, data.items || data || [], 'paper');
             updatePaperMeta(data);
         } catch (e) {
             console.error(e);
@@ -471,6 +553,50 @@
     
     function escapeHtml(s) {
         return String(s).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
+    }
+
+    function updateBulkStatus() {
+        const bulkStatus = sQ('bulkStatus');
+        if (bulkStatus) {
+            const count = bulk.paperIds.size;
+            bulkStatus.textContent = count > 0 ? `${count} selected` : '';
+        }
+    }
+
+    function selectAllPage() {
+        const checkboxes = paperList.querySelectorAll('.bulkChk');
+        checkboxes.forEach(chk => {
+            chk.checked = true;
+            const id = chk.getAttribute('data-id');
+            if (id) bulk.paperIds.add(id);
+        });
+        updateBulkStatus();
+    }
+
+    function clearAllPage() {
+        const checkboxes = paperList.querySelectorAll('.bulkChk');
+        checkboxes.forEach(chk => {
+            chk.checked = false;
+            const id = chk.getAttribute('data-id');
+            if (id) bulk.paperIds.delete(id);
+        });
+        updateBulkStatus();
+    }
+
+    function invertSelection() {
+        const checkboxes = paperList.querySelectorAll('.bulkChk');
+        checkboxes.forEach(chk => {
+            chk.checked = !chk.checked;
+            const id = chk.getAttribute('data-id');
+            if (id) {
+                if (chk.checked) {
+                    bulk.paperIds.add(id);
+                } else {
+                    bulk.paperIds.delete(id);
+                }
+            }
+        });
+        updateBulkStatus();
     }
 
     function init() {

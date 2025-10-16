@@ -1,6 +1,6 @@
 // User Activity Page Logic
 (function(){
-  const BASE = '/video';
+  const BASE = '';
   const root = document.getElementById('user-activity-root');
   if(!root) return;
   const userId = root.getAttribute('data-user-id');

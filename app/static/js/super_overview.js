@@ -1,5 +1,5 @@
 (function(){
-  const BASE = '/video';
+  const BASE = '';
   const maintBtn = document.getElementById('toggleMaint');
   const maintState = document.getElementById('maintState');
   if(maintBtn){

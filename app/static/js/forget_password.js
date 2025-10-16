@@ -38,7 +38,7 @@ async function submitForgot() {
     msgEl.className = 'text-sm mt-2 opacity-80';
     btn?.setAttribute('disabled', 'true');
 
-    const res = await postJSON('/video/api/v1/auth/forgot-password', { email, mobile });
+    const res = await postJSON('/api/v1/auth/forgot-password', { email, mobile });
 
     if (!res.ok) {
         btn?.removeAttribute('disabled');
@@ -86,7 +86,7 @@ async function submitReset() {
     msgEl.className = 'text-sm mt-2 opacity-80';
     btn?.setAttribute('disabled', 'true');
 
-    const res = await postJSON('/video/api/v1/auth/reset-password', { email: identifier, token, password });
+    const res = await postJSON('/api/v1/auth/reset-password', { email: identifier, token, password });
 
     btn?.removeAttribute('disabled');
     msgEl.textContent = (res.body && res.body.msg) || (res.ok ? 'Password updated' : 'Error');
@@ -116,8 +116,8 @@ function showSuccessModal() {
     modal.classList.remove('hidden');
     const btn = $('sm_login_btn');
     btn.focus();
-    btn.addEventListener('click', () => { window.location.href = '/video/login'; });
-    setTimeout(() => { window.location.href = '/video/login'; }, 3000);
+    btn.addEventListener('click', () => { window.location.href = '/login'; });
+    setTimeout(() => { window.location.href = '/login'; }, 3000);
 }
 
 // --- Wire up everything once DOM is parsed (defer guarantees this, but it's safe)

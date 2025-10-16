@@ -18,8 +18,6 @@ view_bp = Blueprint('view_bp', __name__)
 
 ALL_ROLES = tuple(r.value for r in Role)
 
-
-
 @view_bp.route('/')
 def index():
     return render_template('index.html')
@@ -43,17 +41,17 @@ def profile_page():
     return render_template('profile.html')
 
 
-@view_bp.route('/settings')
-@jwt_required()
-@require_roles(*ALL_ROLES)
-def settings_page():
-    return render_template('settings.html')
+# @view_bp.route('/settings')
+# @jwt_required()
+# @require_roles(*ALL_ROLES)
+# def settings_page():
+#     return render_template('settings.html')
 
-@view_bp.route('/history')
-@jwt_required()
-@require_roles(Role.USER.value)
-def history_page():
-    return render_template('history.html')
+# @view_bp.route('/history')
+# @jwt_required()
+# @require_roles(Role.USER.value)
+# def history_page():
+#     return render_template('history.html')
 
 @view_bp.route('/change-password')
 @jwt_required()

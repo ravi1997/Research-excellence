@@ -1,5 +1,5 @@
 /* ==========================================================================
-   RPC Surgical Video Library — Login page logic
+   Research Submission Portal — Login page logic
    Works with templates/login.html
    ========================================================================== */
 
@@ -27,7 +27,7 @@ async function login() {
 
     try {
         // 1. Request login
-        const res = await fetch("/video/api/v1/auth/login", {
+        const res = await fetch("/api/v1/auth/login", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
@@ -42,17 +42,17 @@ async function login() {
 
         // 2. Save access token & decide eventual redirect
         localStorage.setItem("token", data.access_token);
-        let redirectTo = "/video/";
+        let redirectTo = "/";
         try {
             const payloadPart = data.access_token.split('.')[1];
             const decoded = JSON.parse(atob(payloadPart.replace(/-/g,'+').replace(/_/g,'/')));
             if (decoded && decoded.pwd_change) {
-                redirectTo = '/video/change-password';
+                redirectTo = '/change-password';
             }
         } catch (e) { /* ignore decode errors */ }
 
         // 3. Fetch profile
-        const me = await fetch("/video/api/v1/auth/me", {
+        const me = await fetch("/api/v1/auth/me", {
             headers: {
                 "Content-Type": "application/json",
                 "Authorization": `Bearer ${data.access_token}`,
@@ -254,7 +254,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         (forResend ? resendBtn : sendBtn) && ((forResend ? resendBtn : sendBtn).disabled = true);
         try {
-            const res = await fetch('/video/api/v1/auth/generate-otp', {
+            const res = await fetch('/api/v1/auth/generate-otp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ mobile })

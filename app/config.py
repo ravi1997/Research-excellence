@@ -117,6 +117,9 @@ class Config:
     SMS_API_TOKEN = os.getenv("SMS_API_TOKEN", "")
     SMS_SENDER_ID = os.getenv("SMS_SENDER_ID", "")
     
+    MAIL_API_URL = os.getenv("MAIL_API_URL", "")
+    MAIL_API_TOKEN = os.getenv("MAIL_API_TOKEN", "")
+    
     # eHospital API Configuration
     EHOSPITAL_INIT_URL = os.getenv("EHOSPITAL_INIT_URL", "")
     EHOSPITAL_FETCH_PATIENT_URL = os.getenv("EHOSPITAL_FETCH_PATIENT_URL", "")

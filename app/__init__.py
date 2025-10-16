@@ -11,8 +11,9 @@ from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from .commands.user_commands import create_user, create_superadmin, rotate_superadmin_password
-from .commands.search_commands import search_reindex
 from .commands.setup_commands import setup_command
+from .commands.seed_commands import seed_command
+
 
 from app.routes import register_blueprints
 
@@ -107,8 +108,7 @@ def create_app(config_name=None):
     
     config_class = config.get(config_name, Config)
     
-    # Mount entire app (including static) under /video
-    app = Flask(__name__, static_url_path='/video/static')
+    app = Flask(__name__, static_url_path='/static')
     app.config.from_object(config_class)
     
     # Initialize configuration-specific setup
@@ -134,8 +134,8 @@ def create_app(config_name=None):
     app.cli.add_command(create_user)
     app.cli.add_command(create_superadmin)
     app.cli.add_command(rotate_superadmin_password)
-    app.cli.add_command(search_reindex)
     app.cli.add_command(setup_command)
+    app.cli.add_command(seed_command)
 
     # ------------------------------------------------------------------
     # Logging & Access log middleware
@@ -153,11 +153,7 @@ def create_app(config_name=None):
         resp.headers.setdefault('X-XSS-Protection', '1; mode=block')
         resp.headers.setdefault('Referrer-Policy', 'no-referrer')
         resp.headers.setdefault('Permissions-Policy', 'fullscreen=()')
-        # CSP tightened; allow blob for workers (Video.js HLS), allow media from self, permit data: images/fonts
-        # Optional CSP nonce (added when templates call {{ csp_nonce() }})
         nonce = getattr(g, 'csp_nonce', None)
-        # Allow 'unsafe-eval' and 'wasm-unsafe-eval' for libraries like CKEditor and PDF.js.
-        # If you later replace these libraries with CSP-safe builds, you can remove these tokens again.
         script_src = "'self' blob: 'unsafe-eval' 'wasm-unsafe-eval'"
         if nonce:
             script_src += f" 'nonce-{nonce}'"
@@ -175,7 +171,7 @@ def create_app(config_name=None):
         resp.headers.setdefault('Content-Security-Policy', csp)
         # Basic favicon fallbacks if not present
         if 'Link' not in resp.headers:
-            resp.headers.add('Link', '</video/static/images/favicon.ico>; rel="icon"')
+            resp.headers.add('Link', '</static/images/favicon.ico>; rel="icon"')
         return resp
 
     # ------------------------------------------------------------------
@@ -185,15 +181,15 @@ def create_app(config_name=None):
     def _enforce_password_change():
         # Skip for static and unauthenticated endpoints
         p = request.path
-        if p.startswith('/video/static') or p.startswith('/static') or p.startswith('/video/favicon') or p.startswith('/favicon'):
+        if p.startswith('/static') or p.startswith('/static') or p.startswith('/favicon') or p.startswith('/favicon'):
             return
         allowed_paths = {
-            '/video/api/v1/user/change-password',
-            '/video/change-password',
-            '/video/api/v1/auth/login',
-            '/video/api/v1/auth/logout',
-            '/video/api/v1/auth/me',
-            '/video/api/v1/user/status',
+            '/api/v1/user/change-password',
+            '/change-password',
+            '/api/v1/auth/login',
+            '/api/v1/auth/logout',
+            '/api/v1/auth/me',
+            '/api/v1/user/status',
             # Backwards-compat (if any legacy routes remain)
             '/api/v1/user/change-password',
             '/change-password',
@@ -202,7 +198,7 @@ def create_app(config_name=None):
             '/api/v1/auth/me',
             '/api/v1/user/status'
         }
-        if p in allowed_paths or p.startswith('/video/auth') or p.startswith('/auth'):
+        if p in allowed_paths or p.startswith('/auth') or p.startswith('/auth'):
             return
         try:
             verify_jwt_in_request(optional=True)
@@ -262,7 +258,7 @@ def create_app(config_name=None):
         if request.method == 'OPTIONS':
             return
         p = request.path
-        if p.startswith('/video/static') or p.startswith('/static') or p in ('/favicon.ico','/video/favicon.ico'):
+        if p.startswith('/static') or p.startswith('/static') or p in ('/favicon.ico','/favicon.ico'):
             return
         ready = app.config.get('DB_SCHEMA_READY')
         if ready:
@@ -274,7 +270,7 @@ def create_app(config_name=None):
                 app.config['DB_SCHEMA_READY'] = True
                 return
             # Not ready yet; only intercept API / auth / admin sensitive endpoints
-            if p.startswith('/video/api/') or p.startswith('/api/') or p.startswith('/video/admin') or p.startswith('/admin'):
+            if p.startswith('/api/') or p.startswith('/api/') or p.startswith('/admin') or p.startswith('/admin'):
                 return jsonify({
                     'error': 'database_uninitialized',
                     'detail': 'Core tables missing. Run migrations: flask db upgrade',
@@ -498,7 +494,7 @@ def create_app(config_name=None):
 
     # Favicon route to eliminate 404 /favicon.ico requests
     @app.route('/favicon.ico')
-    @app.route('/video/favicon.ico')
+    @app.route('/favicon.ico')
     def favicon():
         static_dir = os.path.join(app.root_path, 'static')
         # Prefer root static/favicon.ico; fallback to images/favicon.ico

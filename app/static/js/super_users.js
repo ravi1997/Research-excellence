@@ -1,6 +1,6 @@
 // Superadmin User Management page logic (externalized for CSP compliance)
 (function(){
-  const BASE = '/video';
+  const BASE = '';
   const tableBody = document.querySelector('#usersTable tbody');
   if(!tableBody) return; // page not present
   const form = document.getElementById('filterForm');
