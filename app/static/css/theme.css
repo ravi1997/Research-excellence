@@ -135,6 +135,19 @@ h4 {
     line-height: 1.2;
 }
 
+/* Explicitly define font-size for h1 elements to prevent browser warnings */
+h1 {
+    font-size: 2rem;
+}
+
+/* Set a uniform font-size for h1 elements */
+h1 {
+    font-size: 2rem; /* Default h1 size */
+    font-weight: 700;
+    margin-block-start: 0.67em;
+    margin-block-end: 0.67em;
+}
+
 p {
     color: var(--text-muted);
     margin: 0 0 1rem 0;

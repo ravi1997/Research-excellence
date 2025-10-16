@@ -165,7 +165,7 @@ def create_app(config_name=None):
             f"script-src {script_src}; "
             "worker-src 'self' blob:; "
             "style-src 'self' 'unsafe-inline'; "
-            "object-src 'none'; frame-ancestors 'none'; base-uri 'self'; manifest-src 'self'"
+            "object-src 'none'; frame-ancestors 'self' http://127.0.0.1:5000; base-uri 'self'; manifest-src 'self'"
         )
         # Only set if not already (allow tests to override)
         resp.headers.setdefault('Content-Security-Policy', csp)
