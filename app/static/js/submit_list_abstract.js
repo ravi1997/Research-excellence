@@ -1,23 +1,183 @@
-
-/* abstract_submit_list.js - abstract page adapter using SubmitList
- * This version preserves previous function names/behaviors:
- *   - window.searchAbstracts(query?)
- *   - window.changeAbstractPage(deltaOrNumber)
- *   - window.updateAbstractMeta()
- */
+/* abstract_submit_list.js — page adapter for ABSTRACTS (preserves old globals) */
 (function () {
     "use strict";
     const { utils, init } = window.SubmitList;
-    const { fetchJSON, escapeHtml, formatDate, getStatusClass, toast } = utils;
+    const { fetchJSON, escapeHtml, formatDate, getStatusClass } = utils;
 
-    // ---- Endpoints (adjust if needed) ----
     const API_LIST = "/api/v1/research/abstracts";
-    const API_ONE = (id) => `/api/v1/research/abstracts/${encodeURIComponent(id)}`;
-    const API_META1 = "/api/v1/research/abstracts/meta";        // preferred
-    const API_META2 = "/api/v1/research/abstracts/status";      // alternate
-    // Fallback strategy: try META1 -> META2 -> derive from list(meta)
+    const API_DETAIL = (id) => `/api/v1/research/abstracts/${encodeURIComponent(id)}`;
+    const API_META = "/api/v1/research/abstracts/meta";
 
-    // ---- Render each list item ----
+    // -----------------------
+    // Helpers for preview code
+    // -----------------------
+    const token = (localStorage.getItem("token")).trim();
+    const BASE = window.API_BASE || `${location.origin}/api/v1/research`; // used by PDF fetch
+
+    function sQ(id) { return document.getElementById(id); }
+
+    // ===== Generated preview (drop-in) =====
+    window.generatePreview = function (selAbstract) {
+        const previewContent = sQ('preview-content');
+        if (!previewContent || !selAbstract) return;
+
+        const categoryName = selAbstract.category?.name || selAbstract.category || 'No Category';
+
+        // Update summary card info (top badges)
+        if (sQ('summaryTitle')) sQ('summaryTitle').textContent = selAbstract.title || 'Untitled Abstract';
+        if (sQ('summaryCategory')) sQ('summaryCategory').textContent = categoryName;
+        if (sQ('summaryAbstractNumber')) sQ('summaryAbstractNumber').textContent = selAbstract.abstract_number || 'Unknown ID';
+
+        if (sQ('summaryStatus')) {
+            sQ('summaryStatus').textContent = selAbstract.status || 'PENDING';
+            sQ('summaryStatus').className = 'badge ' + getStatusClass(selAbstract.status);
+        }
+        if (sQ('summaryAuthor')) sQ('summaryAuthor').textContent = selAbstract.created_by?.username || selAbstract.author || 'Unknown User';
+        if (sQ('summaryDate')) sQ('summaryDate').textContent = formatDate(selAbstract.created_at);
+
+        // Build Authors block
+        let authorsHTML = '';
+        if (Array.isArray(selAbstract.authors) && selAbstract.authors.length > 0) {
+            authorsHTML = selAbstract.authors.map(author => {
+                const roles = [];
+                if (author.is_presenter) roles.push('Presenter');
+                if (author.is_corresponding) roles.push('Corresponding');
+                return `
+          <div class="border-l-4 border-blue-400 dark:border-blue-600 pl-4 py-2">
+            <div class="flex flex-wrap justify-between gap-2">
+              <p class="font-medium text-gray-900 dark:text-white">${escapeHtml(author.name || '')}</p>
+              ${roles.length ? `<div class="flex flex-wrap gap-1">
+                ${roles.map(r => `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100">${r}</span>`).join('')}
+              </div>` : ''}
+            </div>
+            ${author.email ? `<p class="text-sm text-blue-600 dark:text-blue-400 mt-1">${escapeHtml(author.email)}</p>` : ''}
+            ${author.affiliation ? `<p class="text-sm text-gray-500 dark:text-gray-400 mt-1">${escapeHtml(author.affiliation)}</p>` : ''}
+          </div>`;
+            }).join('');
+        } else {
+            authorsHTML = `<p class="text-gray-500 dark:text-gray-400 italic">No authors listed</p>`;
+        }
+
+        const previewHTML = `
+      <div class="divide-y divide-gray-200 dark:divide-gray-700">
+        <!-- Abstract Content Section -->
+        <div class="p-5">
+          <div class="ml-2">
+            <div class="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg border border-gray-200 dark:border-gray-600">
+              <p class="whitespace-pre-wrap text-gray-800 dark:text-gray-200">${escapeHtml(selAbstract.content || selAbstract.abstract || '')}</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Authors Section -->
+        <div class="p-5">
+          <div class="flex items-center mb-4">
+            <div class="flex-shrink-0 h-10 w-10 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+            </div>
+            <div class="ml-4">
+              <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Authors</h3>
+              <p class="text-sm text-gray-500 dark:text-gray-400">List of contributing authors</p>
+            </div>
+          </div>
+          <div class="ml-2 space-y-4">
+            ${authorsHTML}
+          </div>
+        </div>
+
+        <!-- PDF Section -->
+        <div class="p-5">
+          <div class="flex items-center mb-4">
+            <div class="flex-shrink-0 h-10 w-10 rounded-full bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-600 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 17V7a2 2 0 012-2h6a2 2 0 012 2v10m-2 4h-4a2 2 0 01-2-2V7a2 2 0 012-2h4a2 2 0 012 2v10a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <div class="ml-4">
+              <h3 class="text-lg font-semibold text-gray-900 dark:text-white">PDF Document</h3>
+              <p class="text-sm text-gray-500 dark:text-gray-400">Uploaded abstract PDF</p>
+            </div>
+          </div>
+          <div class="ml-2">
+            ${selAbstract.pdf_path ? `
+              <div id="pdf-preview-container" class="border border-gray-300 dark:border-gray-600 rounded mt-3 bg-white dark:bg-gray-800" style="max-height: 500px; overflow-y: auto;">
+                <div class="p-4 text-center">
+                  <div class="inline-flex items-center px-4 py-2 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
+                    <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span class="text-blue-600 dark:text-blue-400">Loading PDF...</span>
+                  </div>
+                </div>
+              </div>
+            ` : `<p class="text-gray-500 dark:text-gray-400 italic p-4 text-center">No PDF uploaded for this abstract.</p>`}
+          </div>
+        </div>
+      </div>
+    `;
+
+        previewContent.innerHTML = previewHTML;
+
+        // After rendering, if PDF exists, render preview using PDF.js
+        if (selAbstract.pdf_path) {
+            window.renderVerifierPdfPreview(selAbstract.id);
+        }
+    };
+
+    // PDF.js rendering (uses BASE + token())
+    window.renderVerifierPdfPreview = function (abstractId) {
+        const container = document.getElementById('pdf-preview-container');
+
+        if (typeof pdfjsLib === 'undefined') {
+            if (container) container.innerHTML = '<p class="text-red-600 dark:text-red-400 text-center p-4">PDF.js library not available. Cannot preview PDF.</p>';
+            return;
+        }
+        pdfjsLib.GlobalWorkerOptions.workerSrc = '/static/js/pdf.worker.min.js';
+
+        fetch(`${BASE}/abstracts/${encodeURIComponent(abstractId)}/pdf`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        })
+            .then(response => {
+                if (!response.ok) throw new Error('Network response was not ok');
+                return response.arrayBuffer();
+            })
+            .then(buffer => {
+                const typedarray = new Uint8Array(buffer);
+                const loadingTask = pdfjsLib.getDocument({ data: typedarray, password: '' });
+                return loadingTask.promise.then(pdf => ({ pdf }));
+            })
+            .then(({ pdf }) => {
+                if (!container) return;
+                container.innerHTML = '';
+                const scale = 1.5;
+                const tasks = [];
+                for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                    tasks.push(
+                        pdf.getPage(pageNum).then(page => {
+                            const viewport = page.getViewport({ scale });
+                            const canvas = document.createElement('canvas');
+                            canvas.className = 'w-full mb-4 rounded shadow';
+                            canvas.height = viewport.height;
+                            canvas.width = viewport.width;
+                            container.appendChild(canvas);
+                            const context = canvas.getContext('2d');
+                            return page.render({ canvasContext: context, viewport }).promise;
+                        })
+                    );
+                }
+                return Promise.all(tasks);
+            })
+            .catch(err => {
+                if (container) container.innerHTML = `<p class="text-red-600 dark:text-red-400 text-center p-4">Unable to load/render PDF: ${escapeHtml(err?.message || 'Unknown error')}</p>`;
+            });
+    };
+
+    // -----------------------
+    // List render
+    // -----------------------
     function renderItem(item) {
         const li = document.createElement("li");
         li.className = "p-3 hover:bg-white/60 dark:hover:bg-gray-800/60 cursor-pointer flex items-start gap-3";
@@ -28,7 +188,7 @@
           <span class="badge text-xs px-2 py-0.5 ${getStatusClass(item.status)}">${escapeHtml(item.status || "")}</span>
         </div>
         <div class="text-xs muted mt-1 truncate">
-          #${escapeHtml(item.id)} · ${escapeHtml(item.category || "-")} · ${escapeHtml(item.author || "-")}
+          #${escapeHtml(item.id)} · ${escapeHtml(item.category || "-")} · ${escapeHtml(item.created_by?.username || "-")}
         </div>
       </div>
       <div class="text-xs whitespace-nowrap ml-2">${escapeHtml(formatDate(item.created_at))}</div>
@@ -36,7 +196,6 @@
         return li;
     }
 
-    // ---- Fetch a page (server params kept compatible) ----
     async function fetchPage({ page, pageSize, sortKey, sortDir, filter, query }) {
         const data = await fetchJSON(API_LIST, {
             q: query, status: filter, sort: sortKey || "created_at", dir: sortDir || "desc", page, size: pageSize
@@ -44,34 +203,28 @@
         return { items: data.items || [], total: data.total ?? 0, totalPages: data.total_pages ?? 1, meta: data.meta || {} };
     }
 
-    // ---- Fill details on select ----
+    // Use generated preview inside selection handler
     async function onSelect(item, ctx) {
-        try {
-            const full = await fetchJSON(API_ONE(item.id));
-            ctx.setDetails({
-                title: full.title || item.title,
-                category: full.category || item.category || "",
-                status: full.status || item.status || "",
-                number: full.abstract_number || full.number || item.number || "",
-                author: full.author || item.author || "",
-                date: formatDate(full.created_at || item.created_at),
-                previewHtml: `<div class="p-3 text-sm muted">Loading preview…</div>`
-            });
+        const full = await fetchJSON(API_DETAIL(item.id));
 
-            // Prefer embedded iframe preview to avoid worker wiring; switch to pdf.js if needed.
-            const pdfUrl = full.pdf_url || full.file_url || item.pdf_url;
-            if (pdfUrl) {
-                ctx.previewEl.innerHTML = `<iframe class="w-full h-[70vh]" src="${pdfUrl}" loading="lazy"></iframe>`;
-            } else {
-                ctx.previewEl.innerHTML = `<div class="p-3 text-sm muted">No PDF attached.</div>`;
-            }
-        } catch (e) {
-            console.error("Detail load error:", e);
-            ctx.setDetails({ previewHtml: `<div class="p-3 text-sm text-red-600 dark:text-red-400">Failed to load details.</div>` });
-        }
+        // Update summary badges via controller so they also reflect in UI elements
+        ctx.setDetails({
+            title: full.title || item.title || "",
+            category: full.category || item.category || (full.category?.name) || "",
+            status: full.status || item.status || "",
+            number: full.abstract_number || full.number || item.number || "",
+            author: (full.created_by?.username) || full.author || item.author || "",
+            date: formatDate(full.created_at || item.created_at),
+            previewHtml: `<div class="p-3 text-sm muted">Loading preview…</div>`
+        });
+
+        // Now render the rich details + authors + PDF using the generated function
+        window.generatePreview(full);
     }
 
-    // ---- Initialize controller ----
+    // -----------------------
+    // Controller wiring
+    // -----------------------
     const ctrl = init({
         listEl: "#List",
         searchInputEl: "#abstractSearch",
@@ -96,138 +249,40 @@
             authorEl: "#summaryAuthor",
             dateEl: "#summaryDate",
         },
-        // Keep the counters identical to old page
         statsMap: { total: "#statTotal", pending: "#statPending", accepted: "#statAccepted", rejected: "#statRejected" },
-        fetchPage,
-        renderItem,
-        onSelect
+        fetchPage, renderItem, onSelect
     });
 
-    // ---- Backward-compatible function names ----
-
-    // searchAbstracts(query?) — keeps old external triggers working
-    window.searchAbstracts = function (query) {
-        if (typeof query === "string") {
-            const input = document.querySelector("#abstractSearch");
-            if (input) input.value = query;
-            ctrl.state.query = query.trim();
-            ctrl.state.page = 1;
-            ctrl.refresh();
-            return;
-        }
-        // If no arg, read from input
-        const input = document.querySelector("#abstractSearch");
-        ctrl.state.query = (input?.value || "").trim();
-        ctrl.state.page = 1;
-        ctrl.refresh();
+    // ---- Old global names preserved ----
+    window.searchAbstracts = function (q) {
+        const s = ctrl.state;
+        if (typeof q === "string") { const input = document.querySelector("#abstractSearch"); if (input) input.value = q; s.query = q.trim(); }
+        else { const input = document.querySelector("#abstractSearch"); s.query = (input?.value || "").trim(); }
+        s.page = 1; ctrl.refresh();
     };
-
-    // changeAbstractPage(deltaOrNumber) — accepts +1/-1 or absolute number
     window.changeAbstractPage = function (deltaOrNumber) {
         const s = ctrl.state;
         if (typeof deltaOrNumber === "number") {
-            if (Number.isInteger(deltaOrNumber) && Math.abs(deltaOrNumber) <= 2 && deltaOrNumber !== 0) {
-                // treat small ints like delta for compatibility
+            if (Number.isInteger(deltaOrNumber) && Math.abs(deltaOrNumber) <= 2 && deltaOrNumber !== 0)
                 s.page = Math.min(Math.max(1, s.page + deltaOrNumber), s.totalPages);
-            } else {
+            else
                 s.page = Math.min(Math.max(1, deltaOrNumber), s.totalPages);
-            }
-        } else if (typeof deltaOrNumber === "string") {
-            if (deltaOrNumber === "next") s.page = Math.min(s.page + 1, s.totalPages);
-            else if (deltaOrNumber === "prev") s.page = Math.max(s.page - 1, 1);
-        }
+        } else if (deltaOrNumber === "next") s.page = Math.min(s.page + 1, s.totalPages);
+        else if (deltaOrNumber === "prev") s.page = Math.max(s.page - 1, 1);
         ctrl.refresh();
     };
-
-    // updateAbstractMeta() — tries dedicated endpoints, then list(meta) fallback
     window.updateAbstractMeta = async function () {
         try {
-            // preferred
-            try {
-                const m = await fetchJSON(API_META1);
-                applyMeta(m);
-                return;
-            } catch (_) { }
-
-            // alternate
-            try {
-                const m = await fetchJSON(API_META2);
-                applyMeta(m);
-                return;
-            } catch (_) { }
-
-            // fallback: hit list API with tiny page to get meta
-            const data = await fetchJSON(API_LIST, { page: 1, size: 1 });
-            applyMeta(data.meta || {});
-        } catch (e) {
-            console.error("updateAbstractMeta failed", e);
-            toast("Failed to refresh counters", "bg-red-600 text-white");
-        }
+            const m = await fetchJSON(API_META);
+            const map = { total: "#statTotal", pending: "#statPending", accepted: "#statAccepted", rejected: "#statRejected" };
+            for (const [k, sel] of Object.entries(map)) {
+                const el = document.querySelector(sel);
+                if (el && m[k] != null) el.textContent = String(m[k]);
+            }
+            const stats = document.querySelector("#Stats");
+            if (stats && m.total != null) stats.textContent = `${m.total} item(s)`;
+        } catch (e) { console.warn("updateAbstractMeta failed", e); }
     };
 
-    function applyMeta(meta) {
-        const map = {
-            total: "#statTotal",
-            pending: "#statPending",
-            accepted: "#statAccepted",
-            rejected: "#statRejected",
-        };
-        Object.entries(map).forEach(([k, sel]) => {
-            const el = document.querySelector(sel);
-            if (el && meta[k] != null) el.textContent = String(meta[k]);
-        });
-        const stats = document.querySelector("#Stats");
-        if (stats && meta.total != null) stats.textContent = `${meta.total} item(s)`;
-    }
-
-    // Expose controller for debugging (optional)
     window.__abstractListCtrl = ctrl;
-
-    // Initial meta refresh (optional; safe if your page used to do it)
-    window.updateAbstractMeta();
-})();
-
-
-/* --- Compatibility shim: expose previous function names so old code keeps working --- */
-(function () {
-    try {
-        const u = (window.SubmitList && window.SubmitList.utils) || {};
-        const ctrl = window.__abstractListCtrl;
-
-        // Map utils directly
-        window.escapeHtml = u.escapeHtml;
-        window.formatDate = u.formatDate;
-        window.fetchJSON = u.fetchJSON;
-        window.headers = u.headers;
-        window.token = u.token;
-        window.toast = u.toast;
-        window.getStatusClass = u.getStatusClass;
-        window.applySortStyles = u.applySortStyles;
-        window.highlightSelection = u.highlightSelection;
-        window.wireSegmentedControls = u.wireSegmentedControls;
-        window.wireSortGroups = u.wireSortGroups;
-
-        // activateSeg existed earlier; export it if available
-        if (u.activateSeg) window.activateSeg = u.activateSeg;
-
-        // Previously present higher-level helpers — provide safe fallbacks
-        window.generatePreview = window.generatePreview || (async function () { /* no-op */ });
-        window.renderVerifierPdfPreview = window.renderVerifierPdfPreview || (async function (url, el) {
-            if (!el) return;
-            if (url) el.innerHTML = `<iframe class="w-full h-[70vh]" src="${url}" loading="lazy"></iframe>`;
-            else el.innerHTML = `<div class="p-3 text-sm muted">No PDF.</div>`;
-        });
-
-        // Page update helpers used by older code
-        window.updatePanel = window.updatePanel || function () { if (ctrl) ctrl.refresh(); };
-        window.updateStatsBar = window.updateStatsBar || function () { if (window.updateAbstractMeta) window.updateAbstractMeta(); };
-
-        // Layout helpers that were page-specific; keep as no-ops to avoid errors
-        window.adjust = window.adjust || function () { };
-        window.apply = window.apply || function () { };
-        window.renderList = window.renderList || function () { if (ctrl) ctrl.refresh(); };
-        window.initCriteriaFilter = window.initCriteriaFilter || function () { };
-        window.initSidePanelCollapse = window.initSidePanelCollapse || function () { };
-
-    } catch (e) { console.warn("Compat shim init error", e); }
 })();

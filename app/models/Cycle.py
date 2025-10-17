@@ -108,7 +108,7 @@ class PaperCategory(db.Model):
 class Awards(db.Model):
     __tablename__ = "awards"
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    title = db.Column(db.String(200), nullable=False)
+    title = db.Column(db.String(500), nullable=False)
     
     author_id = db.Column(UUID(as_uuid=True), db.ForeignKey('authors.id'), nullable=False)
     author = db.relationship("Author", back_populates="awards")
@@ -160,7 +160,7 @@ class AwardVerifiers(db.Model):
 class BestPaper(db.Model):
     __tablename__ = "best_papers"
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    title = db.Column(db.String(200), nullable=False)
+    title = db.Column(db.String(500), nullable=False)
 
     author_id = db.Column(UUID(as_uuid=True), db.ForeignKey(
         'authors.id'), nullable=False)

@@ -7,9 +7,11 @@ live in versioned modules:
     * app.routes.v1.superadmin_route -> super_api_bp
 """
 
+from app.routes.v1.admin_route import admin_api_bp
 from app.routes.v1.auth_route import auth_bp
 from app.routes.v1.view_route import view_bp
 from app.routes.v1.user_route import user_bp
+from app.routes.v1.superadmin_route import super_api_bp
 from app.routes.v1.research import research_bp
 
 def register_blueprints(app):
@@ -24,5 +26,7 @@ def register_blueprints(app):
     app.register_blueprint(view_bp, url_prefix=BASE)
     app.register_blueprint(user_bp, url_prefix=f'{BASE}/api/v1/user')
     app.register_blueprint(auth_bp, url_prefix=f'{BASE}/api/v1/auth')
+    app.register_blueprint(admin_api_bp, url_prefix=f'{BASE}/api/v1/admin')
+    app.register_blueprint(super_api_bp, url_prefix=f'{BASE}/api/v1/super')
     app.register_blueprint(research_bp, url_prefix=f'{BASE}/api/v1/research')
     app.logger.info("Blueprints registered (core + admin_api + super_api + research)")

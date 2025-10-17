@@ -9,6 +9,7 @@ from app.models.Cycle import Abstracts, Author, Category, Cycle, AbstractAuthors
 from app.models.User import User
 from app.schemas.abstract_schema import AbstractSchema
 from app.extensions import db
+from app.security_utils import audit_log
 from app.utils.decorator import require_roles
 from app.models.enumerations import Role, Status
 import json
@@ -22,6 +23,7 @@ abstracts_schema = AbstractSchema(many=True)
 
 @research_bp.route('/abstracts', methods=['POST'])
 @jwt_required()
+@require_roles(Role.USER.value,Role.ADMIN.value, Role.SUPERADMIN.value)
 def create_abstract():
     """Create a new research abstract."""
     try:
@@ -119,11 +121,13 @@ def create_abstract():
             "Abstract Created Successfully",
             f"Dear {user.username},\n\nYour abstract with ID {abstract.id} has been created successfully and is pending submission for review.\n Details:\nTitle: {abstract.title}\nAbstract ID: {abstract.id}\n\nBest regards,\nResearch Section,AIIMS"
         )
-        
+        audit_log('abstract_create_success', actor_id=current_user_id, target_user_id=current_user_id, detail=f"Abstract ID: {abstract.id}")  # Log abstract creation
         return jsonify(abstract_schema.dump(abstract)), 201
     except Exception as e:
         db.session.rollback()
         current_app.logger.exception("Error creating abstract")
+        audit_log('abstract_create_failure', actor_id=current_user_id, target_user_id=current_user_id,
+                  detail=f"Abstract failed: {e}")
         return jsonify({"error": str(e)}), 400
 
 
@@ -266,7 +270,15 @@ def get_abstracts():
             status_value = Status[status]
             query = query.filter(Abstracts.status == status_value)
             
-        
+        current_user_id = get_jwt_identity()
+        user = User.query.filter_by(id=current_user_id).first()
+        if not (
+                user.has_role(Role.ADMIN.value) or
+                user.has_role(Role.SUPERADMIN.value) or
+                user.has_role(Role.VERIFIER.value)
+        ):
+            query = query.filter_by(created_by_id=current_user_id)
+
         # Apply verifiers filter
         if verifiers:
             if verifiers.lower() == 'yes':

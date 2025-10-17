@@ -217,6 +217,15 @@ def get_awards():
             query = query.join(User, User.id == AwardVerifiers.user_id)
             query = query.filter(AwardVerifiers.user_id == current_user_id)
         
+        current_user_id = get_jwt_identity()
+        user = User.query.filter_by(id=current_user_id).first()
+        if not (
+                user.has_role(Role.ADMIN.value) or
+                user.has_role(Role.SUPERADMIN.value) or
+                user.has_role(Role.VERIFIER.value)
+        ):
+            query = query.filter_by(created_by_id=current_user_id)
+
         # Apply sorting
         if sort_by == 'title':
             order_by = Awards.title.asc() if sort_dir.lower() == 'asc' else Awards.title.desc()

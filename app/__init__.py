@@ -308,6 +308,10 @@ def create_app(config_name=None):
         return jsonify({"error": "internal_server_error"}), 500
     # MongoDB connectivity (legacy) removed; SQLAlchemy is the sole datastore.
 
+
+
+    
+
     Compress(app)
     CORS(app,supports_credentials=True)
     app.logger.info("Middleware loaded: Compress, CORS")

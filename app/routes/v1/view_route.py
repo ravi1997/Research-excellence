@@ -88,10 +88,7 @@ def super_audit_page():
     Uses same underlying API endpoints (/api/v1/super/audit/list & export).
     We only seed initial recent logs (e.g., 50) for fast first paint.
     """
-    from app.models import AuditLog
-    # Seed recent logs (limit 50) similar to overview page
-    recent = AuditLog.query.order_by(AuditLog.id.desc()).limit(50).all()
-    return render_template('superadmin/super_audit.html', audit_logs=[a.to_dict() for a in recent])
+    return render_template('superadmin/super_audit.html')
 
 @view_bp.route('/admin/super/users')
 @jwt_required()
