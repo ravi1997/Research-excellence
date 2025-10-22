@@ -275,7 +275,8 @@ def get_abstracts():
         if not (
                 user.has_role(Role.ADMIN.value) or
                 user.has_role(Role.SUPERADMIN.value) or
-                user.has_role(Role.VERIFIER.value)
+                user.has_role(Role.VERIFIER.value) or
+                user.has_role(Role.COORDINATOR.value)
         ):
             query = query.filter_by(created_by_id=current_user_id)
 

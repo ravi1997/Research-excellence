@@ -74,7 +74,13 @@ def create_award():
                 fwd_file.save(file_path)
                 current_app.logger.info(f"Forwarding letter PDF saved to: {file_path}")
                 forwarding_letter_path = file_path.replace("app/", "", 1)
-
+        if not (
+                user.has_role(Role.ADMIN.value) or
+                user.has_role(Role.SUPERADMIN.value) or
+                user.has_role(Role.VERIFIER.value) or
+                user.has_role(Role.COORDINATOR.value)
+        ):
+            query = query.filter_by(created_by_id=current_user_id)
         # Extract potential authors array (frontend sends single-author array)
         authors_data = data.pop('authors', []) or []
 
@@ -222,7 +228,8 @@ def get_awards():
         if not (
                 user.has_role(Role.ADMIN.value) or
                 user.has_role(Role.SUPERADMIN.value) or
-                user.has_role(Role.VERIFIER.value)
+                user.has_role(Role.VERIFIER.value) or
+                user.has_role(Role.COORDINATOR.value)
         ):
             query = query.filter_by(created_by_id=current_user_id)
 
