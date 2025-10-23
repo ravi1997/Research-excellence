@@ -1,24 +1,93 @@
-import uuid
-
-from app.models.enumerations import GradingFor, Status
-from ..extensions import db
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy import Enum as SqlEnum
+from sqlalchemy import Enum as SqlEnum, Identity, Index, Computed
+from sqlalchemy import func, and_
+from sqlalchemy.dialects.postgresql import ExcludeConstraint
+from sqlalchemy.schema import CheckConstraint
+from sqlalchemy.dialects.postgresql import UUID, DATERANGE
 from sqlalchemy import Identity
-
-
+from sqlalchemy import Enum as SqlEnum
+from sqlalchemy.dialects.postgresql import UUID
+from ..extensions import db
+from app.models.enumerations import CyclePhase, GradingFor, Status
+import uuid
 
 
 class Cycle(db.Model):
     __tablename__ = "cycles"
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = db.Column(db.String(100), nullable=False, unique=True)
+
+    # Keep these existing columns (backward compatible)
     start_date = db.Column(db.Date, nullable=False)
     end_date = db.Column(db.Date, nullable=False)
 
-    best_papers = db.relationship("BestPaper", back_populates="cycle", lazy=True)
+    best_papers = db.relationship(
+        "BestPaper", back_populates="cycle", lazy=True)
     abstracts = db.relationship("Abstracts", back_populates="cycle", lazy=True)
     awards = db.relationship("Awards", back_populates="cycle", lazy=True)
+
+    # NEW: windows relationship
+    windows = db.relationship(
+        "CycleWindow",
+        back_populates="cycle",
+        cascade="all, delete-orphan",
+        lazy=True
+    )
+
+    # Convenience filtered relationships
+    submission_windows = db.relationship(
+        "CycleWindow",
+        primaryjoin=lambda: and_(
+            Cycle.id == CycleWindow.cycle_id,
+            CycleWindow.phase == CyclePhase.SUBMISSION,
+        ),
+        viewonly=True,
+        lazy=True,
+    )
+    verification_windows = db.relationship(
+        "CycleWindow",
+        primaryjoin=lambda: and_(
+            Cycle.id == CycleWindow.cycle_id,
+            CycleWindow.phase == CyclePhase.VERIFICATION,
+        ),
+        viewonly=True,
+        lazy=True,
+    )
+    final_windows = db.relationship(
+        "CycleWindow",
+        primaryjoin=lambda: and_(
+            Cycle.id == CycleWindow.cycle_id,
+            CycleWindow.phase == CyclePhase.FINAL,
+        ),
+        viewonly=True,
+        lazy=True,
+    )
+
+
+class CycleWindow(db.Model):
+    __tablename__ = "cycle_windows"
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+
+    cycle_id = db.Column(UUID(as_uuid=True), db.ForeignKey(
+        "cycles.id", ondelete="CASCADE"), nullable=False)
+    cycle = db.relationship("Cycle", back_populates="windows")
+
+    phase = db.Column(SqlEnum(CyclePhase, name="cycle_phase"), nullable=False)
+
+    start_date = db.Column(db.Date, nullable=False)
+    end_date = db.Column(db.Date, nullable=False)
+
+    # Generated (stored) daterange for robust constraints
+    # Inclusive bounds: '[]' (both start & end inclusive)
+    win = db.Column(
+        DATERANGE,
+        Computed("daterange(start_date, end_date, '[]')", persisted=True),
+        nullable=False
+    )
+
+    created_at = db.Column(db.DateTime, nullable=False,
+                           server_default=db.func.current_timestamp())
+    updated_at = db.Column(db.DateTime, nullable=False, server_default=db.func.current_timestamp(
+    ), onupdate=db.func.current_timestamp())
 
 
 class Author(db.Model):
@@ -30,47 +99,59 @@ class Author(db.Model):
     is_presenter = db.Column(db.Boolean, default=False)
     is_corresponding = db.Column(db.Boolean, default=False)
 
-    abstracts = db.relationship("Abstracts", secondary="abstract_authors", back_populates="authors")
+    abstracts = db.relationship(
+        "Abstracts", secondary="abstract_authors", back_populates="authors")
     awards = db.relationship("Awards", back_populates="author", lazy=True)
-    best_papers = db.relationship("BestPaper", back_populates="author", lazy=True)
+    best_papers = db.relationship(
+        "BestPaper", back_populates="author", lazy=True)
+
 
 class Category(db.Model):
     __tablename__ = "categories"
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = db.Column(db.String(100), nullable=False, unique=True)
 
-    abstracts = db.relationship("Abstracts", back_populates="category", lazy=True)
+    abstracts = db.relationship(
+        "Abstracts", back_populates="category", lazy=True)
     users = db.relationship("User", back_populates="category", lazy=True)
+
 
 class Abstracts(db.Model):
     __tablename__ = "abstracts"
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     title = db.Column(db.String(500), nullable=False)
- 
-    category_id = db.Column(UUID(as_uuid=True), db.ForeignKey('categories.id'), nullable=False)
+
+    category_id = db.Column(UUID(as_uuid=True), db.ForeignKey(
+        'categories.id'), nullable=False)
     category = db.relationship("Category", back_populates="abstracts")
 
-    authors = db.relationship("Author", secondary="abstract_authors", back_populates="abstracts")
+    authors = db.relationship(
+        "Author", secondary="abstract_authors", back_populates="abstracts")
 
     content = db.Column(db.Text, nullable=False)
     pdf_path = db.Column(db.String(500), nullable=True)  # Path to uploaded PDF
 
-    cycle_id = db.Column(UUID(as_uuid=True), db.ForeignKey('cycles.id'), nullable=False)
+    cycle_id = db.Column(UUID(as_uuid=True), db.ForeignKey(
+        'cycles.id'), nullable=False)
     cycle = db.relationship("Cycle", back_populates="abstracts")
 
-    created_at = db.Column(db.DateTime, nullable=False, default=db.func.current_timestamp())
-    updated_at = db.Column(db.DateTime, nullable=False, default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
+    created_at = db.Column(db.DateTime, nullable=False,
+                           default=db.func.current_timestamp())
+    updated_at = db.Column(db.DateTime, nullable=False, default=db.func.current_timestamp(
+    ), onupdate=db.func.current_timestamp())
 
-    status = db.Column(SqlEnum(Status), nullable=False, default=Status.PENDING.value)
-    created_by_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=False)
+    status = db.Column(SqlEnum(Status), nullable=False,
+                       default=Status.PENDING.value)
+    created_by_id = db.Column(
+        UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=False)
     created_by = db.relationship("User", foreign_keys=[created_by_id])
-    updated_by = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=True)
+    updated_by = db.Column(
+        UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=True)
 
-    # Auto-incrementing human-friendly number using PostgreSQL identity (starts at 10000)
-    # This avoids manual sequence management and is created automatically with the table.
     abstract_number = db.Column(
         db.Integer,
-        Identity(start=10000),  # GENERATED BY DEFAULT AS IDENTITY (START WITH 10000)
+        # GENERATED BY DEFAULT AS IDENTITY (START WITH 10000)
+        Identity(start=10000),
         nullable=False,
         unique=True
     )
@@ -78,21 +159,29 @@ class Abstracts(db.Model):
     consent = db.Column(db.Boolean, default=False, nullable=False)
 
     # Relationship to verifiers (users who can verify this abstract)
-    verifiers = db.relationship("User", secondary="abstract_verifiers", back_populates="abstracts_to_verify")
+    verifiers = db.relationship(
+        "User", secondary="abstract_verifiers", back_populates="abstracts_to_verify")
     gradings = db.relationship("Grading", back_populates="abstract", lazy=True)
+
 
 class AbstractAuthors(db.Model):
     __tablename__ = "abstract_authors"
-    abstract_id = db.Column(UUID(as_uuid=True), db.ForeignKey('abstracts.id'), primary_key=True)
-    author_id = db.Column(UUID(as_uuid=True), db.ForeignKey('authors.id'), primary_key=True)
-    author_order = db.Column(db.Integer, nullable=False)  # To maintain the order of authors
+    abstract_id = db.Column(UUID(as_uuid=True), db.ForeignKey(
+        'abstracts.id'), primary_key=True)
+    author_id = db.Column(UUID(as_uuid=True), db.ForeignKey(
+        'authors.id'), primary_key=True)
+    # To maintain the order of authors
+    author_order = db.Column(db.Integer, nullable=False)
 
 
 class AbstractVerifiers(db.Model):
     __tablename__ = "abstract_verifiers"
-    abstract_id = db.Column(UUID(as_uuid=True), db.ForeignKey('abstracts.id'), primary_key=True)
-    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), primary_key=True)
-    assigned_at = db.Column(db.DateTime, nullable=False, default=db.func.current_timestamp())
+    abstract_id = db.Column(UUID(as_uuid=True), db.ForeignKey(
+        'abstracts.id'), primary_key=True)
+    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey(
+        'users.id'), primary_key=True)
+    assigned_at = db.Column(db.DateTime, nullable=False,
+                            default=db.func.current_timestamp())
 
 
 class PaperCategory(db.Model):
@@ -105,29 +194,35 @@ class PaperCategory(db.Model):
     best_papers = db.relationship(
         "BestPaper", back_populates="paper_category", lazy=True)
 
+
 class Awards(db.Model):
     __tablename__ = "awards"
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     title = db.Column(db.String(500), nullable=False)
-    
-    author_id = db.Column(UUID(as_uuid=True), db.ForeignKey('authors.id'), nullable=False)
+
+    author_id = db.Column(UUID(as_uuid=True), db.ForeignKey(
+        'authors.id'), nullable=False)
     author = db.relationship("Author", back_populates="awards")
 
-    cycle_id = db.Column(UUID(as_uuid=True), db.ForeignKey('cycles.id'), nullable=False)
+    cycle_id = db.Column(UUID(as_uuid=True), db.ForeignKey(
+        'cycles.id'), nullable=False)
     cycle = db.relationship("Cycle", back_populates="awards")
 
     forwarding_letter_path = db.Column(db.String(500), nullable=True)
     full_paper_path = db.Column(db.String(500), nullable=True)
-    
+
     is_aiims_work = db.Column(db.Boolean, default=False)
 
-    paper_category_id = db.Column(UUID(as_uuid=True), db.ForeignKey('paper_categories.id'), nullable=False)
+    paper_category_id = db.Column(UUID(as_uuid=True), db.ForeignKey(
+        'paper_categories.id'), nullable=False)
     paper_category = db.relationship("PaperCategory", back_populates="awards")
 
-
-    created_at = db.Column(db.DateTime, nullable=False, default=db.func.current_timestamp())
-    updated_at = db.Column(db.DateTime, nullable=False, default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
-    status = db.Column(SqlEnum(Status), nullable=False, default=Status.PENDING.value)
+    created_at = db.Column(db.DateTime, nullable=False,
+                           default=db.func.current_timestamp())
+    updated_at = db.Column(db.DateTime, nullable=False, default=db.func.current_timestamp(
+    ), onupdate=db.func.current_timestamp())
+    status = db.Column(SqlEnum(Status), nullable=False,
+                       default=Status.PENDING.value)
     # Relationship to verifiers (users who can verify this abstract)
     created_by_id = db.Column(
         UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=False)
@@ -177,7 +272,8 @@ class BestPaper(db.Model):
 
     paper_category_id = db.Column(UUID(as_uuid=True), db.ForeignKey(
         'paper_categories.id'), nullable=False)
-    paper_category = db.relationship("PaperCategory", back_populates="best_papers")
+    paper_category = db.relationship(
+        "PaperCategory", back_populates="best_papers")
 
     created_at = db.Column(db.DateTime, nullable=False,
                            default=db.func.current_timestamp())
@@ -194,7 +290,8 @@ class BestPaper(db.Model):
     # Relationship to verifiers (users who can verify this abstract)
     verifiers = db.relationship(
         "User", secondary="best_paper_verifiers", back_populates="best_papers_to_verify")
-    gradings = db.relationship("Grading", back_populates="best_paper", lazy=True)
+    gradings = db.relationship(
+        "Grading", back_populates="best_paper", lazy=True)
 
     bestpaper_number = db.Column(
         db.Integer,
@@ -204,6 +301,7 @@ class BestPaper(db.Model):
         unique=True
     )
 
+
 class BestPaperVerifiers(db.Model):
     __tablename__ = "best_paper_verifiers"
     best_paper_id = db.Column(UUID(as_uuid=True), db.ForeignKey(
@@ -212,7 +310,7 @@ class BestPaperVerifiers(db.Model):
         'users.id'), primary_key=True)
     assigned_at = db.Column(db.DateTime, nullable=False,
                             default=db.func.current_timestamp())
-    
+
 
 class GradingType(db.Model):
     __tablename__ = "grading_types"
@@ -226,6 +324,7 @@ class GradingType(db.Model):
                            default=db.func.current_timestamp())
     updated_at = db.Column(db.DateTime, nullable=False, default=db.func.current_timestamp(
     ), onupdate=db.func.current_timestamp())
+
 
 class Grading(db.Model):
     __tablename__ = "gradings"
@@ -249,7 +348,8 @@ class Grading(db.Model):
         'awards.id'), nullable=True)
     award = db.relationship("Awards")
 
-    graded_by_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=False)
+    graded_by_id = db.Column(
+        UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=False)
     graded_by = db.relationship("User", foreign_keys=[graded_by_id])
 
     created_at = db.Column(db.DateTime, nullable=False,

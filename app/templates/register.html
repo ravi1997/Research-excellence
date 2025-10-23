@@ -192,12 +192,13 @@
         <div>
             <h1 class="mt-4 text-3xl md:text-4xl font-extrabold tracking-tight text-[color:var(--text)]">Create your
                 account</h1>
-            <p class="muted mt-3 max-w-md">Join the AIIMS Research Submission Portal. 
-                1. You need to register, either using either your employee code (residents) or your mobile number (students, research staff etc). 
-                2. Please keep a PDF copy of your ID card handy as you need that to register. 
-                3. The account information you provide will be reviewed and verified by the admins. 
-                4. You will be able to log in <b>after</b> your request has been verified (24-48 hours).</p> 
-                 <p class="muted mt-4 text-sm">Already have an account? <a href="/login"
+            <p class="muted mt-3 max-w-md">Join the AIIMS Research Submission Portal.
+                1. You need to register, either using either your employee code (residents) or your mobile number
+                (students, research staff etc).
+                2. Please keep a PDF copy of your ID card handy as you need that to register.
+                3. The account information you provide will be reviewed and verified by the admins.
+                4. You will be able to log in <b>after</b> your request has been verified (24-48 hours).</p>
+            <p class="muted mt-4 text-sm">Already have an account? <a href="/login"
                     class="no-underline hover:underline text-[color:var(--brand-600)]">Sign in</a>.</p>
         </div>
         <div class="hidden md:block mt-6 text-xs opacity-70">
@@ -244,11 +245,11 @@
                         <div class="flex gap-4 text-sm">
                             <label class="inline-flex items-center gap-2 cursor-pointer">
                                 <input type="radio" name="has_emp_id" value="yes" class="radio" checked>
-                                <span>Yes, I have an Employee ID</span>
+                                <span>Yes, I have an Employee ID (Faculty, Scientist, Residents, etc.)</span>
                             </label>
                             <label class="inline-flex items-center gap-2 cursor-pointer">
                                 <input type="radio" name="has_emp_id" value="no" class="radio">
-                                <span>No, I only have a mobile number</span>
+                                <span>No, I only have a mobile number (Students, Research Project Staff, others)</span>
                             </label>
                         </div>
                     </fieldset>
@@ -256,8 +257,9 @@
                         <!-- Employee ID wrapper -->
                         <div id="step1_employee_wrap" class="space-y-2">
                             <input id="step1_employee" type="text" class="input w-full pl-3 pr-3 pt-4 pb-2 rounded-lg"
-                                placeholder="Employee ID" autocomplete="off" />
-                            <p class="muted text-[11px]">We'll fetch the registered mobile automatically if employee ID is found. 
+                                placeholder="Employee ID (starts with E*******)" autocomplete="off" />
+                            <p class="muted text-[11px]">We'll fetch the registered mobile automatically if employee ID
+                                is found.
                             </p>
                         </div>
                     </div>
@@ -321,6 +323,8 @@
                         <button id="step2_verify" class="btn btn-primary flex-1">Verify OTP</button>
                         <button id="step2_back" type="button" class="btn-ghost px-4">Back</button>
                         <p class="muted text-sm mt-1">Maxiumum 3 Resend attempts allowed.</p>
+                        <p class="text-sm font-bold mt-1">After Entering OTP, You need to upload ID Proof and complete
+                            your profile.</p>
                     </div>
                     <p id="step2_msg" class="muted text-xs"></p>
                 </div>
@@ -329,8 +333,13 @@
                 <div id="upload_intermediate" class="hidden space-y-4">
                     <div>
                         <h2 class="text-lg font-semibold">Upload ID (PDF)</h2>
-                        <p class="muted text-sm mt-1">Upload AIIMS ID document to proove your identity. Only PDF. Up to 5 MB in size</p>
+                        <p class="muted text-sm mt-1">Upload AIIMS ID document to proove your identity. Only PDF. Up to
+                            5 MB in size</p>
                     </div>
+                    <label for="mid_file"
+                        class="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg inline-block">
+                        Upload PDF
+                    </label>
                     <input id="mid_file" type="file" accept="application/pdf" class="block w-full text-sm" />
                     <button id="mid_upload" class="btn btn-primary w-full">Upload Document</button>
                     <p id="mid_msg" class="muted text-xs"></p>
@@ -341,7 +350,8 @@
                     <div>
                         <h2 class="text-lg font-semibold">Step 3 · Account Details</h2>
                         <p class="muted text-sm mt-1">Choose a unique username, confirm email, and set a strong
-                            password (Mix of capital and small alphabet, one number, one special symbol, 8-13 characters).</p>
+                            password (Mix of capital and small alphabet, one number, one special symbol, 8-13
+                            characters).</p>
                     </div>
                     <div class="relative">
                         <input id="step3_username" type="text" class="input w-full pl-3 pr-3 pt-4 pb-2 rounded-lg"
