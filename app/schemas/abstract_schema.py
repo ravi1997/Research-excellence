@@ -21,15 +21,20 @@ class AbstractSchema(ma.SQLAlchemyAutoSchema):
     category_id = fields.String(required=True)
     cycle_id = fields.String(required=True)
     status = fields.String(required=False)
-    pdf_path = fields.String(dump_only=True)
-    created_by = fields.Nested(UserSchema, dump_only=True)
-    updated_by = fields.String(dump_only=True)
+    pdf = fields.String(attribute="pdf_path", dump_only=True)
+    created_by = fields.Nested(UserSchema, dump_only=True, attribute="created_by")
+    submitted_by = fields.Nested(UserSchema, dump_only=True, attribute="created_by")
+    updated_by = fields.Nested(UserSchema, dump_only=True)
     created_at = fields.DateTime(dump_only=True)
+    submitted_on = fields.DateTime(dump_only=True, attribute="created_at")
     updated_at = fields.DateTime(dump_only=True)
+    updated_on = fields.DateTime(dump_only=True, attribute="updated_at")
 
     # Related fields
     category = fields.Nested(CategorySchema, dump_only=True)
     authors = fields.Nested(AuthorSchema, many=True, dump_only=True)
     verifiers = fields.Nested(UserSchema, many=True, dump_only=True)
     gradings = fields.Nested(GradingSchema, many=True, dump_only=True)
+    coordinators = fields.Nested(UserSchema, many=True, dump_only=True)
+    grades = fields.Nested(GradingSchema, many=True, dump_only=True, attribute="grades")
     

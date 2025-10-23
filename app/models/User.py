@@ -118,6 +118,63 @@ class User(db.Model):
         "UserRole", back_populates="user", cascade="all, delete-orphan")
     roles = association_proxy("role_associations", "role")
     
+    abstracts_submitted = db.relationship(
+        "Abstracts",
+        foreign_keys="Abstracts.created_by_id",
+        back_populates="created_by",
+        lazy=True,
+    )
+    abstracts_updated = db.relationship(
+        "Abstracts",
+        foreign_keys="Abstracts.updated_by_id",
+        back_populates="updated_by",
+        lazy=True,
+    )
+    awards_submitted = db.relationship(
+        "Awards",
+        foreign_keys="Awards.created_by_id",
+        back_populates="created_by",
+        lazy=True,
+    )
+    awards_updated = db.relationship(
+        "Awards",
+        foreign_keys="Awards.updated_by_id",
+        back_populates="updated_by",
+        lazy=True,
+    )
+    best_papers_submitted = db.relationship(
+        "BestPaper",
+        foreign_keys="BestPaper.created_by_id",
+        back_populates="created_by",
+        lazy=True,
+    )
+    best_papers_updated = db.relationship(
+        "BestPaper",
+        foreign_keys="BestPaper.updated_by_id",
+        back_populates="updated_by",
+        lazy=True,
+    )
+    abstracts_to_coordinate = db.relationship(
+        "Abstracts",
+        secondary="abstract_coordinators",
+        back_populates="coordinators",
+    )
+    awards_to_coordinate = db.relationship(
+        "Awards",
+        secondary="award_coordinators",
+        back_populates="coordinators",
+    )
+    best_papers_to_coordinate = db.relationship(
+        "BestPaper",
+        secondary="best_paper_coordinators",
+        back_populates="coordinators",
+    )
+    grades_given = db.relationship(
+        "Grading",
+        back_populates="graded_by",
+        lazy=True,
+    )
+
     # Relationship to abstracts that this user can verify
     abstracts_to_verify = db.relationship(
         "Abstracts", secondary="abstract_verifiers", back_populates="verifiers")
