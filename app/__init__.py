@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from flask import Flask, app, render_template, request, jsonify, send_from_directory, g
 import secrets
 from app.security_utils import log_structured
+from app.utils.logging_utils import get_logger, init_logger
 import logging
 from logging.handlers import RotatingFileHandler
 from flask_compress import Compress
@@ -56,6 +57,9 @@ def configure_logging(app):
     log_level = getattr(logging, app.config.get('LOG_LEVEL', 'INFO'))
     app.logger.setLevel(log_level)
     app.logger.info("Logging configured with level: %s", app.config.get('LOG_LEVEL', 'INFO'))
+
+    # Configure categorized loggers using the same application config.
+    init_logger(app)
 
     # Wire internal library/module loggers to use the same handlers/formatting
     # Avoid duplicate emission by disabling propagation and attaching app handlers.
@@ -116,6 +120,7 @@ def create_app(config_name=None):
 
     configure_logging(app)
     app.logger.info("Using config: %s", config_class.__name__)
+    get_logger("app").info("Application startup with config %s", config_class.__name__)
 
     # Optional proxy fix: enable when running behind a trusted proxy by setting PROXY_FIX_NUM
     try:
