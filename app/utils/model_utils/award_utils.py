@@ -1,14 +1,19 @@
 from __future__ import annotations
 
-from typing import Optional, Sequence
+import json
+from typing import Dict, Optional, Sequence
 
 from sqlalchemy.orm import joinedload
 
 from app.extensions import db
 from app.models.Cycle import Awards
 from app.models.User import User
+from app.security_utils import audit_log
+from app.utils.logging_utils import get_logger, log_context
 
 from .base import (
+    _sanitize_payload,
+    _serialize_value,
     create_instance,
     delete_instance,
     get_instance,
@@ -16,13 +21,65 @@ from .base import (
     update_instance,
 )
 
-
-def create_award(commit: bool = True, **attributes) -> Awards:
-    return create_instance(Awards, commit=commit, **attributes)
+logger = get_logger("award_utils")
 
 
-def get_award_by_id(award_id) -> Optional[Awards]:
-    return get_instance(Awards, award_id)
+def _audit(event: str, actor_id: Optional[str], payload: Dict[str, object]) -> None:
+    try:
+        audit_log(
+            event,
+            user_id=str(actor_id) if actor_id is not None else None,
+            detail=json.dumps(payload, default=_serialize_value),
+        )
+    except Exception:
+        logger.exception("Failed to record award audit", extra={"event": event})
+
+
+def create_award(
+    commit: bool = True,
+    *,
+    actor_id: Optional[str] = None,
+    context: Optional[Dict[str, object]] = None,
+    **attributes,
+) -> Awards:
+    ctx = {"function": "create_award", **(context or {})}
+    sanitized = _sanitize_payload(attributes)
+    with log_context(module="award_utils", action="create_award", actor_id=actor_id):
+        logger.info("create_award commit=%s attributes=%s", commit, sanitized)
+    award = create_instance(
+        Awards,
+        commit=commit,
+        actor_id=actor_id,
+        event_name="award.create",
+        context=ctx,
+        **attributes,
+    )
+    logger.info("create_award complete id=%s", _serialize_value(getattr(award, "id", None)))
+    return award
+
+
+def get_award_by_id(
+    award_id,
+    *,
+    actor_id: Optional[str] = None,
+    context: Optional[Dict[str, object]] = None,
+) -> Optional[Awards]:
+    ctx = {"function": "get_award_by_id", **(context or {})}
+    with log_context(module="award_utils", action="get_award_by_id", actor_id=actor_id):
+        logger.info("get_award_by_id id=%s", _serialize_value(award_id))
+    award = get_instance(
+        Awards,
+        award_id,
+        actor_id=actor_id,
+        event_name="award.get",
+        context=ctx,
+    )
+    logger.info(
+        "get_award_by_id resolved id=%s found=%s",
+        _serialize_value(award_id),
+        award is not None,
+    )
+    return award
 
 
 def list_awards(
@@ -30,63 +87,253 @@ def list_awards(
     filters: Optional[Sequence] = None,
     eager: bool = False,
     order_by=None,
+    actor_id: Optional[str] = None,
+    context: Optional[Dict[str, object]] = None,
 ) -> Sequence[Awards]:
-    query = db.session.query(Awards)
-    if eager:
-        query = query.options(
+    options = (
+        [
             joinedload(Awards.author),
             joinedload(Awards.verifiers),
             joinedload(Awards.coordinators),
+        ]
+        if eager
+        else None
+    )
+    ctx = {"function": "list_awards", "eager": eager, **(context or {})}
+    awards = list_instances(
+        Awards,
+        filters=filters,
+        order_by=order_by,
+        query_options=options,
+        actor_id=actor_id,
+        event_name="award.list",
+        context=ctx,
+    )
+    with log_context(module="award_utils", action="list_awards", actor_id=actor_id):
+        logger.info("list_awards complete eager=%s count=%s", eager, len(awards))
+    return awards
+
+
+def update_award(
+    award: Awards,
+    commit: bool = True,
+    *,
+    actor_id: Optional[str] = None,
+    context: Optional[Dict[str, object]] = None,
+    **attributes,
+) -> Awards:
+    ctx = {
+        "function": "update_award",
+        "award_id": _serialize_value(getattr(award, "id", None)),
+        **(context or {}),
+    }
+    sanitized = _sanitize_payload(attributes)
+    with log_context(module="award_utils", action="update_award", actor_id=actor_id):
+        logger.info("update_award target_id=%s attributes=%s", ctx.get("award_id"), sanitized)
+    updated = update_instance(
+        award,
+        commit=commit,
+        actor_id=actor_id,
+        event_name="award.update",
+        context=ctx,
+        **attributes,
+    )
+    logger.info("update_award complete target_id=%s", ctx.get("award_id"))
+    return updated
+
+
+def delete_award(
+    award_or_id,
+    commit: bool = True,
+    *,
+    actor_id: Optional[str] = None,
+    context: Optional[Dict[str, object]] = None,
+) -> None:
+    ctx = {"function": "delete_award", **(context or {})}
+    with log_context(module="award_utils", action="delete_award", actor_id=actor_id):
+        logger.info("delete_award requested target=%s", _serialize_value(award_or_id))
+    delete_instance(
+        Awards,
+        award_or_id,
+        commit=commit,
+        actor_id=actor_id,
+        event_name="award.delete",
+        context=ctx,
+    )
+    logger.info("delete_award completed target=%s", _serialize_value(award_or_id))
+
+
+def assign_verifier(
+    award: Awards,
+    verifier: User,
+    commit: bool = True,
+    *,
+    actor_id: Optional[str] = None,
+    context: Optional[Dict[str, object]] = None,
+) -> Awards:
+    ctx = {
+        "function": "assign_award_verifier",
+        "award_id": _serialize_value(getattr(award, "id", None)),
+        "verifier_id": _serialize_value(getattr(verifier, "id", None)),
+        **(context or {}),
+    }
+    changed = False
+    with log_context(module="award_utils", action="assign_verifier", actor_id=actor_id):
+        logger.info(
+            "assign_award_verifier award_id=%s verifier_id=%s",
+            ctx["award_id"],
+            ctx["verifier_id"],
         )
-
-    if filters:
-        for clause in filters:
-            query = query.filter(clause)
-
-    if order_by is not None:
-        if isinstance(order_by, (list, tuple)):
-            query = query.order_by(*order_by)
-        else:
-            query = query.order_by(order_by)
-
-    return query.all()
-
-
-def update_award(award: Awards, commit: bool = True, **attributes) -> Awards:
-    return update_instance(award, commit=commit, **attributes)
-
-
-def delete_award(award_or_id, commit: bool = True) -> None:
-    delete_instance(Awards, award_or_id, commit=commit)
-
-
-def assign_verifier(award: Awards, verifier: User, commit: bool = True) -> Awards:
-    if verifier not in award.verifiers:
-        award.verifiers.append(verifier)
-        if commit:
-            db.session.commit()
+        if verifier not in award.verifiers:
+            award.verifiers.append(verifier)
+            changed = True
+    if changed and commit:
+        db.session.commit()
+        _audit(
+            "award.assign_verifier",
+            actor_id,
+            {
+                "operation": "assign_verifier",
+                "award_id": ctx["award_id"],
+                "verifier_id": ctx["verifier_id"],
+            },
+        )
+    logger.info(
+        "assign_award_verifier completed award_id=%s verifier_id=%s changed=%s",
+        ctx["award_id"],
+        ctx["verifier_id"],
+        changed,
+    )
     return award
 
 
-def assign_coordinator(award: Awards, coordinator: User, commit: bool = True) -> Awards:
-    if coordinator not in award.coordinators:
-        award.coordinators.append(coordinator)
-        if commit:
-            db.session.commit()
+def assign_coordinator(
+    award: Awards,
+    coordinator: User,
+    commit: bool = True,
+    *,
+    actor_id: Optional[str] = None,
+    context: Optional[Dict[str, object]] = None,
+) -> Awards:
+    ctx = {
+        "function": "assign_award_coordinator",
+        "award_id": _serialize_value(getattr(award, "id", None)),
+        "coordinator_id": _serialize_value(getattr(coordinator, "id", None)),
+        **(context or {}),
+    }
+    changed = False
+    with log_context(module="award_utils", action="assign_coordinator", actor_id=actor_id):
+        logger.info(
+            "assign_award_coordinator award_id=%s coordinator_id=%s",
+            ctx["award_id"],
+            ctx["coordinator_id"],
+        )
+        if coordinator not in award.coordinators:
+            award.coordinators.append(coordinator)
+            changed = True
+    if changed and commit:
+        db.session.commit()
+        _audit(
+            "award.assign_coordinator",
+            actor_id,
+            {
+                "operation": "assign_coordinator",
+                "award_id": ctx["award_id"],
+                "coordinator_id": ctx["coordinator_id"],
+            },
+        )
+    logger.info(
+        "assign_award_coordinator completed award_id=%s coordinator_id=%s changed=%s",
+        ctx["award_id"],
+        ctx["coordinator_id"],
+        changed,
+    )
     return award
 
 
-def remove_verifier(award: Awards, verifier: User, commit: bool = True) -> Awards:
-    if verifier in award.verifiers:
-        award.verifiers.remove(verifier)
-        if commit:
-            db.session.commit()
+def remove_verifier(
+    award: Awards,
+    verifier: User,
+    commit: bool = True,
+    *,
+    actor_id: Optional[str] = None,
+    context: Optional[Dict[str, object]] = None,
+) -> Awards:
+    ctx = {
+        "function": "remove_award_verifier",
+        "award_id": _serialize_value(getattr(award, "id", None)),
+        "verifier_id": _serialize_value(getattr(verifier, "id", None)),
+        **(context or {}),
+    }
+    removed = False
+    with log_context(module="award_utils", action="remove_verifier", actor_id=actor_id):
+        logger.info(
+            "remove_award_verifier award_id=%s verifier_id=%s",
+            ctx["award_id"],
+            ctx["verifier_id"],
+        )
+        if verifier in award.verifiers:
+            award.verifiers.remove(verifier)
+            removed = True
+    if removed and commit:
+        db.session.commit()
+        _audit(
+            "award.remove_verifier",
+            actor_id,
+            {
+                "operation": "remove_verifier",
+                "award_id": ctx["award_id"],
+                "verifier_id": ctx["verifier_id"],
+            },
+        )
+    logger.info(
+        "remove_award_verifier completed award_id=%s verifier_id=%s removed=%s",
+        ctx["award_id"],
+        ctx["verifier_id"],
+        removed,
+    )
     return award
 
 
-def remove_coordinator(award: Awards, coordinator: User, commit: bool = True) -> Awards:
-    if coordinator in award.coordinators:
-        award.coordinators.remove(coordinator)
-        if commit:
-            db.session.commit()
+def remove_coordinator(
+    award: Awards,
+    coordinator: User,
+    commit: bool = True,
+    *,
+    actor_id: Optional[str] = None,
+    context: Optional[Dict[str, object]] = None,
+) -> Awards:
+    ctx = {
+        "function": "remove_award_coordinator",
+        "award_id": _serialize_value(getattr(award, "id", None)),
+        "coordinator_id": _serialize_value(getattr(coordinator, "id", None)),
+        **(context or {}),
+    }
+    removed = False
+    with log_context(module="award_utils", action="remove_coordinator", actor_id=actor_id):
+        logger.info(
+            "remove_award_coordinator award_id=%s coordinator_id=%s",
+            ctx["award_id"],
+            ctx["coordinator_id"],
+        )
+        if coordinator in award.coordinators:
+            award.coordinators.remove(coordinator)
+            removed = True
+    if removed and commit:
+        db.session.commit()
+        _audit(
+            "award.remove_coordinator",
+            actor_id,
+            {
+                "operation": "remove_coordinator",
+                "award_id": ctx["award_id"],
+                "coordinator_id": ctx["coordinator_id"],
+            },
+        )
+    logger.info(
+        "remove_award_coordinator completed award_id=%s coordinator_id=%s removed=%s",
+        ctx["award_id"],
+        ctx["coordinator_id"],
+        removed,
+    )
     return award
