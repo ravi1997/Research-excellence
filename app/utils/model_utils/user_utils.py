@@ -90,6 +90,8 @@ def list_users(
     filters: Optional[Sequence] = None,
     eager: bool = False,
     order_by=None,
+    limit: Optional[int] = None,
+    offset: Optional[int] = None,
     actor_id: Optional[str] = None,
     context: Optional[Dict[str, object]] = None,
 ) -> Sequence[User]:
@@ -102,18 +104,32 @@ def list_users(
         if eager
         else None
     )
-    ctx = {"function": "list_users", "eager": eager, **(context or {})}
+    ctx = {
+        "function": "list_users",
+        "eager": eager,
+        "limit": limit,
+        "offset": offset,
+        **(context or {}),
+    }
     users = list_instances(
         User,
         filters=filters,
         order_by=order_by,
         query_options=options,
+        limit=limit,
+        offset=offset,
         actor_id=actor_id,
         event_name="user.list",
         context=ctx,
     )
     with log_context(module="user_utils", action="list_users", actor_id=actor_id):
-        logger.info("list_users complete eager=%s count=%s", eager, len(users))
+        logger.info(
+            "list_users complete eager=%s limit=%s offset=%s count=%s",
+            eager,
+            limit,
+            offset,
+            len(users),
+        )
     return users
 
 

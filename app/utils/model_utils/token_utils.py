@@ -79,6 +79,27 @@ def get_token_by_id(
     return token
 
 
+def get_refresh_token_by_hash(
+    token_hash: str,
+    *,
+    actor_id: Optional[str] = None,
+    context: Optional[Dict[str, object]] = None,
+) -> Optional[Token]:
+    ctx = {"function": "get_refresh_token_by_hash", **(context or {})}
+    tokens = list_instances(
+        Token,
+        filters=[
+            Token.token_hash == token_hash,
+            Token.token_type == "refresh",
+        ],
+        limit=1,
+        actor_id=actor_id,
+        event_name="token.refresh.lookup",
+        context=ctx,
+    )
+    return tokens[0] if tokens else None
+
+
 def list_tokens(
     *,
     filters: Optional[Sequence] = None,

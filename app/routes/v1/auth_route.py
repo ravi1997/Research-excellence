@@ -2,6 +2,7 @@ import re
 import uuid
 from datetime import datetime, timedelta, timezone
 import random
+from typing import Optional
 from flask import Blueprint, current_app, make_response, render_template_string, request, jsonify
 from app.config import Config
 from app.models.User import User, UserRole
@@ -28,12 +29,73 @@ from flask import send_file
 from app.utils.services.cdac import cdac_service
 from app.utils.services.sms import send_sms
 from app.utils import metrics_cache
+from app.utils.model_utils import user_utils, token_utils
 
 auth_bp = Blueprint('auth_bp', __name__)
 user_schema = UserSchema()
 users_schema = UserSchema(many=True)
 login_schema = LoginSchema()
 ADMIN_ROLE = Config.ADMIN_ROLE
+
+
+def _first_user(filters, *, eager=False, limit: Optional[int] = 1, context: Optional[dict] = None):
+    users = user_utils.list_users(
+        filters=filters,
+        eager=eager,
+        limit=limit,
+        context=context or {},
+    )
+    return users[0] if users else None
+
+
+def _get_user_by_email(email: Optional[str]):
+    if not email:
+        return None
+    return _first_user([User.email == email], context={"lookup": "email"})
+
+
+def _get_user_by_employee_id(employee_id: Optional[str]):
+    if not employee_id:
+        return None
+    return _first_user([User.employee_id == employee_id], context={"lookup": "employee_id"})
+
+
+def _get_user_by_mobile(mobile: Optional[str]):
+    if not mobile:
+        return None
+    return _first_user([User.mobile == mobile], context={"lookup": "mobile"})
+
+
+def _find_user_by_identifier(raw_identifier: str):
+    if not raw_identifier:
+        return None
+    ident_norm = raw_identifier.strip().lower()
+    clause = (
+        (User.email.ilike(ident_norm)) |
+        (User.username.ilike(ident_norm)) |
+        (User.employee_id.ilike(ident_norm))
+    )
+    return _first_user([clause], context={"lookup": "identifier"})
+
+
+def _extract_user_attributes(user_obj: User) -> dict:
+    fields = (
+        "username",
+        "email",
+        "employee_id",
+        "mobile",
+        "designation",
+        "department_id",
+        "user_type",
+        "category_id",
+        "affiliation",
+        "password_hash",
+    )
+    attrs = {field: getattr(user_obj, field, None) for field in fields if getattr(user_obj, field, None) is not None}
+    attrs.setdefault("is_active", True)
+    attrs.setdefault("is_verified", False)
+    attrs.setdefault("document_submitted", False)
+    return attrs
 
 
 # -------------------- REGISTER --------------------
@@ -58,44 +120,58 @@ def register():
 
     try:
         # Check if user already exists by email or employee ID
-        if User.query.filter_by(email=user.email).first():
+        if _get_user_by_email(user.email):
             current_app.logger.warning(f"⚠️  Email already registered: {user.email}")
             return jsonify(message="Email already exists"), 409
 
-        if user.employee_id and User.query.filter_by(employee_id=user.employee_id).first():
+        if user.employee_id and _get_user_by_employee_id(user.employee_id):
             current_app.logger.warning(f"⚠️  Employee ID already registered: {user.employee_id}")
             return jsonify(message="Employee ID already exists"), 409
 
-        # Hash the password securely
+        plain_password = data.get("password")
+        temp_user = User()
         try:
-            user.set_password(data.get("password"))
+            temp_user.set_password(plain_password)
         except ValueError as pe:
             current_app.logger.warning(f"Weak password attempt for user {user.username}: {pe}")
             return jsonify(message=str(pe)), 400
-        current_app.logger.info(f"🔒 Password set for user: {user.username}")
+        password_hash = temp_user.password_hash
+
+        user.password_hash = password_hash
+        user_attrs = _extract_user_attributes(user)
+        new_user = user_utils.create_user(
+            commit=False,
+            context={"route": "auth.register"},
+            **user_attrs,
+        )
 
         # Deduplicate while preserving order
         seen = set()
+        normalized_roles = []
         for role in [r for r in roles_in if not (r in seen or seen.add(r))]:
             if role not in [r.value for r in Role]:
                 current_app.logger.warning(f"❌ Invalid role: {role}")
                 return jsonify(message=f"Invalid role: {role}"), 400
-            # Check if the role is already assigned to the user
-            if any(user_role.role == Role(role) for user_role in user.role_associations):
-                current_app.logger.info(
-                    f"⚠️ Role {role} already assigned to user: {user.username}")
-                continue
-            user.role_associations.append(UserRole(role=Role(role)))
-            current_app.logger.info(f"✅ Role {role} added to user: {user.username}")
+            normalized_roles.append(Role(role))
 
-        db.session.add(user)
-        db.session.commit()
+        user_utils.set_user_roles(
+            new_user,
+            normalized_roles,
+            commit=False,
+            context={"route": "auth.register"},
+        )
+
+        user_utils.update_user(
+            new_user,
+            commit=True,
+            context={"route": "auth.register"},
+        )
         try:
             metrics_cache.invalidate()
         except Exception:
             pass
-        current_app.logger.info(f"✅ User registered successfully: {user.username} ({user.email})")
-        audit_log('register_success', actor_id=user.id)
+        current_app.logger.info(f"✅ User registered successfully: {new_user.username} ({new_user.email})")
+        audit_log('register_success', actor_id=new_user.id)
         return jsonify(message="User registered"), 201
     except Exception as e:
         current_app.logger.exception(f"❌ Error : {e}")
@@ -132,16 +208,7 @@ def login():
         current_app.logger.info(
             f"Employee login attempt with identifier: {identifier}")
         if identifier:
-            ident_norm = identifier.strip().lower()
-            user = (
-                User.query
-                .filter(
-                    (User.email.ilike(ident_norm)) |
-                    (User.username.ilike(ident_norm)) |
-                    (User.employee_id.ilike(ident_norm))
-                )
-                .first()
-            )
+            user = _find_user_by_identifier(identifier)
             if not user:
                 current_app.logger.warning(
                     f"Login failed: No user found for identifier {identifier}")
@@ -158,17 +225,15 @@ def login():
                 return _htmx_or_json_error("Invalid credentials", 401)
             current_app.logger.info(
                 f"Login successful for employee user {identifier}")
-
     # --- OTP LOGIN ---
     elif mobile and otp:
         current_app.logger.info(f"OTP login attempt for mobile: {mobile}")
-        # OTP login: soft rate limit by mobile to slow brute-force
         from app.security_utils import allow_action
         allowed, retry_after = allow_action(f"otp:{mobile}", limit=6, window_sec=300)
         if not allowed:
             log_login_failed('otp_invalid')
             return _htmx_or_json_error(f"Too many OTP attempts. Retry in {retry_after}s", 429)
-        user = User.query.filter_by(mobile=mobile).first()
+        user = _get_user_by_mobile(mobile)
         if not user:
             current_app.logger.warning(
                 f"Login failed: No user found for mobile {mobile}")
@@ -189,7 +254,6 @@ def login():
             log_login_failed('general_used_password_flow', target_user_id=user.id)
             return _htmx_or_json_error("General users must log in with OTP only", 403)
         current_app.logger.info(f"OTP login successful for mobile {mobile}")
-
     else:
         current_app.logger.warning("Login failed: Missing credentials")
         return _htmx_or_json_error("Missing credentials", 400)
@@ -199,14 +263,27 @@ def login():
     # Issue refresh token (persisted, hashed)
     refresh_ttl = timedelta(minutes=Config.REFRESH_TOKEN_EXPIRES_MINUTES)
     try:
-        rt_obj, refresh_plain = Token.create_refresh_for_user(user.id, refresh_ttl, request.headers.get('User-Agent'), request.remote_addr)
+        rt_obj, refresh_plain = token_utils.create_refresh_token_for_user(
+            user.id,
+            ttl=refresh_ttl,
+            user_agent=request.headers.get('User-Agent'),
+            ip_address=request.remote_addr,
+            commit=False,
+            actor_id=user.id,
+            context={"route": "auth.login"},
+        )
     except Exception:
         current_app.logger.exception("Failed creating refresh token")
         return _htmx_or_json_error("Internal error", 500)
     user.last_login = datetime.now(timezone.utc)
     user.reset_failed_logins()
     try:
-        db.session.commit()
+        user_utils.update_user(
+            user,
+            commit=True,
+            actor_id=user.id,
+            context={"route": "auth.login"},
+        )
     except Exception:
         db.session.rollback()
         current_app.logger.exception("Login DB commit failed")
@@ -268,7 +345,10 @@ def refresh_token():
     if not supplied:
         return jsonify({'msg': 'refresh_token required'}), 400
     token_hash = Token.hash_token(supplied)
-    rt = Token.query.filter_by(token_hash=token_hash, token_type='refresh').first()
+    rt = token_utils.get_refresh_token_by_hash(
+        token_hash,
+        context={"route": "auth.refresh.lookup"},
+    )
     if not rt:
         audit_log('refresh_failed', detail='token_not_found')
         return jsonify({'msg': 'invalid refresh token'}), 401
@@ -277,17 +357,39 @@ def refresh_token():
         return jsonify({'msg': 'expired or revoked'}), 401
 
     # Rotate (single-use) -> revoke current, issue new
-    user = db.session.get(User, rt.user_id)
+    user = user_utils.get_user_by_id(
+        rt.user_id,
+        context={"route": "auth.refresh.user_lookup"},
+    )
     if not user or not user.is_active:
         audit_log('refresh_failed', detail='user_inactive', target_user_id=user.id if user else None)
         return jsonify({'msg': 'user inactive'}), 401
 
     access_token = issue_access_token(user)
     refresh_ttl = timedelta(minutes=Config.REFRESH_TOKEN_EXPIRES_MINUTES)
-    new_rt, new_plain = Token.create_refresh_for_user(user.id, refresh_ttl, request.headers.get('User-Agent'), request.remote_addr)
-    rt.revoke(replaced_by=new_rt)
+    new_rt, new_plain = token_utils.create_refresh_token_for_user(
+        user.id,
+        ttl=refresh_ttl,
+        user_agent=request.headers.get('User-Agent'),
+        ip_address=request.remote_addr,
+        commit=False,
+        actor_id=user.id,
+        context={"route": "auth.refresh.rotate"},
+    )
+    token_utils.revoke_token(
+        rt,
+        commit=False,
+        replaced_by=new_rt,
+        actor_id=user.id,
+        context={"route": "auth.refresh.rotate"},
+    )
     try:
-        db.session.commit()
+        user_utils.update_user(
+            user,
+            commit=True,
+            actor_id=user.id,
+            context={"route": "auth.refresh.finalize"},
+        )
     except Exception:
         db.session.rollback()
         current_app.logger.exception('refresh_token: DB commit failed')
@@ -310,15 +412,14 @@ def generate_otp():
         return jsonify({"msg": "Mobile number required", "success": False}), 400
 
     # Using SQLAlchemy (Postgres) instead of Mongo-style API
-    user = User.query.filter_by(mobile=mobile).first()
+    user = _get_user_by_mobile(mobile)
     if not user:
         audit_log('generate_otp_failed', detail='user_not_found')
         return jsonify({"msg": "User with this mobile not found", "success": False}), 404
 
     # Generate 6-digit OTP
     otp_code = str(random.randint(100000, 999999))
-    user.otp = otp_code
-    user.otp_expiration = datetime.now(timezone.utc) + timedelta(minutes=5)
+    otp_expires = datetime.now(timezone.utc) + timedelta(minutes=5)
     try:
         otp_status = send_sms(
             mobile, f"OTP for Research Section, AIIMS is {otp_code}")
@@ -326,7 +427,14 @@ def generate_otp():
             current_app.logger.warning(f"Failed to send OTP SMS to {mobile}")
             audit_log('generate_otp_failed', target_user_id=user.id, detail='sms_failed')
             return jsonify({"msg": "Failed to send OTP", "success": False}), 500
-        db.session.commit()
+        user_utils.update_user(
+            user,
+            commit=True,
+            actor_id=user.id,
+            context={"route": "auth.generate_otp"},
+            otp=otp_code,
+            otp_expiration=otp_expires,
+        )
     except Exception:
         db.session.rollback()
         current_app.logger.exception("Failed to save OTP to DB")
@@ -397,27 +505,28 @@ def employee_lookup():
     # Branch 1 / 2: Have employee_id
     if emp_id:
         try:
-            user = User.query.filter_by(employee_id=emp_id).first()
+            user = _get_user_by_employee_id(emp_id)
         except ProgrammingError:
             current_app.logger.exception("employee_lookup: programming error")
             return json_error("internal server error", 500)
 
         if user:
-            changed = False
             # Existing employee; maybe update missing mobile if a valid one supplied
             if mobile_in and not user.mobile:
-                user.mobile = mobile_in
-                changed = True
-            if not user.mobile:
-                return json_error("mobile required to proceed", 400, mobile_required=True)
-            if changed:
                 try:
-                    db.session.commit()
+                    user_utils.update_user(
+                        user,
+                        commit=True,
+                        context={"route": "auth.employee_lookup.patch_mobile"},
+                        mobile=mobile_in,
+                    )
                 except Exception:
                     db.session.rollback()
                     current_app.logger.exception(
                         "employee_lookup: failed to persist employee update")
                     return json_error("internal server error", 500)
+            if not user.mobile:
+                return json_error("mobile required to proceed", 400, mobile_required=True)
             return jsonify({
                 'ok': True,
                 'found': True,
@@ -459,32 +568,39 @@ def employee_lookup():
             return json_error("invalid mobile format", 400)
 
         # Check if mobile already belongs to an existing user; attach employee_id if vacant
-        existing_mobile_user = User.query.filter_by(mobile=mobile).first()
+        existing_mobile_user = _get_user_by_mobile(mobile)
         if existing_mobile_user and existing_mobile_user.employee_id and existing_mobile_user.employee_id != emp_id:
             return json_error("mobile already in use by another user", 409)
 
-        if existing_mobile_user and not existing_mobile_user.employee_id:
-            user = existing_mobile_user
-            user.employee_id = emp_id
-            if email and not user.email:
-                user.email = email
-            if username and not user.username:
-                user.username = username
-        else:
-            user = User(
-                username=username,
-                email=email,
-                mobile=mobile,
-                employee_id=emp_id,
-                user_type='employee',
-                is_active=True,
-                is_verified=False,
-                document_submitted=False
-            )
-            db.session.add(user)
-
         try:
-            db.session.commit()
+            if existing_mobile_user and not existing_mobile_user.employee_id:
+                user = existing_mobile_user
+                updates = {
+                    "employee_id": emp_id,
+                }
+                if email and not user.email:
+                    updates["email"] = email
+                if username and not user.username:
+                    updates["username"] = username
+                user_utils.update_user(
+                    user,
+                    commit=True,
+                    context={"route": "auth.employee_lookup.update_existing"},
+                    **updates,
+                )
+            else:
+                user = user_utils.create_user(
+                    commit=True,
+                    context={"route": "auth.employee_lookup.create_employee"},
+                    username=username,
+                    email=email,
+                    mobile=mobile,
+                    employee_id=emp_id,
+                    user_type='employee',
+                    is_active=True,
+                    is_verified=False,
+                    document_submitted=False,
+                )
         except Exception:
             db.session.rollback()
             current_app.logger.exception(
@@ -505,21 +621,20 @@ def employee_lookup():
     # Branch 3: mobile only (non-permanent / general)
     if mobile_in:
         mobile = mobile_in
-        existing = User.query.filter_by(mobile=mobile).first()
-        if existing:
-            user = existing
-        else:
-            user = User(
-                mobile=mobile,
-                user_type='general',
-                is_active=True,
-                is_verified=False,
-                document_submitted=False
-            )
-            db.session.add(user)
-
+        existing = _get_user_by_mobile(mobile)
         try:
-            db.session.commit()
+            if existing:
+                user = existing
+            else:
+                user = user_utils.create_user(
+                    commit=True,
+                    context={"route": "auth.employee_lookup.create_general"},
+                    mobile=mobile,
+                    user_type='general',
+                    is_active=True,
+                    is_verified=False,
+                    document_submitted=False,
+                )
         except Exception:
             db.session.rollback()
             current_app.logger.exception(
@@ -551,7 +666,7 @@ def verify_otp():
         audit_log('verify_otp_failed', detail='missing_params')
         return jsonify({'msg': 'mobile and otp required'}), 400
 
-    user = User.query.filter_by(mobile=mobile).first()
+    user = _get_user_by_mobile(mobile)
     if not user:
         audit_log('verify_otp_failed', detail='user_not_found')
         return jsonify({'msg': 'user not found'}), 404
@@ -561,9 +676,14 @@ def verify_otp():
         return jsonify({'msg': 'invalid otp'}), 401
 
     # mark mobile verified for the session — don't mark is_verified yet
-    user.otp = None
-    user.otp_expiration = None
-    db.session.commit()
+    user_utils.update_user(
+        user,
+        commit=True,
+        actor_id=user.id,
+        context={"route": "auth.verify_otp"},
+        otp=None,
+        otp_expiration=None,
+    )
     audit_log('verify_otp_success', target_user_id=user.id)
     return jsonify({'msg': 'otp verified', 'mobile': mobile}), 200
 
@@ -593,9 +713,9 @@ def create_account():
     # Find existing provisional user created during lookup phase
     user = None
     if employee_id:
-        user = User.query.filter_by(employee_id=employee_id).first()
+        user = _get_user_by_employee_id(employee_id)
     if not user:
-        user = User.query.filter_by(mobile=mobile).first()
+        user = _get_user_by_mobile(mobile)
     if not user:
         audit_log('create_account_failed', detail='provisional_not_found')
         return jsonify({'msg': 'provisional user not found'}), 404
@@ -640,10 +760,21 @@ def create_account():
     # Check if user already has USER role to avoid duplicates
     has_user_role = any(role.role == Role.USER for role in user.role_associations)
     if not has_user_role:
-        user.role_associations.append(UserRole(role=Role.USER))
+        user_utils.set_user_roles(
+            user,
+            [Role.USER],
+            commit=False,
+            actor_id=user.id,
+            context={"route": "auth.create_account"},
+        )
 
     try:
-        db.session.commit()
+        user_utils.update_user(
+            user,
+            commit=True,
+            actor_id=user.id,
+            context={"route": "auth.create_account"},
+        )
     except Exception:
         db.session.rollback()
         current_app.logger.exception('create_account: DB commit failed')
@@ -763,12 +894,20 @@ def upload_id(user_id):
     dest = os.path.join(upload_dir, f"{user_id}_{filename}")
     f.save(dest)
 
-    user = db.session.get(User, user_id)
+    user = user_utils.get_user_by_id(
+        user_id,
+        context={"route": "auth.upload_id.lookup"},
+    )
     if not user:
         audit_log('upload_id_failed', target_user_id=user_id, detail='user_not_found')
         return jsonify({'msg': 'user not found'}), 404
     user.document_submitted = True
-    db.session.commit()
+    user_utils.update_user(
+        user,
+        commit=True,
+        actor_id=user_id,
+        context={"route": "auth.upload_id.update"},
+    )
     audit_log('upload_id_success', target_user_id=user_id, detail=filename)
     return jsonify({'msg': 'file uploaded'}), 200
 
@@ -780,10 +919,11 @@ def list_unverified():
     """Return list of users pending admin verification.
     Includes basic profile & document status. Sorted oldest first.
     """
-    users = (User.query
-             .filter_by(is_verified=False)
-             .order_by(User.created_at.asc())
-             .all())
+    users = user_utils.list_users(
+        filters=[User.is_verified.is_(False)],
+        order_by=User.created_at.asc(),
+        context={"route": "auth.list_unverified"},
+    )
     payload = users_schema.dump(users)
     audit_log('list_unverified', detail=f'count={len(payload)}')
     return jsonify({'users': payload, 'count': len(payload)}), 200
@@ -796,6 +936,7 @@ def verify_user():
     Body: {"user_id": "<uuid>"}
     Returns updated user summary.
     """
+    actor_id = get_jwt_identity()
     try:
         data = request.get_json(force=True)
     except Exception:
@@ -804,7 +945,10 @@ def verify_user():
     if not target_id:
         audit_log('verify_user_failed', detail='missing_user_id')
         return jsonify({'msg': 'user_id required'}), 400
-    target = db.session.get(User, target_id)
+    target = user_utils.get_user_by_id(
+        target_id,
+        context={"route": "auth.verify_user.lookup"},
+    )
     if not target:
         audit_log('verify_user_failed', detail='user_not_found')
         return jsonify({'msg': 'user not found'}), 404
@@ -820,7 +964,12 @@ def verify_user():
     target.is_verified = True
     target.updated_at = datetime.now(timezone.utc)
     try:
-        db.session.commit()
+        user_utils.update_user(
+            target,
+            commit=True,
+            actor_id=actor_id,
+            context={"route": "auth.verify_user"},
+        )
     except Exception:
         db.session.rollback()
         current_app.logger.exception('verify_user: DB commit failed')
@@ -885,6 +1034,7 @@ def discard_user():
     Body: {"user_id": "<uuid>"}
     Prevent deletion of already verified users.
     """
+    actor_id = get_jwt_identity()
     try:
         data = request.get_json(force=True)
     except Exception:
@@ -893,7 +1043,10 @@ def discard_user():
     if not target_id:
         audit_log('discard_user_failed', detail='missing_user_id')
         return jsonify({'msg': 'user_id required'}), 400
-    target = db.session.get(User, target_id)
+    target = user_utils.get_user_by_id(
+        target_id,
+        context={"route": "auth.discard_user.lookup"},
+    )
     if not target:
         audit_log('discard_user_failed', target_user_id=target_id, detail='user_not_found')
         return jsonify({'msg': 'user not found'}), 404
@@ -909,8 +1062,12 @@ def discard_user():
                 except Exception:
                     current_app.logger.warning('discard_user: failed to remove file %s', fname)
     try:
-        db.session.delete(target)
-        db.session.commit()
+        user_utils.delete_user(
+            target,
+            commit=True,
+            actor_id=actor_id,
+            context={"route": "auth.discard_user"},
+        )
     except Exception:
         db.session.rollback()
         current_app.logger.exception('discard_user: DB delete failed')
@@ -935,18 +1092,28 @@ def grant_user():
     if not target_id:
         audit_log('grant_user_failed', detail='missing_user_id')
         return jsonify({'msg': 'user_id required'}), 400
-    target = db.session.get(User, target_id)
+    actor_id = get_jwt_identity()
+    target = user_utils.get_user_by_id(
+        target_id,
+        context={"route": "auth.grant_user.lookup"},
+    )
     if not target:
         audit_log('grant_user_failed', target_user_id=target_id, detail='user_not_found')
         return jsonify({'msg': 'user not found'}), 404
     # If already has role, return ok
-    if any(ur.role == Role.VERIFIER for ur in target.role_associations):
+    current_roles = {association.role for association in target.role_associations}
+    if Role.VERIFIER in current_roles:
         audit_log('grant_user_skipped', target_user_id=target_id, detail='already_verifier')
         return jsonify({'msg': 'already verifier', 'roles': [r.value for r in target.roles]}), 200
-    # Append new role association
+    desired_roles = list(current_roles | {Role.VERIFIER})
     try:
-        target.role_associations.append(UserRole(role=Role.VERIFIER))
-        db.session.commit()
+        user_utils.set_user_roles(
+            target,
+            desired_roles,
+            commit=True,
+            actor_id=actor_id,
+            context={"route": "auth.grant_user"},
+        )
     except Exception:
         db.session.rollback()
         current_app.logger.exception('grant_user: DB commit failed')
@@ -963,14 +1130,24 @@ def bulk_verify_users():
     if not isinstance(ids, list) or not ids:
         audit_log('bulk_verify_failed', detail='missing_ids')
         return jsonify({'msg':'user_ids required'}), 400
-    users = User.query.filter(User.id.in_(ids), User.is_verified.is_(False)).all()
+    actor_id = get_jwt_identity()
+    users = user_utils.list_users(
+        filters=[User.id.in_(ids), User.is_verified.is_(False)],
+        context={"route": "auth.bulk_verify"},
+    )
     count = 0
     for u in users:
         # Optional rule: require doc for general users
         if u.user_type == 'general' and not u.document_submitted:
             continue
-        u.is_verified = True
-        u.updated_at = datetime.now(timezone.utc)
+        user_utils.update_user(
+            u,
+            commit=False,
+            actor_id=actor_id,
+            context={"route": "auth.bulk_verify"},
+            is_verified=True,
+            updated_at=datetime.now(timezone.utc),
+        )
         count += 1
     try:
         db.session.commit()
@@ -989,8 +1166,12 @@ def bulk_discard_users():
     if not isinstance(ids, list) or not ids:
         audit_log('bulk_discard_failed', detail='missing_ids')
         return jsonify({'msg':'user_ids required'}), 400
+    actor_id = get_jwt_identity()
     upload_dir = current_app.config.get('UPLOAD_FOLDER', '/tmp/uploads')
-    users = User.query.filter(User.id.in_(ids), User.is_verified.is_(False)).all()
+    users = user_utils.list_users(
+        filters=[User.id.in_(ids), User.is_verified.is_(False)],
+        context={"route": "auth.bulk_discard"},
+    )
     removed = 0
     for u in users:
         # delete files
@@ -1004,7 +1185,12 @@ def bulk_discard_users():
                             current_app.logger.warning('bulk discard: failed to remove file %s', fname)
         except Exception:
             current_app.logger.exception('bulk discard: cleanup error')
-        db.session.delete(u)
+        user_utils.delete_user(
+            u,
+            commit=False,
+            actor_id=actor_id,
+            context={"route": "auth.bulk_discard"},
+        )
         removed += 1
     try:
         db.session.commit()
@@ -1030,11 +1216,19 @@ def _htmx_or_json_error(message, status):
 @jwt_required()
 def logout():
     jwt_payload = get_jwt()
+    actor_id = get_jwt_identity()
     jti = jwt_payload["jti"]
     exp_timestamp = jwt_payload["exp"]
     expires_at = datetime.fromtimestamp(exp_timestamp, tz=timezone.utc)
-
-    db.session.add(Token(token_type='block', jti=jti, created_at=datetime.now(timezone.utc), expires_at=expires_at))
+    token_utils.create_token(
+        commit=False,
+        actor_id=actor_id,
+        context={"route": "auth.logout"},
+        token_type='block',
+        jti=jti,
+        created_at=datetime.now(timezone.utc),
+        expires_at=expires_at,
+    )
 
     # Optional body refresh_token to revoke proactively
     try:
@@ -1044,9 +1238,17 @@ def logout():
     supplied = (data.get('refresh_token') or '').strip()
     if supplied:
         h = Token.hash_token(supplied)
-        rt = Token.query.filter_by(token_hash=h, token_type='refresh').first()
+        rt = token_utils.get_refresh_token_by_hash(
+            h,
+            context={"route": "auth.logout.refresh_lookup"},
+        )
         if rt and rt.is_active():
-            rt.revoke()
+            token_utils.revoke_token(
+                rt,
+                commit=False,
+                actor_id=actor_id,
+                context={"route": "auth.logout.refresh_revoke"},
+            )
 
     try:
         db.session.commit()
@@ -1067,7 +1269,13 @@ def logout():
 def about_me():
     jwt_data = get_jwt()
     user_id = jwt_data.get('sub', 'unknown')
-    user = User.query.get_or_404(user_id)
+    user = user_utils.get_user_by_id(
+        user_id,
+        context={"route": "auth.about_me"},
+    )
+    if not user:
+        audit_log('me_view_failed', actor_id=user_id)
+        return jsonify({'msg': 'user not found'}), 404
     audit_log('me_view', actor_id=user.id)
     return jsonify(logged_in_as=user_schema.dump(user)), 200
 
@@ -1090,9 +1298,9 @@ def forgot_password():
 
     user = None
     if email:
-        user = User.query.filter_by(email=email).first()
+        user = _get_user_by_email(email)
     elif mobile:
-        user = User.query.filter_by(mobile=mobile).first()
+        user = _get_user_by_mobile(mobile)
 
     # Always return generic success to avoid user enumeration
     if not user:
@@ -1108,7 +1316,12 @@ def forgot_password():
 
     token = user.generate_reset_token()
     try:
-        db.session.commit()
+        user_utils.update_user(
+            user,
+            commit=True,
+            actor_id=user.id,
+            context={"route": "auth.forgot_password"},
+        )
     except Exception:
         db.session.rollback()
         current_app.logger.exception('forgot_password: failed to store reset token')
@@ -1145,7 +1358,8 @@ def reset_password():
         audit_log('reset_password_failed', detail='missing_params')
         return jsonify({'ok': False, 'msg': 'identifier, token, password required'}), 400
 
-    user = User.query.filter((User.email == identifier) | (User.mobile == identifier)).first()
+    filter_clause = (User.email == identifier) | (User.mobile == identifier)
+    user = _first_user([filter_clause], context={"route": "auth.reset_password.lookup"})
     if not user or not user.verify_reset_token(token):
         audit_log('reset_password_failed', target_user_id=user.id if user else None, detail='invalid_token')
         return jsonify({'ok': False, 'msg': 'invalid token'}), 400
@@ -1153,7 +1367,12 @@ def reset_password():
     user.set_password(new_password)
     user.clear_reset_token()
     try:
-        db.session.commit()
+        user_utils.update_user(
+            user,
+            commit=True,
+            actor_id=user.id,
+            context={"route": "auth.reset_password"},
+        )
     except Exception:
         db.session.rollback()
         current_app.logger.exception('reset_password: failed to update password')
