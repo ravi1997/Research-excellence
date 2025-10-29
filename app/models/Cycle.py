@@ -28,13 +28,6 @@ class Cycle(db.Model):
     start_date = db.Column(db.Date, nullable=False)
     end_date = db.Column(db.Date, nullable=False)
 
-    __table_args__ = (
-        CheckConstraint(
-            "end_date >= start_date",
-            name="check_cycles_date_order",
-        ),
-    )
-
     best_papers = db.relationship("BestPaper", back_populates="cycle", lazy=True)
     abstracts = db.relationship("Abstracts", back_populates="cycle", lazy=True)
     awards = db.relationship("Awards", back_populates="cycle", lazy=True)
@@ -111,21 +104,6 @@ class CycleWindow(db.Model):
         server_default=db.func.current_timestamp(),
         onupdate=db.func.current_timestamp(),
     )
-
-    __table_args__ = (
-        CheckConstraint(
-            "end_date >= start_date",
-            name="check_cycle_window_dates",
-        ),
-        ExcludeConstraint(
-            ("cycle_id", "="),
-            ("win", "&&"),
-            name="prevent_cycle_window_overlap",
-            using="gist",
-        ),
-        Index("ix_cycle_window_cycle_phase", "cycle_id", "phase", "start_date"),
-    )
-
 
 class Author(db.Model):
     __tablename__ = "authors"
@@ -253,7 +231,7 @@ class Abstracts(db.Model):
         lazy=True,
         cascade="all, delete-orphan",
     )
-    gradings = grades
+    gradings = synonym("grades")
 
     pdf = synonym("pdf_path")
     submitted_on = synonym("created_at")
@@ -309,16 +287,6 @@ class AbstractVerifiers(db.Model):
         default=db.func.current_timestamp(),
     )
 
-    __table_args__ = (
-        UniqueConstraint(
-            "abstract_id",
-            "user_id",
-            "verification_level",
-            name="uq_abstract_verifier_per_level",
-        ),
-    )
-
-
 class AbstractCoordinators(db.Model):
     __tablename__ = "abstract_coordinators"
 
@@ -336,14 +304,6 @@ class AbstractCoordinators(db.Model):
         db.DateTime,
         nullable=False,
         default=db.func.current_timestamp(),
-    )
-
-    __table_args__ = (
-        UniqueConstraint(
-            "abstract_id",
-            "user_id",
-            name="uq_abstract_coordinator",
-        ),
     )
 
 
@@ -450,7 +410,7 @@ class Awards(db.Model):
         lazy=True,
         cascade="all, delete-orphan",
     )
-    gradings = grades
+    gradings = synonym("grades")
 
     award_number = db.Column(
         db.Integer,
@@ -503,16 +463,6 @@ class AwardVerifiers(db.Model):
         default=db.func.current_timestamp(),
     )
 
-    __table_args__ = (
-        UniqueConstraint(
-            "award_id",
-            "user_id",
-            "verification_level",
-            name="uq_award_verifier_per_level",
-        ),
-    )
-
-
 class AwardCoordinators(db.Model):
     __tablename__ = "award_coordinators"
 
@@ -530,14 +480,6 @@ class AwardCoordinators(db.Model):
         db.DateTime,
         nullable=False,
         default=db.func.current_timestamp(),
-    )
-
-    __table_args__ = (
-        UniqueConstraint(
-            "award_id",
-            "user_id",
-            name="uq_award_coordinator",
-        ),
     )
 
 
@@ -633,7 +575,7 @@ class BestPaper(db.Model):
         lazy=True,
         cascade="all, delete-orphan",
     )
-    gradings = grades
+    gradings = synonym("grades")
 
     bestpaper_number = db.Column(
         db.Integer,
@@ -687,15 +629,6 @@ class BestPaperVerifiers(db.Model):
         default=db.func.current_timestamp(),
     )
 
-    __table_args__ = (
-        UniqueConstraint(
-            "best_paper_id",
-            "user_id",
-            "verification_level",
-            name="uq_best_paper_verifier_per_level",
-        ),
-    )
-
 
 class BestPaperCoordinators(db.Model):
     __tablename__ = "best_paper_coordinators"
@@ -714,14 +647,6 @@ class BestPaperCoordinators(db.Model):
         db.DateTime,
         nullable=False,
         default=db.func.current_timestamp(),
-    )
-
-    __table_args__ = (
-        UniqueConstraint(
-            "best_paper_id",
-            "user_id",
-            name="uq_best_paper_coordinator",
-        ),
     )
 
 
@@ -763,21 +688,6 @@ class GradingType(db.Model):
         lazy=True,
         cascade="all, delete-orphan",
     )
-
-    __table_args__ = (
-        CheckConstraint("max_score >= 0", name="check_grading_type_max_nonnegative"),
-        CheckConstraint(
-            "verification_level > 0",
-            name="check_grading_type_level_positive",
-        ),
-        UniqueConstraint(
-            "criteria",
-            "grading_for",
-            "verification_level",
-            name="uq_grading_types_unique_per_level",
-        ),
-    )
-
 
 class Grading(db.Model):
     __tablename__ = "gradings"
@@ -850,14 +760,6 @@ class Grading(db.Model):
         nullable=False,
         default=db.func.current_timestamp(),
         onupdate=db.func.current_timestamp(),
-    )
-
-    __table_args__ = (
-        CheckConstraint("score >= 0", name="check_grading_score_min"),
-        CheckConstraint(
-            "verification_level > 0",
-            name="check_grading_level_positive",
-        ),
     )
 
     created_at = synonym("graded_on")
