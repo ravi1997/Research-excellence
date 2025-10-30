@@ -813,18 +813,42 @@ def _ensure_submission_window(connection, submission_model):
         submitted_on = datetime.utcnow()
 
     submission_date = submitted_on.date()
+    
+    # Determine the required phase based on the model type
+    if isinstance(submission_model, Abstracts):
+        required_phase = CyclePhase.ABSTRACT_SUBMISSION
+    elif isinstance(submission_model, Awards):
+        required_phase = CyclePhase.AWARD_SUBMISSION
+    elif isinstance(submission_model, BestPaper):
+        required_phase = CyclePhase.BEST_PAPER_SUBMISSION
+    else:
+        # Fallback to general submission for other types
+        required_phase = CyclePhase.SUBMISSION
 
     stmt = select(CycleWindow.id).where(
         CycleWindow.cycle_id == cycle_id,
-        CycleWindow.phase == CyclePhase.SUBMISSION,
+        CycleWindow.phase == required_phase,
         CycleWindow.start_date <= submission_date,
         CycleWindow.end_date >= submission_date,
     )
 
     if connection.execute(stmt).first() is None:
-        raise ValueError(
-            "Submissions are allowed only during the submission period for the cycle.",
+        # If specific phase window is not found, check if general submission window exists
+        general_stmt = select(CycleWindow.id).where(
+            CycleWindow.cycle_id == cycle_id,
+            CycleWindow.phase == CyclePhase.SUBMISSION,
+            CycleWindow.start_date <= submission_date,
+            CycleWindow.end_date >= submission_date,
         )
+        
+        if connection.execute(general_stmt).first() is None:
+            raise ValueError(
+                f"Submissions are allowed only during the {required_phase} period for the cycle.",
+            )
+        else:
+            # If general window exists but specific doesn't, allow submission
+            # This maintains backward compatibility
+            pass
 
 
 @event.listens_for(Abstracts, "before_insert")

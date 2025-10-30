@@ -78,6 +78,14 @@ def admin_dashboard_page():
     return render_template('admin/admin_dashboard.html')
 
 
+@view_bp.route('/admin/cycle-management')
+@jwt_required()
+@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
+def cycle_management_page():
+    """Admin page for managing research cycles and their time windows."""
+    return render_template('admin/cycle_management.html')
+
+
 
 @view_bp.route('/admin/super/audit')
 @jwt_required()

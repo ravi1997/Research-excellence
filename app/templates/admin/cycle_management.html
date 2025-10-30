@@ -1,0 +1,139 @@
+{% extends "components/layout.html" %}
+
+{% block title %}Cycle Management{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-800 mb-2">Cycle Management</h1>
+        <p class="text-gray-600">Manage research cycles and their time windows for abstracts, best papers, and awards</p>
+    </div>
+
+    <!-- Cycle List Section -->
+    <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-xl font-semibold text-gray-800">Research Cycles</h2>
+            <button id="createCycleBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition duration-200">
+                Create New Cycle
+            </button>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Start Date</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">End Date</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="cycleTableBody" class="bg-white divide-y divide-gray-200">
+                    <!-- Cycle data will be populated here dynamically -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Cycle Detail Section (Hidden by default) -->
+    <div id="cycleDetailSection" class="hidden bg-white rounded-lg shadow-md p-6 mb-8">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-xl font-semibold text-gray-800">Cycle Details: <span id="cycleDetailName"></span></h2>
+            <button id="backToCyclesBtn" class="bg-gray-600 hover:bg-gray-70 text-white px-4 py-2 rounded-lg transition duration-200">
+                Back to Cycles
+            </button>
+        </div>
+
+        <div id="cycleWindowsContainer">
+            <!-- Cycle windows will be populated here dynamically -->
+        </div>
+
+        <div class="mt-8">
+            <h3 class="text-lg font-medium text-gray-800 mb-4">Add New Time Window</h3>
+            <form id="addWindowForm" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <input type="hidden" id="cycleIdForWindow">
+                
+                <div>
+                    <label for="windowPhase" class="block text-sm font-medium text-gray-700 mb-1">Phase</label>
+                    <select id="windowPhase" name="phase" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                        <option value="">Select Phase</option>
+                        <option value="SUBMISSION">General Submission</option>
+                        <option value="VERIFICATION">General Verification</option>
+                        <option value="FINAL">General Final</option>
+                        <option value="ABSTRACT_SUBMISSION">Abstract Submission</option>
+                        <option value="ABSTRACT_VERIFICATION">Abstract Verification</option>
+                        <option value="ABSTRACT_FINAL">Abstract Final</option>
+                        <option value="BEST_PAPER_SUBMISSION">Best Paper Submission</option>
+                        <option value="BEST_PAPER_VERIFICATION">Best Paper Verification</option>
+                        <option value="BEST_PAPER_FINAL">Best Paper Final</option>
+                        <option value="AWARD_SUBMISSION">Award Submission</option>
+                        <option value="AWARD_VERIFICATION">Award Verification</option>
+                        <option value="AWARD_FINAL">Award Final</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label for="windowStartDate" class="block text-sm font-medium text-gray-70 mb-1">Start Date</label>
+                    <input type="date" id="windowStartDate" name="start_date" class="w-full px-3 py-2 border border-gray-30 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                
+                <div>
+                    <label for="windowEndDate" class="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                    <input type="date" id="windowEndDate" name="end_date" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                
+                <div class="flex items-end">
+                    <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md transition duration-200">
+                        Add Window
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Create/Edit Cycle Modal -->
+    <div id="cycleModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden">
+        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div class="mt-3">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 id="modalTitle" class="text-lg font-semibold text-gray-800">Create New Cycle</h3>
+                    <button id="closeModalBtn" class="text-gray-500 hover:text-gray-700">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+                <form id="cycleForm">
+                    <input type="hidden" id="cycleId">
+                    
+                    <div class="mb-4">
+                        <label for="cycleName" class="block text-sm font-medium text-gray-700 mb-1">Cycle Name</label>
+                        <input type="text" id="cycleName" name="name" required class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label for="cycleStartDate" class="block text-sm font-medium text-gray-70 mb-1">Start Date</label>
+                        <input type="date" id="cycleStartDate" name="start_date" required class="w-full px-3 py-2 border border-gray-30 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label for="cycleEndDate" class="block text-sm font-medium text-gray-70 mb-1">End Date</label>
+                        <input type="date" id="cycleEndDate" name="end_date" required class="w-full px-3 py-2 border border-gray-30 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-50">
+                    </div>
+                    
+                    <div class="flex justify-end space-x-2">
+                        <button type="button" id="cancelModalBtn" class="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition duration-200">
+                            Cancel
+                        </button>
+                        <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition duration-200">
+                            Save Cycle
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/cycle_management.js') }}"></script>
+{% endblock %}
