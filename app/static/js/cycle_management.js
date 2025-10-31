@@ -19,6 +19,7 @@ const createCycleBtn = document.getElementById('createCycleBtn');
 const backToCyclesBtn = document.getElementById('backToCyclesBtn');
 const closeModalBtn = document.getElementById('closeModalBtn');
 const cancelModalBtn = document.getElementById('cancelModalBtn');
+const cycleListSection = document.getElementById('cycleListSection');
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', function() {
@@ -60,7 +61,7 @@ async function loadCycles() {
     try {
         const response = await fetch(`${API_BASE_URL}/cycles`, {
             headers: {
-                'Authorization': `Bearer ${localStorage.getItem('token') || sessionStorage.getItem('access_token')}`,
+                'Authorization': `Bearer ${localStorage.getItem('token') || sessionStorage.getItem('token')}`,
                 'Content-Type': 'application/json'
             }
         });
@@ -109,7 +110,7 @@ async function viewCycleDetails(cycleId) {
         // Get cycle details
         const cycleResponse = await fetch(`${API_BASE_URL}/cycles/${cycleId}`, {
             headers: {
-                'Authorization': `Bearer ${localStorage.getItem('access_token') || sessionStorage.getItem('access_token')}`,
+                'Authorization': `Bearer ${localStorage.getItem('token') || sessionStorage.getItem('token')}`,
                 'Content-Type': 'application/json'
             }
         });
@@ -123,7 +124,7 @@ async function viewCycleDetails(cycleId) {
         // Get cycle windows
         const windowsResponse = await fetch(`${API_BASE_URL}/cycles/${cycleId}/windows`, {
             headers: {
-                'Authorization': `Bearer ${localStorage.getItem('access_token') || sessionStorage.getItem('access_token')}`,
+                'Authorization': `Bearer ${localStorage.getItem('token') || sessionStorage.getItem('token')}`,
                 'Content-Type': 'application/json'
             }
         });
@@ -135,11 +136,13 @@ async function viewCycleDetails(cycleId) {
         const windows = await windowsResponse.json();
         
         // Show cycle detail section
-        cycleDetailName.textContent = cycle.data.name;
+        cycleDetailName.textContent = cycle.name;
         cycleIdForWindow.value = cycleId;
-        renderCycleWindows(windows.data);
+        renderCycleWindows(windows);
         
-        document.querySelector('.bg-white.rounded-lg.shadow-md.p-6.mb-8:first-child').classList.add('hidden');
+        if (cycleListSection) {
+            cycleListSection.classList.add('hidden');
+        }
         cycleDetailSection.classList.remove('hidden');
     } catch (error) {
         console.error('Error loading cycle details:', error);
@@ -205,7 +208,9 @@ function formatPhaseName(phase) {
 
 // Show cycle list view
 function showCycleList() {
-    document.querySelector('.bg-white.rounded-lg.shadow-md.p-6.mb-8:first-child').classList.remove('hidden');
+    if (cycleListSection) {
+        cycleListSection.classList.remove('hidden');
+    }
     cycleDetailSection.classList.add('hidden');
 }
 
@@ -222,7 +227,7 @@ async function editCycle(cycleId) {
     try {
         const response = await fetch(`${API_BASE_URL}/cycles/${cycleId}`, {
             headers: {
-                'Authorization': `Bearer ${localStorage.getItem('access_token') || sessionStorage.getItem('access_token')}`,
+                'Authorization': `Bearer ${localStorage.getItem('token') || sessionStorage.getItem('token')}`,
                 'Content-Type': 'application/json'
             }
         });
@@ -264,7 +269,7 @@ async function handleCycleFormSubmit(e) {
         const response = await fetch(url, {
             method: method,
             headers: {
-                'Authorization': `Bearer ${localStorage.getItem('access_token') || sessionStorage.getItem('access_token')}`,
+                'Authorization': `Bearer ${localStorage.getItem('token') || sessionStorage.getItem('token')}`,
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify(cycleData)
@@ -304,7 +309,7 @@ async function deleteCycle(cycleId) {
         const response = await fetch(`${API_BASE_URL}/cycles/${cycleId}`, {
             method: 'DELETE',
             headers: {
-                'Authorization': `Bearer ${localStorage.getItem('access_token') || sessionStorage.getItem('access_token')}`,
+                'Authorization': `Bearer ${localStorage.getItem('token') || sessionStorage.getItem('token')}`,
                 'Content-Type': 'application/json'
             }
         });
@@ -341,7 +346,7 @@ async function handleAddWindow(e) {
         const response = await fetch(`${API_BASE_URL}/cycles/${cycleId}/windows`, {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${localStorage.getItem('access_token') || sessionStorage.getItem('access_token')}`,
+                'Authorization': `Bearer ${localStorage.getItem('token') || sessionStorage.getItem('token')}`,
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify(windowData)
@@ -371,7 +376,7 @@ async function deleteWindow(cycleId, windowId) {
         const response = await fetch(`${API_BASE_URL}/cycles/${cycleId}/windows/${windowId}`, {
             method: 'DELETE',
             headers: {
-                'Authorization': `Bearer ${localStorage.getItem('access_token') || sessionStorage.getItem('access_token')}`,
+                'Authorization': `Bearer ${localStorage.getItem('token') || sessionStorage.getItem('token')}`,
                 'Content-Type': 'application/json'
             }
         });

@@ -11,7 +11,7 @@
     // -----------------------
     // Helpers for preview code
     // -----------------------
-    const token = (localStorage.getItem("token")).trim();
+    const token = () => (localStorage.getItem("access_token") || "").trim();
     const BASE = window.API_BASE || `${location.origin}/api/v1/research`; // used by PDF fetch
 
     function sQ(id) { return document.getElementById(id); }
@@ -138,7 +138,7 @@
         pdfjsLib.GlobalWorkerOptions.workerSrc = '/static/js/pdf.worker.min.js';
 
         fetch(`${BASE}/abstracts/${encodeURIComponent(abstractId)}/pdf`, {
-            headers: { 'Authorization': `Bearer ${token}` }
+            headers: { 'Authorization': `Bearer ${token()}` }
         })
             .then(response => {
                 if (!response.ok) throw new Error('Network response was not ok');
@@ -225,64 +225,81 @@
     // -----------------------
     // Controller wiring
     // -----------------------
-    const ctrl = init({
-        listEl: "#List",
-        searchInputEl: "#abstractSearch",
-        searchBtnEl: "#SearchBtn",
-        statusGroupEl: "#StatusGroup",
-        sortGroupEl: "#SortGroup",
-        prevBtnEl: "#Prev",
-        nextBtnEl: "#Next",
-        pageInfoEl: "#PageInfo",
-        statsEl: "#Stats",
-        pageSizeGroupEl: "#PageSizeGroup",
-        globalLoadingEl: "#globalLoading",
-        details: {
-            containerEl: "#Details",
-            noSelectedEl: "#noSelected",
-            contentEl: "#Content",
-            previewEl: "#preview-content",
-            titleEl: "#summaryTitle",
-            categoryEl: "#summaryCategory",
-            statusEl: "#summaryStatus",
-            numberEl: "#summaryNumber",
-            authorEl: "#summaryAuthor",
-            dateEl: "#summaryDate",
-        },
-        statsMap: { total: "#statTotal", pending: "#statPending", accepted: "#statAccepted", rejected: "#statRejected" },
-        fetchPage, renderItem, onSelect
+    let __abstractListCtrl = null;
+
+    document.addEventListener('DOMContentLoaded', function() {
+        try {
+            const ctrl = init({
+                listEl: "#List",
+                searchInputEl: "#abstractSearch",
+                searchBtnEl: "#SearchBtn",
+                statusGroupEl: "#StatusGroup",
+                sortGroupEl: "#SortGroup",
+                prevBtnEl: "#Prev",
+                nextBtnEl: "#Next",
+                pageInfoEl: "#PageInfo",
+                statsEl: "#Stats",
+                pageSizeGroupEl: "#PageSizeGroup",
+                globalLoadingEl: "#globalLoading",
+                details: {
+                    containerEl: "#Details",
+                    noSelectedEl: "#noSelected",
+                    contentEl: "#Content",
+                    previewEl: "#preview-content",
+                    titleEl: "#summaryTitle",
+                    categoryEl: "#summaryCategory",
+                    statusEl: "#summaryStatus",
+                    numberEl: "#summaryNumber",
+                    authorEl: "#summaryAuthor",
+                    dateEl: "#summaryDate",
+                },
+                statsMap: { total: "#statTotal", pending: "#statPending", accepted: "#statAccepted", rejected: "#statRejected" },
+                fetchPage, renderItem, onSelect
+            });
+            
+            __abstractListCtrl = ctrl;
+            
+            // ---- Old global names preserved ----
+            window.searchAbstracts = function (q) {
+                const s = __abstractListCtrl.state;
+                if (typeof q === "string") { const input = document.querySelector("#abstractSearch"); if (input) input.value = q; s.query = q.trim(); }
+                else { const input = document.querySelector("#abstractSearch"); s.query = (input?.value || "").trim(); }
+                s.page = 1; __abstractListCtrl.refresh();
+            };
+            window.changeAbstractPage = function (deltaOrNumber) {
+                const s = __abstractListCtrl.state;
+                if (typeof deltaOrNumber === "number") {
+                    if (Number.isInteger(deltaOrNumber) && Math.abs(deltaOrNumber) <= 2 && deltaOrNumber !== 0)
+                        s.page = Math.min(Math.max(1, s.page + deltaOrNumber), s.totalPages);
+                    else
+                        s.page = Math.min(Math.max(1, deltaOrNumber), s.totalPages);
+                } else if (deltaOrNumber === "next") s.page = Math.min(s.page + 1, s.totalPages);
+                else if (deltaOrNumber === "prev") s.page = Math.max(s.page - 1, 1);
+                __abstractListCtrl.refresh();
+            };
+            window.updateAbstractMeta = async function () {
+                try {
+                    const m = await fetchJSON(API_META);
+                    const map = { total: "#statTotal", pending: "#statPending", accepted: "#statAccepted", rejected: "#statRejected" };
+                    for (const [k, sel] of Object.entries(map)) {
+                        const el = document.querySelector(sel);
+                        if (el && m[k] != null) el.textContent = String(m[k]);
+                    }
+                    const stats = document.querySelector("#Stats");
+                    if (stats && m.total != null) stats.textContent = `${m.total} item(s)`;
+                } catch (e) { console.warn("updateAbstractMeta failed", e); }
+            };
+
+            window.__abstractListCtrl = __abstractListCtrl;
+        } catch (error) {
+            console.error("Error initializing abstract list controller:", error);
+            // Show an error message to the user
+            const statsEl = document.querySelector("#Stats");
+            if (statsEl) {
+                statsEl.textContent = "Error loading abstract list. Please refresh the page.";
+                statsEl.className = "text-red-600 dark:text-red-400";
+            }
+        }
     });
 
-    // ---- Old global names preserved ----
-    window.searchAbstracts = function (q) {
-        const s = ctrl.state;
-        if (typeof q === "string") { const input = document.querySelector("#abstractSearch"); if (input) input.value = q; s.query = q.trim(); }
-        else { const input = document.querySelector("#abstractSearch"); s.query = (input?.value || "").trim(); }
-        s.page = 1; ctrl.refresh();
-    };
-    window.changeAbstractPage = function (deltaOrNumber) {
-        const s = ctrl.state;
-        if (typeof deltaOrNumber === "number") {
-            if (Number.isInteger(deltaOrNumber) && Math.abs(deltaOrNumber) <= 2 && deltaOrNumber !== 0)
-                s.page = Math.min(Math.max(1, s.page + deltaOrNumber), s.totalPages);
-            else
-                s.page = Math.min(Math.max(1, deltaOrNumber), s.totalPages);
-        } else if (deltaOrNumber === "next") s.page = Math.min(s.page + 1, s.totalPages);
-        else if (deltaOrNumber === "prev") s.page = Math.max(s.page - 1, 1);
-        ctrl.refresh();
-    };
-    window.updateAbstractMeta = async function () {
-        try {
-            const m = await fetchJSON(API_META);
-            const map = { total: "#statTotal", pending: "#statPending", accepted: "#statAccepted", rejected: "#statRejected" };
-            for (const [k, sel] of Object.entries(map)) {
-                const el = document.querySelector(sel);
-                if (el && m[k] != null) el.textContent = String(m[k]);
-            }
-            const stats = document.querySelector("#Stats");
-            if (stats && m.total != null) stats.textContent = `${m.total} item(s)`;
-        } catch (e) { console.warn("updateAbstractMeta failed", e); }
-    };
-
-    window.__abstractListCtrl = ctrl;
 })();

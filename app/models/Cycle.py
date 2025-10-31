@@ -82,7 +82,7 @@ class CycleWindow(db.Model):
     )
     cycle = db.relationship("Cycle", back_populates="windows")
 
-    phase = db.Column(SqlEnum(CyclePhase, name="cycle_phase"), nullable=False)
+    phase = db.Column(SqlEnum(CyclePhase), nullable=False)
 
     start_date = db.Column(db.Date, nullable=False)
     end_date = db.Column(db.Date, nullable=False)
