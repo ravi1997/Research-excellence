@@ -1,4 +1,4 @@
-from flask import request, jsonify, current_app,abort, send_file
+from flask import request, jsonify, current_app, abort, send_file
 import json
 import os
 import uuid
@@ -15,6 +15,25 @@ from werkzeug.utils import secure_filename
 from app.utils.services.mail import send_mail
 from app.utils.services.sms import send_sms
 
+# Import utility functions
+from app.utils.model_utils.award_utils import (
+    create_award as create_award_util,
+    get_award_by_id as get_award_by_id_util,
+    list_awards as list_awards_util,
+    update_award as update_award_util,
+    delete_award as delete_award_util,
+    assign_verifier as assign_award_verifier_util,
+    remove_verifier as remove_award_verifier_util,
+)
+from app.utils.model_utils.author_utils import (
+    create_author as create_author_util,
+    get_or_create_author as get_or_create_author_util,
+)
+from app.utils.model_utils.user_utils import (
+    get_user_by_id as get_user_by_id_util,
+    list_users as list_users_util,
+)
+
 award_schema = AwardsSchema()
 awards_schema = AwardsSchema(many=True)
 
@@ -23,6 +42,12 @@ awards_schema = AwardsSchema(many=True)
 def create_award():
     """Create a new research award."""
     try:
+        # Get the current user ID from JWT
+        current_user_id = get_jwt_identity()
+        user = get_user_by_id_util(current_user_id)
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
         # Handle both JSON and multipart form-data (for file uploads)
         if request.is_json:
             data = request.get_json()
@@ -34,12 +59,6 @@ def create_award():
                 return jsonify({"error": "No data provided"}), 400
 
             try:
-                # Get the current user ID from JWT
-                current_user_id = get_jwt_identity()
-                user = User.query.get(current_user_id)
-                if not user:
-                    return jsonify({"error": "User not found"}), 404
-
                 # Set created_by_id in data for schema load
                 data = json.loads(data_json)
                 data['created_by_id'] = current_user_id
@@ -74,13 +93,17 @@ def create_award():
                 fwd_file.save(file_path)
                 current_app.logger.info(f"Forwarding letter PDF saved to: {file_path}")
                 forwarding_letter_path = file_path.replace("app/", "", 1)
+
+        # Check permissions
         if not (
                 user.has_role(Role.ADMIN.value) or
                 user.has_role(Role.SUPERADMIN.value) or
                 user.has_role(Role.VERIFIER.value) or
                 user.has_role(Role.COORDINATOR.value)
         ):
-            query = query.filter_by(created_by_id=current_user_id)
+            # For non-admin users, ensure they can only create awards for themselves
+            pass  # This will be handled by setting created_by_id
+
         # Extract potential authors array (frontend sends single-author array)
         authors_data = data.pop('authors', []) or []
 
@@ -89,35 +112,38 @@ def create_award():
         if not author_id:
             if authors_data:
                 a0 = authors_data[0] or {}
-                author = Author(
-                    name=a0.get('name', ''),
-                    email=a0.get('email'),
-                    affiliation=a0.get('affiliation'),
-                    is_presenter=a0.get('is_presenter', False),
-                    is_corresponding=a0.get('is_corresponding', False),
-                )
-                if not author.name:
+                author_name = a0.get('name', '').strip()
+                if not author_name:
                     return jsonify({"error": "Author name is required"}), 400
-                db.session.add(author)
-                db.session.flush()  # obtain author.id
+                
+                # Use get_or_create_author utility
+                author, created = get_or_create_author_util(
+                    name=author_name,
+                    affiliation=a0.get('affiliation'),
+                    email=a0.get('email'),
+                    actor_id=current_user_id
+                )
                 author_id = str(author.id)
-                current_app.logger.info(f"Created author {author.name} with ID {author_id} for award")
+                current_app.logger.info(f"{'Created' if created else 'Found'} author {author.name} with ID {author_id} for award")
             else:
                 return jsonify({"error": "Author information is required"}), 400
 
-        # Inject resolved author_id and any uploaded file paths
-        data['author_id'] = author_id
+        # Validate required fields
         if 'paper_category_id' not in data:
             return jsonify({"error": "paper_category_id is required"}), 400
+
+        # Inject resolved author_id and any uploaded file paths
+        data['author_id'] = author_id
         if full_paper_path:
             data['full_paper_path'] = full_paper_path
         if forwarding_letter_path:
             data['forwarding_letter_path'] = forwarding_letter_path
 
-        # Load and persist award
-        award = award_schema.load(data)
-        db.session.add(award)
-        db.session.commit()
+        # Use utility function to create award
+        award = create_award_util(
+            actor_id=current_user_id,
+            **data
+        )
         
         # Send notification (SMS and Email) to the user who created the award
         send_sms(
@@ -130,7 +156,6 @@ def create_award():
         )        
         return jsonify(award_schema.dump(award)), 201
     except Exception as e:
-        db.session.rollback()
         current_app.logger.exception("Error creating award")
         return jsonify({"error": str(e)}), 400
 
@@ -138,8 +163,8 @@ def create_award():
 @research_bp.route('/awards/<abstract_id>/pdf', methods=['GET'])
 @jwt_required()
 def get_awards_pdf(abstract_id):
-    abstract = Awards.query.get_or_404(abstract_id)
-    if not abstract.full_paper_path:
+    abstract = get_award_by_id_util(abstract_id)
+    if not abstract or not abstract.full_paper_path:
         abort(404, description="No PDF uploaded for this abstract.")
     try:
         return send_file(abstract.full_paper_path, mimetype='application/pdf', as_attachment=False)
@@ -151,8 +176,8 @@ def get_awards_pdf(abstract_id):
 @research_bp.route('/awards/<abstract_id>/forwarding_pdf', methods=['GET'])
 @jwt_required()
 def get_awards_forwarding_pdf(abstract_id):
-    abstract = Awards.query.get_or_404(abstract_id)
-    if not abstract.forwarding_letter_path:
+    abstract = get_award_by_id_util(abstract_id)
+    if not abstract or not abstract.forwarding_letter_path:
         abort(404, description="No PDF uploaded for this abstract.")
     try:
         return send_file(abstract.forwarding_letter_path, mimetype='application/pdf', as_attachment=False)
@@ -179,61 +204,82 @@ def get_awards():
         page_size = min(page_size, 100)  # Limit max page size
         page = max(1, page)  # Ensure page is at least 1
         
-        # Build query for awards
-        query = Awards.query
-        
-        q_int = q.isdigit() and int(q) or None
+        # Get current user for permissions
+        current_user_id = get_jwt_identity()
+        user = get_user_by_id_util(current_user_id)
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        # Build filters based on user permissions and query parameters
+        filters = []
         
         # Apply search filter
         if q:
-            search_filter = db.or_(
-                Awards.title.ilike(f'%{q}%'),
-                Awards.description.ilike(f'%{q}%') if hasattr(Awards, 'description') else None
-            )
-            # Filter out None values
-            search_filters = [f for f in [
-                Awards.title.ilike(f'%{q}%'),
-                Awards.description.ilike(f'%{q}%') if hasattr(Awards, 'description') else None,
-                Awards.id == q_int if q_int else None
-            ] if f is not None]
+            q_int = q.isdigit() and int(q) or None
+            search_filters = []
+            
+            # Search in title
+            search_filters.append(Awards.title.ilike(f'%{q}%'))
+            
+            # Search in description if it exists
+            if hasattr(Awards, 'description'):
+                search_filters.append(Awards.description.ilike(f'%{q}%'))
+            
+            # Search by ID if q is numeric
+            if q_int:
+                search_filters.append(Awards.id == q_int)
             
             if search_filters:
-                search_filter = db.or_(*search_filters)
-                query = query.filter(search_filter)
+                from sqlalchemy import or_
+                filters.append(or_(*search_filters))
         
         # Apply status filter
         if status in ['PENDING', 'UNDER_REVIEW', 'ACCEPTED', 'REJECTED']:
             status_value = Status[status]
-            query = query.filter(Awards.status == status_value)
+            filters.append(Awards.status == status_value)
         
-        # Apply verifiers filter
-        if verifiers:
-            if verifiers.lower() == 'yes':
-                # Only awards with assigned verifiers
-                query = query.join(AwardVerifiers, Awards.id == AwardVerifiers.award_id)
-            elif verifiers.lower() == 'no':
-                # Only awards without assigned verifiers
-                query = query.outerjoin(AwardVerifiers, Awards.id == AwardVerifiers.award_id).filter(AwardVerifiers.award_id.is_(None))
-        
-        # Apply verifier filter (filter by current user if they are a verifier)
-        if verifier_filter:
-            current_user_id = get_jwt_identity()
-            # Only show awards assigned to the current user (robust join)
-            query = query.join(AwardVerifiers, AwardVerifiers.award_id == Awards.id)
-            query = query.join(User, User.id == AwardVerifiers.user_id)
-            query = query.filter(AwardVerifiers.user_id == current_user_id)
-        
-        current_user_id = get_jwt_identity()
-        user = User.query.filter_by(id=current_user_id).first()
+        # Apply permissions filter
         if not (
                 user.has_role(Role.ADMIN.value) or
                 user.has_role(Role.SUPERADMIN.value) or
                 user.has_role(Role.VERIFIER.value) or
                 user.has_role(Role.COORDINATOR.value)
         ):
-            query = query.filter_by(created_by_id=current_user_id)
-
+            # Regular users can only see their own awards
+            filters.append(Awards.created_by_id == current_user_id)
+        
+        # Apply verifier filter (filter by current user if they are a verifier)
+        if verifier_filter:
+            # Only show awards assigned to the current user
+            from sqlalchemy import exists
+            filters.append(
+                exists().where(
+                    (AwardVerifiers.award_id == Awards.id) & 
+                    (AwardVerifiers.user_id == current_user_id)
+                )
+            )
+        
+        # Apply verifiers filter
+        if verifiers:
+            if verifiers.lower() == 'yes':
+                # Only awards with assigned verifiers
+                from sqlalchemy import exists
+                filters.append(
+                    exists().where(
+                        (AwardVerifiers.award_id == Awards.id)
+                    )
+                )
+            elif verifiers.lower() == 'no':
+                # Only awards without assigned verifiers
+                from sqlalchemy import not_, exists
+                filters.append(
+                    not_(exists().where(
+                        (AwardVerifiers.award_id == Awards.id)
+                    ))
+                )
+        
         # Apply sorting
+        order_by = None
         if sort_by == 'title':
             order_by = Awards.title.asc() if sort_dir.lower() == 'asc' else Awards.title.desc()
         elif sort_by == 'created_at':
@@ -241,11 +287,25 @@ def get_awards():
         else:  # default to id
             order_by = Awards.id.asc() if sort_dir.lower() == 'asc' else Awards.id.desc()
         
-        query = query.order_by(order_by)
+        # Calculate offset
+        offset = (page - 1) * page_size
         
-        # Apply pagination
-        total = query.count()
-        awards = query.offset((page - 1) * page_size).limit(page_size).all()
+        # Use utility function to list awards with filters
+        awards = list_awards_util(
+            filters=filters,
+            order_by=order_by,
+            limit=page_size,
+            offset=offset,
+            eager=True,  # Load related data like author, verifiers
+            actor_id=current_user_id
+        )
+        
+        # Count total records (without pagination)
+        from sqlalchemy import func
+        total_query = db.session.query(func.count(Awards.id))
+        for f in filters:
+            total_query = total_query.filter(f)
+        total = total_query.scalar()
         
         # Add verifiers count to each award
         awards_data = []
@@ -274,7 +334,10 @@ def get_awards():
 @jwt_required()
 def get_award(award_id):
     """Get a specific research award."""
-    award = Awards.query.get_or_404(award_id)
+    award = get_award_by_id_util(award_id)
+    if not award:
+        return jsonify({"error": "Award not found"}), 404
+        
     data = award_schema.dump(award)
     # Add PDF URLs if available
     if award.full_paper_path:
@@ -287,19 +350,39 @@ def get_award(award_id):
 @jwt_required()
 def update_award(award_id):
     """Update a research award."""
-    award = Awards.query.get_or_404(award_id)
+    award = get_award_by_id_util(award_id)
+    if not award:
+        return jsonify({"error": "Award not found"}), 404
+        
     try:
         # Check if user is authorized to update this award
         current_user_id = get_jwt_identity()
+        user = get_user_by_id_util(current_user_id)
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+            
         # In a real implementation, you might want to check if the user
         # is the author or has admin privileges
-        
+        if not (
+                user.has_role(Role.ADMIN.value) or
+                user.has_role(Role.SUPERADMIN.value) or
+                user.has_role(Role.VERIFIER.value) or
+                user.has_role(Role.COORDINATOR.value) or
+                award.created_by_id == current_user_id
+        ):
+            return jsonify({"error": "Unauthorized to update this award"}), 403
+
         data = request.get_json()
-        award = award_schema.load(data, instance=award, partial=True)
-        db.session.commit()
-        return jsonify(award_schema.dump(award)), 200
+        
+        # Use utility function to update award
+        updated_award = update_award_util(
+            award,
+            actor_id=current_user_id,
+            **data
+        )
+        
+        return jsonify(award_schema.dump(updated_award)), 200
     except Exception as e:
-        db.session.rollback()
         current_app.logger.exception("Error updating award")
         return jsonify({"error": str(e)}), 400
 
@@ -308,13 +391,18 @@ def update_award(award_id):
 @require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
 def delete_award(award_id):
     """Delete a research award."""
-    award = Awards.query.get_or_404(award_id)
+    award = get_award_by_id_util(award_id)
+    if not award:
+        return jsonify({"error": "Award not found"}), 404
+        
     try:
-        db.session.delete(award)
-        db.session.commit()
+        # Use utility function to delete award
+        delete_award_util(
+            award_id,
+            actor_id=get_jwt_identity()
+        )
         return jsonify({"message": "Award deleted"}), 200
     except Exception as e:
-        db.session.rollback()
         current_app.logger.exception("Error deleting award")
         return jsonify({"error": str(e)}), 400
 
@@ -322,18 +410,34 @@ def delete_award(award_id):
 @jwt_required()
 def submit_award(award_id):
     """Submit an award for review."""
-    award = Awards.query.get_or_404(award_id)
+    award = get_award_by_id_util(award_id)
+    if not award:
+        return jsonify({"error": "Award not found"}), 404
+        
     try:
         # Check if user is authorized to submit this award
         current_user_id = get_jwt_identity()
-        # In a real implementation, you might want to check if the user
-        # is the author of the award
+        user = get_user_by_id_util(current_user_id)
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+            
+        # Only the creator of the award or admin can submit it
+        if not (
+                award.created_by_id == current_user_id or
+                user.has_role(Role.ADMIN.value) or
+                user.has_role(Role.SUPERADMIN.value)
+        ):
+            return jsonify({"error": "Unauthorized to submit this award"}), 403
+
+        # Use utility function to update award status
+        updated_award = update_award_util(
+            award,
+            status=Status.UNDER_REVIEW,
+            actor_id=current_user_id
+        )
         
-        award.status = Status.UNDER_REVIEW
-        db.session.commit()
         return jsonify({"message": "Award submitted for review"}), 200
     except Exception as e:
-        db.session.rollback()
         current_app.logger.exception("Error submitting award")
         return jsonify({"error": str(e)}), 400
 
@@ -343,25 +447,49 @@ def submit_award(award_id):
 def get_award_submission_status():
     """Get submission status of awards for the current user."""
     current_user_id = get_jwt_identity()
-    user = User.query.get_or_404(current_user_id)
+    user = get_user_by_id_util(current_user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
 
+    # Build filters based on user permissions
+    filters = []
+    
     if user.has_role(Role.ADMIN.value) or user.has_role(Role.SUPERADMIN.value):
         # Admins can see all awards
-        awards = Awards.query
+        pass
     elif user.has_role(Role.VERIFIER.value):
         # Verifiers can see awards assigned to them
-        awards = db.session.query(Awards).join(
-            AwardVerifiers, Awards.id == AwardVerifiers.award_id
-        ).filter(
-            AwardVerifiers.user_id == current_user_id
+        from sqlalchemy import exists
+        filters.append(
+            exists().where(
+                (AwardVerifiers.award_id == Awards.id) & 
+                (AwardVerifiers.user_id == current_user_id)
+            )
         )
     else:
-        awards = Awards.query.filter_by(created_by_id=current_user_id)
+        # Regular users can only see their own awards
+        filters.append(Awards.created_by_id == current_user_id)
 
-    pending_awards = awards.filter(Awards.status==Status.PENDING).count()
-    under_review_awards = awards.filter(Awards.status==Status.UNDER_REVIEW).count()
-    accepted_awards = awards.filter(Awards.status==Status.ACCEPTED).count()
-    rejected_awards = awards.filter(Awards.status==Status.REJECTED).count()
+    # Count awards by status
+    pending_awards = db.session.query(Awards).filter(
+        *filters,
+        Awards.status == Status.PENDING
+    ).count()
+    
+    under_review_awards = db.session.query(Awards).filter(
+        *filters,
+        Awards.status == Status.UNDER_REVIEW
+    ).count()
+    
+    accepted_awards = db.session.query(Awards).filter(
+        *filters,
+        Awards.status == Status.ACCEPTED
+    ).count()
+    
+    rejected_awards = db.session.query(Awards).filter(
+        *filters,
+        Awards.status == Status.REJECTED
+    ).count()
 
     return jsonify({
         "pending": pending_awards,
@@ -380,31 +508,26 @@ def assign_verifier_to_award(award_id, user_id):
     """Assign a verifier to an award."""
     try:
         # Check if award exists
-        award = Awards.query.get_or_404(award_id)
+        award = get_award_by_id_util(award_id)
+        if not award:
+            return jsonify({"error": "Award not found"}), 404
         
         # Check if user exists and is a verifier
-        user = User.query.get_or_404(user_id)
+        user = get_user_by_id_util(user_id)
+        if not user:
+            return jsonify({"error": "User not found"}), 404
         if not user.has_role(Role.VERIFIER.value):
             return jsonify({"error": "User is not a verifier"}), 400
         
-        # Check if already assigned
-        existing_assignment = AwardVerifiers.query.filter_by(
-            award_id=award_id, user_id=user_id).first()
-        
-        if existing_assignment:
-            return jsonify({"message": "Verifier already assigned to this award"}), 200
-        
-        # Create new assignment
-        assignment = AwardVerifiers(
-            award_id=award_id,
-            user_id=user_id
+        # Use utility function to assign verifier
+        updated_award = assign_award_verifier_util(
+            award,
+            user,
+            actor_id=get_jwt_identity()
         )
-        db.session.add(assignment)
-        db.session.commit()
         
         return jsonify({"message": "Verifier assigned successfully"}), 201
     except Exception as e:
-        db.session.rollback()
         current_app.logger.exception("Error assigning verifier to award")
         return jsonify({"error": str(e)}), 400
 
@@ -416,18 +539,24 @@ def unassign_verifier_from_award(award_id, user_id):
     """Unassign a verifier from an award."""
     try:
         # Check if award exists
-        award = Awards.query.get_or_404(award_id)
+        award = get_award_by_id_util(award_id)
+        if not award:
+            return jsonify({"error": "Award not found"}), 404
         
-        # Check if assignment exists
-        assignment = AwardVerifiers.query.filter_by(
-            award_id=award_id, user_id=user_id).first_or_404()
+        # Check if user exists
+        user = get_user_by_id_util(user_id)
+        if not user:
+            return jsonify({"error": "User not found"}), 404
         
-        db.session.delete(assignment)
-        db.session.commit()
+        # Use utility function to remove verifier
+        updated_award = remove_award_verifier_util(
+            award,
+            user,
+            actor_id=get_jwt_identity()
+        )
         
         return jsonify({"message": "Verifier unassigned successfully"}), 200
     except Exception as e:
-        db.session.rollback()
         current_app.logger.exception("Error unassigning verifier from award")
         return jsonify({"error": str(e)}), 400
 
@@ -438,14 +567,12 @@ def get_verifiers_for_award(award_id):
     """Get all verifiers assigned to an award."""
     try:
         # Check if award exists
-        award = Awards.query.get_or_404(award_id)
+        award = get_award_by_id_util(award_id)
+        if not award:
+            return jsonify({"error": "Award not found"}), 404
         
-        # Get all verifiers for this award
-        verifiers = db.session.query(User).join(
-            AwardVerifiers, User.id == AwardVerifiers.user_id
-        ).filter(
-            AwardVerifiers.award_id == award_id
-        ).all()
+        # Get all verifiers for this award using the relationship
+        verifiers = award.verifiers
         
         # Convert to simple dict format
         verifiers_data = []
@@ -469,14 +596,20 @@ def get_awards_for_verifier(user_id):
     """Get all awards assigned to a verifier."""
     try:
         # Check if user exists
-        user = User.query.get_or_404(user_id)
+        user = get_user_by_id_util(user_id)
+        if not user:
+            return jsonify({"error": "User not found"}), 404
         
-        # Get all awards assigned to this verifier
+        # Get all awards assigned to this verifier using the relationship
+        awards = user.awards_assigned  # This assumes there's a relationship defined
+        
+        # If the relationship doesn't exist, we need to query manually
+        from sqlalchemy.orm import joinedload
         awards = db.session.query(Awards).join(
             AwardVerifiers, Awards.id == AwardVerifiers.award_id
         ).filter(
             AwardVerifiers.user_id == user_id
-        ).all()
+        ).options(joinedload(Awards.author)).all()
         
         return jsonify(awards_schema.dump(awards)), 200
     except Exception as e:
@@ -500,38 +633,43 @@ def bulk_assign_verifiers_to_awards():
         user_ids = data['user_ids']
         
         # Validate that all awards and users exist
-        awards = Awards.query.filter(Awards.id.in_(award_ids)).all()
-        users = User.query.filter(User.id.in_(user_ids)).all()
+        awards = [get_award_by_id_util(aid) for aid in award_ids]
+        users = [get_user_by_id_util(uid) for uid in user_ids]
+        
+        # Check if any awards or users are None (not found)
+        if None in awards:
+            return jsonify({"error": "One or more awards not found"}), 404
+        if None in users:
+            return jsonify({"error": "One or more users not found"}), 404
         
         # Check if all users are verifiers
         non_verifiers = [user for user in users if not user.has_role(Role.VERIFIER.value)]
         if non_verifiers:
             return jsonify({"error": "Some users are not verifiers"}), 400
         
-        # Create assignments
+        # Create assignments using utility functions
         assignments_created = 0
+        actor_id = get_jwt_identity()
         for award_id in award_ids:
             for user_id in user_ids:
+                # Get the award and user objects
+                award = get_award_by_id_util(award_id)
+                user = get_user_by_id_util(user_id)
+                
                 # Check if already assigned
-                existing_assignment = AwardVerifiers.query.filter_by(
+                existing_assignment = db.session.query(AwardVerifiers).filter_by(
                     award_id=award_id, user_id=user_id).first()
                 
                 if not existing_assignment:
-                    assignment = AwardVerifiers(
-                        award_id=award_id,
-                        user_id=user_id
-                    )
-                    db.session.add(assignment)
+                    # Use the utility function to assign verifier
+                    assign_award_verifier_util(award, user, actor_id=actor_id)
                     assignments_created += 1
-        
-        db.session.commit()
         
         return jsonify({
             "message": f"Successfully created {assignments_created} assignments",
             "assignments_created": assignments_created
         }), 201
     except Exception as e:
-        db.session.rollback()
         current_app.logger.exception("Error in bulk assigning verifiers to awards")
         return jsonify({"error": str(e)}), 400
 
@@ -552,7 +690,7 @@ def bulk_unassign_verifiers_from_awards():
         user_ids = data['user_ids']
         
         # Delete assignments
-        assignments_deleted = AwardVerifiers.query.filter(
+        assignments_deleted = db.session.query(AwardVerifiers).filter(
             AwardVerifiers.award_id.in_(award_ids),
             AwardVerifiers.user_id.in_(user_ids)
         ).delete(synchronize_session=False)

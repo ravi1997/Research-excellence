@@ -287,12 +287,14 @@ def update_abstract(abstract_id):
 @research_bp.route('/abstracts/<abstract_id>/pdf', methods=['GET'])
 @jwt_required()
 def get_abstract_pdf(abstract_id):
+    current_app.logger.info("Fetching PDF for abstract ID: %s", abstract_id)
     actor_id, context = _resolve_actor_context("get_abstract_pdf")
     abstract = abstract_utils.get_abstract_by_id(
         abstract_id,
         actor_id=actor_id,
         context=context,
     )
+    current_app.logger.info("Abstract fetched: %s", "found" if abstract else "not found")
     if abstract is None:
         audit_log_utils.record_event(
             event="abstract.pdf.missing",
@@ -300,6 +302,8 @@ def get_abstract_pdf(abstract_id):
             detail=f"Abstract not found ID: {abstract_id}",
         )
         abort(404, description="Abstract not found.")
+
+    current_app.logger.info("Checking PDF path for abstract ID: %s", abstract_id)
 
     if not abstract.pdf_path:
         audit_log_utils.record_event(
@@ -315,6 +319,7 @@ def get_abstract_pdf(abstract_id):
             user_id=actor_id,
             detail=f"Served PDF for abstract ID: {abstract_id}",
         )
+        current_app.logger.info("PDF served successfully")
         return send_file(abstract.pdf_path, mimetype='application/pdf', as_attachment=False)
     except Exception:
         current_app.logger.exception("Error sending PDF file")
@@ -336,8 +341,8 @@ def get_abstracts():
         page = max(1, int(request.args.get('page', 1)))
         status = request.args.get('status', '').strip().upper()
         page_size = min(int(request.args.get('page_size', 20)), 100)
-        sort_by = request.args.get('sort_by', 'id')
-        sort_dir = request.args.get('sort_dir', 'desc').lower()
+        sort_by = request.args.get('sort', 'id')
+        sort_dir = request.args.get('dir', 'desc').lower()
         verifier_filter = request.args.get('verifier', '').strip().lower() == 'true'
 
         filters = []
@@ -378,6 +383,8 @@ def get_abstracts():
 
         if verifier_filter and actor_id:
             filters.append(Abstracts.verifiers.any(User.id == actor_id))
+
+        current_app.logger.info(f"Sorting by {sort_by} in {sort_dir} order")
 
         if sort_by == 'title':
             order_by = Abstracts.title.asc() if sort_dir == 'asc' else Abstracts.title.desc()

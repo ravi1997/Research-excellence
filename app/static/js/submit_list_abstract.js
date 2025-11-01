@@ -11,7 +11,7 @@
     // -----------------------
     // Helpers for preview code
     // -----------------------
-    const token = () => (localStorage.getItem("access_token") || "").trim();
+    const token = () => (localStorage.getItem("token") || "").trim();
     const BASE = window.API_BASE || `${location.origin}/api/v1/research`; // used by PDF fetch
 
     function sQ(id) { return document.getElementById(id); }
@@ -200,7 +200,7 @@
         const data = await fetchJSON(API_LIST, {
             q: query, status: filter, sort: sortKey || "created_at", dir: sortDir || "desc", page, size: pageSize
         });
-        return { items: data.items || [], total: data.total ?? 0, totalPages: data.total_pages ?? 1, meta: data.meta || {} };
+      return { items: data.items || [], total: data.total ?? 0, totalPages: data.pages ?? 1, meta: data.meta || {} };
     }
 
     // Use generated preview inside selection handler
@@ -290,7 +290,30 @@
                 } catch (e) { console.warn("updateAbstractMeta failed", e); }
             };
 
+            // Ensure global controller reference is accessible
             window.__abstractListCtrl = __abstractListCtrl;
+            
+            // Add explicit event handlers for next/prev buttons to ensure they work
+            const nextBtn = document.querySelector("#Next");
+            const prevBtn = document.querySelector("#Prev");
+            
+            if (nextBtn) {
+                nextBtn.addEventListener('click', function() {
+                    if (__abstractListCtrl && __abstractListCtrl.state.page < __abstractListCtrl.state.totalPages) {
+                        __abstractListCtrl.state.page++;
+                        __abstractListCtrl.refresh();
+                    }
+                });
+            }
+            
+            if (prevBtn) {
+                prevBtn.addEventListener('click', function() {
+                    if (__abstractListCtrl && __abstractListCtrl.state.page > 1) {
+                        __abstractListCtrl.state.page--;
+                        __abstractListCtrl.refresh();
+                    }
+                });
+            }
         } catch (error) {
             console.error("Error initializing abstract list controller:", error);
             // Show an error message to the user
@@ -301,5 +324,24 @@
             }
         }
     });
+    
+    // Define global functions outside DOMContentLoaded but with checks to ensure controller is ready
+    window.nextAbstractPage = function() {
+        if (window.__abstractListCtrl && window.__abstractListCtrl.state.page < window.__abstractListCtrl.state.totalPages) {
+            window.__abstractListCtrl.state.page++;
+            window.__abstractListCtrl.refresh();
+        } else {
+            console.warn("Abstract list controller not ready or already on last page");
+        }
+    };
+    
+    window.prevAbstractPage = function() {
+        if (window.__abstractListCtrl && window.__abstractListCtrl.state.page > 1) {
+            window.__abstractListCtrl.state.page--;
+            window.__abstractListCtrl.refresh();
+        } else {
+            console.warn("Abstract list controller not ready or already on first page");
+        }
+    };
 
 })();
