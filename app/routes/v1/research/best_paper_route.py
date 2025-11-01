@@ -15,15 +15,87 @@ from werkzeug.utils import secure_filename
 from app.utils.services.mail import send_mail
 from app.utils.services.sms import send_sms
 
+# Import utility functions
+from app.utils.model_utils.best_paper_utils import (
+    create_best_paper as create_best_paper_util,
+    get_best_paper_by_id as get_best_paper_by_id_util,
+    list_best_papers as list_best_papers_util,
+    update_best_paper as update_best_paper_util,
+    delete_best_paper as delete_best_paper_util,
+    assign_verifier as assign_best_paper_verifier_util,
+    remove_verifier as remove_best_paper_verifier_util,
+)
+from app.utils.model_utils.author_utils import (
+    create_author as create_author_util,
+    get_or_create_author as get_or_create_author_util,
+)
+from app.utils.model_utils.user_utils import (
+    get_user_by_id as get_user_by_id_util,
+    list_users as list_users_util,
+)
+from app.utils.model_utils.audit_log_utils import (
+    create_audit_log as create_audit_log_util,
+    record_event as record_event_util,
+)
+
 # NOTE: Underlying model/schema still named BestPaper for now; outward API renamed to best_papers
 best_paper_schema = BestPaperSchema()
 best_papers_schema = BestPaperSchema(many=True)
+
+def log_audit_event(event_type, user_id, details, ip_address=None, target_user_id=None):
+    """Helper function to create audit logs with proper transaction handling"""
+    try:
+        # Create audit log without committing to avoid transaction issues
+        create_audit_log_util(
+            event=event_type,
+            user_id=user_id,
+            target_user_id=target_user_id,
+            ip=ip_address,
+            detail=json.dumps(details) if isinstance(details, dict) else details,
+            actor_id=user_id,
+            commit=False  # Don't commit here to avoid transaction issues
+        )
+        db.session.commit() # Commit only this specific operation
+    except Exception as e:
+        current_app.logger.error(f"Failed to create audit log: {str(e)}")
+        try:
+            db.session.rollback()
+        except:
+            pass  # Ignore rollback errors in error handling
+
+def safe_commit():
+    """Safely commit the database session with error handling"""
+    try:
+        db.session.commit()
+        return True
+    except Exception as e:
+        current_app.logger.error(f"Database commit failed: {str(e)}")
+        try:
+            db.session.rollback()
+        except:
+            current_app.logger.error("Database rollback also failed")
+        return False
 
 @research_bp.route('/best-papers', methods=['POST'])
 @jwt_required()
 def create_best_paper():
     """Create a new Best Paper submission."""
+    current_user_id = get_jwt_identity()
+    user = None
+    best_paper = None
     try:
+        # Get the current user ID from JWT
+        user = get_user_by_id_util(current_user_id)
+        if not user:
+            error_msg = "Authentication failed: User not found"
+            log_audit_event(
+                event_type="best_paper.create.failed",
+                user_id=current_user_id,
+                details={"error": error_msg},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
+
         # Handle both JSON and multipart form-data (for file uploads)
         if request.is_json:
             data = request.get_json()
@@ -32,19 +104,28 @@ def create_best_paper():
         else:
             data_json = request.form.get('data')
             if not data_json:
-                return jsonify({"error": "No data provided"}), 400
+                error_msg = "Request validation failed: No data provided in form request"
+                log_audit_event(
+                    event_type="best_paper.create.failed",
+                    user_id=current_user_id,
+                    details={"error": error_msg},
+                    ip_address=request.remote_addr
+                )
+                return jsonify({"error": error_msg}), 40
 
             try:
-                # Get the current user ID from JWT
-                current_user_id = get_jwt_identity()
-                user = User.query.get(current_user_id)
-                if not user:
-                    return jsonify({"error": "User not found"}), 404
                 # Set created_by_id in data for schema load
                 data = json.loads(data_json)
                 data['created_by_id'] = current_user_id
             except json.JSONDecodeError:
-                return jsonify({"error": "Invalid JSON data"}), 400
+                error_msg = "Request validation failed: Invalid JSON data provided"
+                log_audit_event(
+                    event_type="best_paper.create.failed",
+                    user_id=current_user_id,
+                    details={"error": error_msg},
+                    ip_address=request.remote_addr
+                )
+                return jsonify({"error": error_msg}), 40
 
             # Handle file uploads
             full_paper_path = None
@@ -56,6 +137,15 @@ def create_best_paper():
                 upload_folder = current_app.config.get('UPLOAD_FOLDER', 'uploads')
                 os.makedirs(upload_folder, exist_ok=True)
                 filename = secure_filename(pdf_file.filename)
+                if not filename:
+                    error_msg = "File validation failed: Invalid filename provided"
+                    log_audit_event(
+                        event_type="best_paper.create.failed",
+                        user_id=current_user_id,
+                        details={"error": error_msg, "filename": pdf_file.filename},
+                        ip_address=request.remote_addr
+                    )
+                    return jsonify({"error": error_msg}), 400
                 unique_filename = f"{uuid.uuid4().hex}_{filename}"
                 file_path = os.path.join(upload_folder, unique_filename)
                 pdf_file.save(file_path)
@@ -69,11 +159,30 @@ def create_best_paper():
                 upload_folder = current_app.config.get('UPLOAD_FOLDER', 'uploads')
                 os.makedirs(upload_folder, exist_ok=True)
                 filename = secure_filename(fwd_file.filename)
+                if not filename:
+                    error_msg = "File validation failed: Invalid forwarding letter filename provided"
+                    log_audit_event(
+                        event_type="best_paper.create.failed",
+                        user_id=current_user_id,
+                        details={"error": error_msg, "filename": fwd_file.filename},
+                        ip_address=request.remote_addr
+                    )
+                    return jsonify({"error": error_msg}), 40
                 unique_filename = f"{uuid.uuid4().hex}_{filename}"
                 file_path = os.path.join(upload_folder, unique_filename)
                 fwd_file.save(file_path)
                 current_app.logger.info(f"Forwarding letter PDF saved to: {file_path}")
                 forwarding_letter_path = file_path.replace("app/", "", 1)
+
+        # Check permissions
+        if not (
+                user.has_role(Role.ADMIN.value) or
+                user.has_role(Role.SUPERADMIN.value) or
+                user.has_role(Role.VERIFIER.value) or
+                user.has_role(Role.COORDINATOR.value)
+        ):
+            # For non-admin users, ensure they can only create best papers for themselves
+            pass  # This will be handled by setting created_by_id
 
         # Extract potential authors array (frontend sends single-author array)
         authors_data = data.pop('authors', []) or []
@@ -83,35 +192,99 @@ def create_best_paper():
         if not author_id:
             if authors_data:
                 a0 = authors_data[0] or {}
-                author = Author(
-                    name=a0.get('name', ''),
-                    email=a0.get('email'),
+                author_name = a0.get('name', '').strip()
+                if not author_name:
+                    error_msg = "Validation failed: Author name is required to create a best paper"
+                    log_audit_event(
+                        event_type="best_paper.create.failed",
+                        user_id=current_user_id,
+                        details={"error": error_msg},
+                        ip_address=request.remote_addr
+                    )
+                    return jsonify({"error": error_msg}), 400
+                
+                # Use get_or_create_author utility
+                author, created = get_or_create_author_util(
+                    name=author_name,
                     affiliation=a0.get('affiliation'),
-                    is_presenter=a0.get('is_presenter', False),
-                    is_corresponding=a0.get('is_corresponding', False),
+                    email=a0.get('email'),
+                    actor_id=current_user_id
                 )
-                if not author.name:
-                    return jsonify({"error": "Author name is required"}), 400
-                db.session.add(author)
-                db.session.flush()  # obtain author.id
                 author_id = str(author.id)
-                current_app.logger.info(f"Created author {author.name} with ID {author_id} for best paper")
+                current_app.logger.info(f"{'Created' if created else 'Found'} author {author.name} with ID {author_id} for best paper")
             else:
-                return jsonify({"error": "Author information is required"}), 400
+                error_msg = "Validation failed: Author information is required to create a best paper"
+                log_audit_event(
+                    event_type="best_paper.create.failed",
+                    user_id=current_user_id,
+                    details={"error": error_msg},
+                    ip_address=request.remote_addr
+                )
+                return jsonify({"error": error_msg}), 40
+
+        # Validate required fields
+        if 'paper_category_id' not in data:
+            error_msg = "Validation failed: paper_category_id is required to create a best paper"
+            log_audit_event(
+                event_type="best_paper.create.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "missing_field": "paper_category_id"},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 400
+
+        # Check if submission window is open for best papers
+        cycle_id = data.get('cycle_id')
+        if cycle_id:
+            from app.utils.model_utils.cycle_utils import get_cycle_by_id as get_cycle_by_id_util
+            cycle = get_cycle_by_id_util(cycle_id)
+            if cycle:
+                from app.models.Cycle import CyclePhase
+                from app.utils.model_utils.cycle_utils import list_windows
+                from datetime import date
+                active_windows = list_windows(cycle_id=cycle_id, reference_date=date.today())
+                best_paper_windows = [w for w in active_windows if w.phase == CyclePhase.BEST_PAPER_SUBMISSION]
+                if not best_paper_windows:
+                    error_msg = f"Submission validation failed: Best paper submissions are not allowed for cycle {cycle.name} at this time"
+                    log_audit_event(
+                        event_type="best_paper.create.failed",
+                        user_id=current_user_id,
+                        details={
+                            "error": error_msg,
+                            "cycle_id": cycle_id,
+                            "cycle_name": cycle.name
+                        },
+                        ip_address=request.remote_addr
+                    )
+                    return jsonify({"error": error_msg}), 400
 
         # Inject resolved author_id and any uploaded file paths
         data['author_id'] = author_id
-        if 'paper_category_id' not in data:
-            return jsonify({"error": "paper_category_id is required"}), 400
         if full_paper_path:
             data['full_paper_path'] = full_paper_path
         if forwarding_letter_path:
             data['forwarding_letter_path'] = forwarding_letter_path
 
-        # Load and persist best paper
-        best_paper = best_paper_schema.load(data)
-        db.session.add(best_paper)
-        db.session.commit()
+        # Use utility function to create best paper
+        best_paper = create_best_paper_util(
+            actor_id=current_user_id,
+            **data
+        )
+        
+        # Log successful creation
+        log_audit_event(
+            event_type="best_paper.create.success",
+            user_id=current_user_id,
+            details={
+                "best_paper_id": best_paper.id,
+                "title": best_paper.title,
+                "author_id": author_id,
+                "has_pdf": bool(full_paper_path),
+                "has_forwarding_letter": bool(forwarding_letter_path)
+            },
+            ip_address=request.remote_addr
+        )
+        
         # Send notification (SMS and Email) to the user who created the best paper
         send_sms(
             user.mobile, f"Your best paper(Oncology) id : {best_paper.id} has been created successfully and is pending submission for review."
@@ -124,41 +297,174 @@ def create_best_paper():
         )
 
         return jsonify(best_paper_schema.dump(best_paper)), 201
+    except ValueError as ve:
+        # Handle specific validation errors from model constraints
+        if "Submissions are allowed only during the CyclePhase.BEST_PAPER_SUBMISSION period" in str(ve):
+            error_msg = "Submission validation failed: Best paper submissions are not allowed at this time. Please check the active cycle windows."
+            log_audit_event(
+                event_type="best_paper.create.failed",
+                user_id=current_user_id if current_user_id else (user.id if user else None),
+                details={"error": error_msg, "exception_type": "ValueError", "exception_message": str(ve)},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 400
+        else:
+            current_app.logger.exception("ValueError creating best paper")
+            error_msg = f"Validation error occurred while creating best paper: {str(ve)}"
+            log_audit_event(
+                event_type="best_paper.create.failed",
+                user_id=current_user_id if current_user_id else (user.id if user else None),
+                details={"error": error_msg, "exception_type": "ValueError", "exception_message": str(ve)},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 40
     except Exception as e:
-        db.session.rollback()
         current_app.logger.exception("Error creating best paper")
-        return jsonify({"error": str(e)}), 400
+        error_msg = f"System error occurred while creating best paper: {str(e)}"
+        
+        # Try to log the failure, but handle transaction issues gracefully
+        try:
+            log_audit_event(
+                event_type="best_paper.create.failed",
+                user_id=current_user_id if current_user_id else (user.id if user else None),
+                details={"error": error_msg, "exception_type": type(e).__name__, "exception_message": str(e)},
+                ip_address=request.remote_addr
+            )
+        except:
+            # If logging fails, at least log to app logger
+            current_app.logger.error(f"Failed to log audit event for best paper creation failure: {str(e)}")
+        
+        # Perform a safe rollback
+        try:
+            db.session.rollback()
+        except:
+            current_app.logger.error("Database rollback failed during error handling")
+        
+        return jsonify({"error": error_msg}), 40
 
 
 @research_bp.route('/best-papers/<best_paper_id>/pdf', methods=['GET'])
 @jwt_required()
 def get_best_paper_pdf(best_paper_id):
-    best_paper = BestPaper.query.get_or_404(best_paper_id)
-    if not best_paper.full_paper_path:
-        abort(404, description="No PDF uploaded for this best paper.")
+    current_user_id = get_jwt_identity()
     try:
+        best_paper = get_best_paper_by_id_util(best_paper_id)
+        if not best_paper:
+            error_msg = f"Resource not found: Best paper with ID {best_paper_id} does not exist"
+            log_audit_event(
+                event_type="best_paper.pdf.access.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "best_paper_id": best_paper_id},
+                ip_address=request.remote_addr
+            )
+            abort(404, description="Best paper not found.")
+        
+        if not best_paper.full_paper_path:
+            error_msg = f"File not found: No PDF uploaded for best paper ID {best_paper_id}"
+            log_audit_event(
+                event_type="best_paper.pdf.access.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "best_paper_id": best_paper_id},
+                ip_address=request.remote_addr
+            )
+            abort(404, description="No PDF uploaded for this best paper.")
+        
+        # Log successful access
+        log_audit_event(
+            event_type="best_paper.pdf.access.success",
+            user_id=current_user_id,
+            details={
+                "best_paper_id": best_paper_id,
+                "file_path": best_paper.full_paper_path
+            },
+            ip_address=request.remote_addr
+        )
+        
         return send_file(best_paper.full_paper_path, mimetype='application/pdf', as_attachment=False)
+    except FileNotFoundError:
+        error_msg = f"File access error: PDF file not found at path {best_paper.full_paper_path if 'best_paper' in locals() else 'unknown'}"
+        log_audit_event(
+            event_type="best_paper.pdf.access.failed",
+            user_id=current_user_id,
+            details={"error": error_msg, "best_paper_id": best_paper_id},
+            ip_address=request.remote_addr
+        )
+        abort(404, description="PDF file not found.")
     except Exception as e:
         current_app.logger.exception("Error sending PDF file")
-        abort(404, description="PDF file not found.")
+        error_msg = f"System error occurred while accessing PDF: {str(e)}"
+        log_audit_event(
+            event_type="best_paper.pdf.access.failed",
+            user_id=current_user_id,
+            details={"error": error_msg, "best_paper_id": best_paper_id},
+            ip_address=request.remote_addr
+        )
+        abort(500, description="Internal server error.")
 
 
 @research_bp.route('/best-papers/<best_paper_id>/forwarding_pdf', methods=['GET'])
 @jwt_required()
 def get_best_paper_forwarding_pdf(best_paper_id):
-    best_paper = BestPaper.query.get_or_404(best_paper_id)
-    if not best_paper.forwarding_letter_path:
-        abort(404, description="No forwarding PDF uploaded for this best paper.")
+    current_user_id = get_jwt_identity()
     try:
+        best_paper = get_best_paper_by_id_util(best_paper_id)
+        if not best_paper:
+            error_msg = f"Resource not found: Best paper with ID {best_paper_id} does not exist"
+            log_audit_event(
+                event_type="best_paper.forwarding_pdf.access.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "best_paper_id": best_paper_id},
+                ip_address=request.remote_addr
+            )
+            abort(404, description="Best paper not found.")
+        
+        if not best_paper.forwarding_letter_path:
+            error_msg = f"File not found: No forwarding PDF uploaded for best paper ID {best_paper_id}"
+            log_audit_event(
+                event_type="best_paper.forwarding.pdf.access.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "best_paper_id": best_paper_id},
+                ip_address=request.remote_addr
+            )
+            abort(404, description="No forwarding PDF uploaded for this best paper.")
+        
+        # Log successful access
+        log_audit_event(
+            event_type="best_paper.forwarding.pdf.access.success",
+            user_id=current_user_id,
+            details={
+                "best_paper_id": best_paper_id,
+                "file_path": best_paper.forwarding_letter_path
+            },
+            ip_address=request.remote_addr
+        )
+        
         return send_file(best_paper.forwarding_letter_path, mimetype='application/pdf', as_attachment=False)
+    except FileNotFoundError:
+        error_msg = f"File access error: Forwarding PDF file not found at path {best_paper.forwarding_letter_path if 'best_paper' in locals() else 'unknown'}"
+        log_audit_event(
+            event_type="best_paper.forwarding.pdf.access.failed",
+            user_id=current_user_id,
+            details={"error": error_msg, "best_paper_id": best_paper_id},
+            ip_address=request.remote_addr
+        )
+        abort(404, description="PDF file not found.")
     except Exception as e:
         current_app.logger.exception("Error sending PDF file")
-        abort(404, description="PDF file not found.")
+        error_msg = f"System error occurred while accessing forwarding PDF: {str(e)}"
+        log_audit_event(
+            event_type="best_paper.forwarding.pdf.access.failed",
+            user_id=current_user_id,
+            details={"error": error_msg, "best_paper_id": best_paper_id},
+            ip_address=request.remote_addr
+        )
+        abort(500, description="Internal server error.")
 
 @research_bp.route('/best-papers', methods=['GET'])
 @jwt_required()
 def get_best_papers():
     """Get all Best Paper submissions with filtering and pagination support."""
+    current_user_id = get_jwt_identity()
     try:
         # Get query parameters
         q = request.args.get('q', '').strip()
@@ -174,70 +480,141 @@ def get_best_papers():
         page_size = min(page_size, 100)  # Limit max page size
         page = max(1, page)  # Ensure page is at least 1
         
-        # Build query for best papers
-        query = BestPaper.query
-        
-        q_int = q.isdigit() and int(q) or None
+        # Get current user for permissions
+        user = get_user_by_id_util(current_user_id)
+        if not user:
+            error_msg = "Authentication failed: User not found"
+            log_audit_event(
+                event_type="best_paper.list.failed",
+                user_id=current_user_id,
+                details={"error": error_msg},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
+
+        # Build filters based on user permissions and query parameters
+        filters = []
         
         # Apply search filter
         if q:
-            # Filter out None values
-            search_filters = [f for f in [
-                BestPaper.title.ilike(f'%{q}%'),
-                BestPaper.content.ilike(f'%{q}%') if hasattr(BestPaper, 'content') else None,
-                BestPaper.id == q_int if q_int else None
-            ] if f is not None]
+            q_int = q.isdigit() and int(q) or None
+            search_filters = []
+            
+            # Search in title
+            search_filters.append(BestPaper.title.ilike(f'%{q}%'))
+            
+            # Search in content if it exists
+            if hasattr(BestPaper, 'content'):
+                search_filters.append(BestPaper.content.ilike(f'%{q}%'))
+            
+            # Search by ID if q is numeric
+            if q_int:
+                search_filters.append(BestPaper.id == q_int)
             
             if search_filters:
-                search_filter = db.or_(*search_filters)
-                query = query.filter(search_filter)
+                from sqlalchemy import or_
+                filters.append(or_(*search_filters))
         
         # Apply status filter
         if status in ['PENDING', 'UNDER_REVIEW', 'ACCEPTED', 'REJECTED']:
             status_value = Status[status]
-            query = query.filter(BestPaper.status == status_value)
+            filters.append(BestPaper.status == status_value)
+        elif status:  # Invalid status provided
+            error_msg = f"Validation failed: Invalid status '{status}'. Valid statuses are PENDING, UNDER_REVIEW, ACCEPTED, REJECTED"
+            log_audit_event(
+                event_type="best_paper.list.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "invalid_status": status},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 40
         
-        # Apply verifiers filter
-        if verifiers:
-            if verifiers.lower() == 'yes':
-                # Only best papers with assigned verifiers
-                query = query.join(BestPaperVerifiers, BestPaper.id == BestPaperVerifiers.best_paper_id)
-            elif verifiers.lower() == 'no':
-                # Only best papers without assigned verifiers
-                query = query.outerjoin(BestPaperVerifiers, BestPaper.id == BestPaperVerifiers.best_paper_id).filter(BestPaperVerifiers.best_paper_id.is_(None))
-        
-        # Apply verifier filter (filter by current user if they are a verifier)
-        if verifier_filter:
-            current_user_id = get_jwt_identity()
-            # Only show best papers assigned to the current user (robust join)
-            query = query.join(BestPaperVerifiers, BestPaperVerifiers.best_paper_id == BestPaper.id)
-            query = query.join(User, User.id == BestPaperVerifiers.user_id)
-            query = query.filter(BestPaperVerifiers.user_id == current_user_id)
-        
-        current_user_id = get_jwt_identity()
-        user = User.query.filter_by(id=current_user_id).first()
+        # Apply permissions filter
         if not (
                 user.has_role(Role.ADMIN.value) or
                 user.has_role(Role.SUPERADMIN.value) or
                 user.has_role(Role.VERIFIER.value) or
                 user.has_role(Role.COORDINATOR.value)
         ):
-            query = query.filter_by(created_by_id=current_user_id)
-
-
+            # Regular users can only see their own best papers
+            filters.append(BestPaper.created_by_id == current_user_id)
+        
+        # Apply verifier filter (filter by current user if they are a verifier)
+        if verifier_filter:
+            # Only show best papers assigned to the current user
+            from sqlalchemy import exists
+            filters.append(
+                exists().where(
+                    (BestPaperVerifiers.best_paper_id == BestPaper.id) & 
+                    (BestPaperVerifiers.user_id == current_user_id)
+                )
+            )
+        
+        # Apply verifiers filter
+        if verifiers:
+            if verifiers.lower() == 'yes':
+                # Only best papers with assigned verifiers
+                from sqlalchemy import exists
+                filters.append(
+                    exists().where(
+                        (BestPaperVerifiers.best_paper_id == BestPaper.id)
+                    )
+                )
+            elif verifiers.lower() == 'no':
+                # Only best papers without assigned verifiers
+                from sqlalchemy import not_, exists
+                filters.append(
+                    not_(exists().where(
+                        (BestPaperVerifiers.best_paper_id == BestPaper.id)
+                    ))
+                )
+            else:
+                error_msg = f"Validation failed: Invalid verifiers parameter '{verifiers}'. Valid values are 'yes' or 'no'"
+                log_audit_event(
+                    event_type="best_paper.list.failed",
+                    user_id=current_user_id,
+                    details={"error": error_msg, "invalid_verifiers_param": verifiers},
+                    ip_address=request.remote_addr
+                )
+                return jsonify({"error": error_msg}), 40
+        
         # Apply sorting
+        order_by = None
         if sort_by == 'title':
             order_by = BestPaper.title.asc() if sort_dir.lower() == 'asc' else BestPaper.title.desc()
         elif sort_by == 'created_at':
             order_by = BestPaper.created_at.asc() if sort_dir.lower() == 'asc' else BestPaper.created_at.desc()
-        else:  # default to id
+        elif sort_by == 'id':
             order_by = BestPaper.id.asc() if sort_dir.lower() == 'asc' else BestPaper.id.desc()
+        else: # invalid sort field
+            error_msg = f"Validation failed: Invalid sort field '{sort_by}'. Valid fields are 'id', 'title', 'created_at'"
+            log_audit_event(
+                event_type="best_paper.list.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "invalid_sort_by": sort_by},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 40
         
-        query = query.order_by(order_by)
+        # Calculate offset
+        offset = (page - 1) * page_size
         
-        # Apply pagination
-        total = query.count()
-        best_papers = query.offset((page - 1) * page_size).limit(page_size).all()
+        # Use utility function to list best papers with filters
+        best_papers = list_best_papers_util(
+            filters=filters,
+            order_by=order_by,
+            limit=page_size,
+            offset=offset,
+            eager=True,  # Load related data like author, verifiers
+            actor_id=current_user_id
+        )
+        
+        # Count total records (without pagination)
+        from sqlalchemy import func
+        total_query = db.session.query(func.count(BestPaper.id))
+        for f in filters:
+            total_query = total_query.filter(f)
+        total = total_query.scalar()
         
         # Add verifiers count to each best paper
         best_papers_data = []
@@ -257,111 +634,387 @@ def get_best_papers():
             'page_size': page_size
         }
         
-        return jsonify(response), 200
+        # Log successful retrieval
+        log_audit_event(
+            event_type="best_paper.list.success",
+            user_id=current_user_id,
+            details={
+                "filters_applied": bool(filters),
+                "search_query": q if q else None,
+                "status_filter": status if status else None,
+                "verifier_filter": verifier_filter,
+                "results_count": len(best_papers_data),
+                "total_count": total,
+                "page": page,
+                "page_size": page_size
+            },
+            ip_address=request.remote_addr
+        )
+        
+        return jsonify(response), 20
     except Exception as e:
         current_app.logger.exception("Error listing best papers with parameters")
-        return jsonify({"error": str(e)}), 400
+        error_msg = f"System error occurred while retrieving best papers: {str(e)}"
+        log_audit_event(
+            event_type="best_paper.list.failed",
+            user_id=current_user_id,
+            details={"error": error_msg, "exception_type": type(e).__name__, "exception_message": str(e)},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 40
 
 @research_bp.route('/best-papers/<best_paper_id>', methods=['GET'])
 @jwt_required()
 def get_best_paper(best_paper_id):
     """Get a specific Best Paper submission."""
-    best_paper = BestPaper.query.get_or_404(best_paper_id)
-    data = best_paper_schema.dump(best_paper)
-    # Add PDF URLs if available
-    if best_paper.full_paper_path:
-        data['pdf_url'] = f"/api/v1/research/best-papers/{best_paper_id}/pdf"
-    if best_paper.forwarding_letter_path:
-        data['forwarding_pdf_url'] = f"/api/v1/research/best-papers/{best_paper_id}/forwarding_pdf"
-    return jsonify(data), 200
+    current_user_id = get_jwt_identity()
+    try:
+        best_paper = get_best_paper_by_id_util(best_paper_id)
+        if not best_paper:
+            error_msg = f"Resource not found: Best paper with ID {best_paper_id} does not exist"
+            log_audit_event(
+                event_type="best_paper.get.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "best_paper_id": best_paper_id},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
+            
+        data = best_paper_schema.dump(best_paper)
+        # Add PDF URLs if available
+        if best_paper.full_paper_path:
+            data['pdf_url'] = f"/api/v1/research/best-papers/{best_paper_id}/pdf"
+        if best_paper.forwarding_letter_path:
+            data['forwarding_pdf_url'] = f"/api/v1/research/best-papers/{best_paper_id}/forwarding_pdf"
+        
+        # Log successful retrieval
+        log_audit_event(
+            event_type="best_paper.get.success",
+            user_id=current_user_id,
+            details={
+                "best_paper_id": best_paper_id,
+                "title": best_paper.title,
+                "has_pdf": bool(best_paper.full_paper_path),
+                "has_forwarding_letter": bool(best_paper.forwarding_letter_path)
+            },
+            ip_address=request.remote_addr
+        )
+        
+        return jsonify(data), 200
+    except Exception as e:
+        current_app.logger.exception("Error retrieving best paper")
+        error_msg = f"System error occurred while retrieving best paper: {str(e)}"
+        log_audit_event(
+            event_type="best_paper.get.failed",
+            user_id=current_user_id,
+            details={"error": error_msg, "best_paper_id": best_paper_id, "exception_type": type(e).__name__, "exception_message": str(e)},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 400
 
 @research_bp.route('/best-papers/<best_paper_id>', methods=['PUT'])
 @jwt_required()
 def update_best_paper(best_paper_id):
     """Update a Best Paper submission."""
-    best_paper = BestPaper.query.get_or_404(best_paper_id)
+    current_user_id = get_jwt_identity()
+    best_paper = None
     try:
+        best_paper = get_best_paper_by_id_util(best_paper_id)
+        if not best_paper:
+            error_msg = f"Resource not found: Best paper with ID {best_paper_id} does not exist"
+            log_audit_event(
+                event_type="best_paper.update.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "best_paper_id": best_paper_id},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
+            
         # Check if user is authorized to update this best paper
-        current_user_id = get_jwt_identity()
+        user = get_user_by_id_util(current_user_id)
+        if not user:
+            error_msg = "Authentication failed: User not found"
+            log_audit_event(
+                event_type="best_paper.update.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "best_paper_id": best_paper_id},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
+            
         # In a real implementation, you might want to check if the user
         # is the author or has admin privileges
-        
+        if not (
+                user.has_role(Role.ADMIN.value) or
+                user.has_role(Role.SUPERADMIN.value) or
+                user.has_role(Role.VERIFIER.value) or
+                user.has_role(Role.COORDINATOR.value) or
+                best_paper.created_by_id == current_user_id
+        ):
+            error_msg = f"Authorization failed: You are not authorized to update best paper ID {best_paper_id}"
+            log_audit_event(
+                event_type="best_paper.update.failed",
+                user_id=current_user_id,
+                details={
+                    "error": error_msg, 
+                    "best_paper_id": best_paper_id,
+                    "user_role": user.role_associations[0].role.value if user.role_associations else "no_role",
+                    "best_paper_creator_id": best_paper.created_by_id
+                },
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 403
+
         data = request.get_json()
-        best_paper = best_paper_schema.load(data, instance=best_paper, partial=True)
-        db.session.commit()
-        return jsonify(best_paper_schema.dump(best_paper)), 200
+        
+        # Use utility function to update best paper
+        updated_best_paper = update_best_paper_util(
+            best_paper,
+            actor_id=current_user_id,
+            **data
+        )
+        
+        # Log successful update
+        log_audit_event(
+            event_type="best_paper.update.success",
+            user_id=current_user_id,
+            details={
+                "best_paper_id": best_paper_id,
+                "updated_fields": list(data.keys()),
+                "title": updated_best_paper.title
+            },
+            ip_address=request.remote_addr
+        )
+        
+        return jsonify(best_paper_schema.dump(updated_best_paper)), 200
     except Exception as e:
-        db.session.rollback()
         current_app.logger.exception("Error updating best paper")
-        return jsonify({"error": str(e)}), 400
+        error_msg = f"System error occurred while updating best paper: {str(e)}"
+        log_audit_event(
+            event_type="best_paper.update.failed",
+            user_id=current_user_id,
+            details={"error": error_msg, "best_paper_id": best_paper_id if best_paper else best_paper_id, "exception_type": type(e).__name__, "exception_message": str(e)},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 40
 
 @research_bp.route('/best-papers/<best_paper_id>', methods=['DELETE'])
 @jwt_required()
 @require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
 def delete_best_paper(best_paper_id):
     """Delete a Best Paper submission."""
-    best_paper = BestPaper.query.get_or_404(best_paper_id)
+    current_user_id = get_jwt_identity()
+    best_paper = None
     try:
-        db.session.delete(best_paper)
-        db.session.commit()
+        best_paper = get_best_paper_by_id_util(best_paper_id)
+        if not best_paper:
+            error_msg = f"Resource not found: Best paper with ID {best_paper_id} does not exist"
+            log_audit_event(
+                event_type="best_paper.delete.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "best_paper_id": best_paper_id},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
+            
+        # Use utility function to delete best paper
+        delete_best_paper_util(
+            best_paper_id,
+            actor_id=current_user_id
+        )
+        
+        # Log successful deletion
+        log_audit_event(
+            event_type="best_paper.delete.success",
+            user_id=current_user_id,
+            details={
+                "best_paper_id": best_paper_id,
+                "title": best_paper.title,
+                "deleted_by": current_user_id
+            },
+            ip_address=request.remote_addr
+        )
+        
         return jsonify({"message": "Best Paper deleted"}), 200
     except Exception as e:
-        db.session.rollback()
         current_app.logger.exception("Error deleting best paper")
-        return jsonify({"error": str(e)}), 400
+        error_msg = f"System error occurred while deleting best paper: {str(e)}"
+        log_audit_event(
+            event_type="best_paper.delete.failed",
+            user_id=current_user_id,
+            details={"error": error_msg, "best_paper_id": best_paper_id if best_paper else best_paper_id, "exception_type": type(e).__name__, "exception_message": str(e)},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 40
 
 @research_bp.route('/best-papers/<best_paper_id>/submit', methods=['POST'])
 @jwt_required()
 def submit_best_paper(best_paper_id):
     """Submit a Best Paper for review."""
-    best_paper = BestPaper.query.get_or_404(best_paper_id)
+    current_user_id = get_jwt_identity()
+    best_paper = None
     try:
+        best_paper = get_best_paper_by_id_util(best_paper_id)
+        if not best_paper:
+            error_msg = f"Resource not found: Best paper with ID {best_paper_id} does not exist"
+            log_audit_event(
+                event_type="best_paper.submit.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "best_paper_id": best_paper_id},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
+            
         # Check if user is authorized to submit this best paper
-        current_user_id = get_jwt_identity()
-        # In a real implementation, you might want to check if the user
-        # is the author of the submission
-        best_paper.status = Status.UNDER_REVIEW
-        db.session.commit()
+        user = get_user_by_id_util(current_user_id)
+        if not user:
+            error_msg = "Authentication failed: User not found"
+            log_audit_event(
+                event_type="best_paper.submit.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "best_paper_id": best_paper_id},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
+            
+        # Only the creator of the best paper or admin can submit it
+        if not (
+                best_paper.created_by_id == current_user_id or
+                user.has_role(Role.ADMIN.value) or
+                user.has_role(Role.SUPERADMIN.value)
+        ):
+            error_msg = f"Authorization failed: You are not authorized to submit best paper ID {best_paper_id} for review"
+            log_audit_event(
+                event_type="best_paper.submit.failed",
+                user_id=current_user_id,
+                details={
+                    "error": error_msg, 
+                    "best_paper_id": best_paper_id,
+                    "user_role": user.role_associations[0].role.value if user.role_associations else "no_role",
+                    "best_paper_creator_id": best_paper.created_by_id
+                },
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 403
+
+        # Use utility function to update best paper status
+        updated_best_paper = update_best_paper_util(
+            best_paper,
+            status=Status.UNDER_REVIEW,
+            actor_id=current_user_id
+        )
+        
+        # Log successful submission
+        log_audit_event(
+            event_type="best_paper.submit.success",
+            user_id=current_user_id,
+            details={
+                "best_paper_id": best_paper_id,
+                "new_status": "UNDER_REVIEW",
+                "title": updated_best_paper.title
+            },
+            ip_address=request.remote_addr
+        )
+        
         return jsonify({"message": "Best Paper submitted for review"}), 200
     except Exception as e:
-        db.session.rollback()
         current_app.logger.exception("Error submitting best paper")
-        return jsonify({"error": str(e)}), 400
+        error_msg = f"System error occurred while submitting best paper: {str(e)}"
+        log_audit_event(
+            event_type="best_paper.submit.failed",
+            user_id=current_user_id,
+            details={"error": error_msg, "best_paper_id": best_paper_id if best_paper else best_paper_id, "exception_type": type(e).__name__, "exception_message": str(e)},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 400
 
 @research_bp.route('/best-papers/status', methods=['GET'])
 @jwt_required()
 def get_best_paper_submission_status():
     """Get submission status of Best Paper submissions for the current user."""
     current_user_id = get_jwt_identity()
-    user = User.query.get_or_404(current_user_id)
+    try:
+        user = get_user_by_id_util(current_user_id)
+        if not user:
+            error_msg = "Authentication failed: User not found"
+            log_audit_event(
+                event_type="best_paper.status.get.failed",
+                user_id=current_user_id,
+                details={"error": error_msg},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
 
-    if user.has_role(Role.ADMIN.value) or user.has_role(Role.SUPERADMIN.value):
-        # Admins can see all submissions
-        best_papers_query = BestPaper.query
-    elif user.has_role(Role.VERIFIER.value):
-        # Verifiers can see submissions assigned to them
-        best_papers_query = db.session.query(BestPaper).join(
-            BestPaperVerifiers, BestPaper.id == BestPaperVerifiers.best_paper_id
-        ).filter(
-            BestPaperVerifiers.user_id == current_user_id
+        # Build filters based on user permissions
+        filters = []
+        
+        if user.has_role(Role.ADMIN.value) or user.has_role(Role.SUPERADMIN.value):
+            # Admins can see all submissions
+            pass
+        elif user.has_role(Role.VERIFIER.value):
+            # Verifiers can see submissions assigned to them
+            from sqlalchemy import exists
+            filters.append(
+                exists().where(
+                    (BestPaperVerifiers.best_paper_id == BestPaper.id) & 
+                    (BestPaperVerifiers.user_id == current_user_id)
+                )
+            )
+        else:
+            # Regular users can only see their own submissions
+            filters.append(BestPaper.created_by_id == current_user_id)
+
+        # Count best papers by status
+        pending_count = db.session.query(BestPaper).filter(
+            *filters,
+            BestPaper.status == Status.PENDING
+        ).count()
+        
+        under_review_count = db.session.query(BestPaper).filter(
+            *filters,
+            BestPaper.status == Status.UNDER_REVIEW
+        ).count()
+        
+        accepted_count = db.session.query(BestPaper).filter(
+            *filters,
+            BestPaper.status == Status.ACCEPTED
+        ).count()
+        
+        rejected_count = db.session.query(BestPaper).filter(
+            *filters,
+            BestPaper.status == Status.REJECTED
+        ).count()
+
+        # Log successful retrieval
+        log_audit_event(
+            event_type="best_paper.status.get.success",
+            user_id=current_user_id,
+            details={
+                "user_role": user.role_associations[0].role.value if user.role_associations else "no_role",
+                "pending_count": pending_count,
+                "under_review_count": under_review_count,
+                "accepted_count": accepted_count,
+                "rejected_count": rejected_count
+            },
+            ip_address=request.remote_addr
         )
-    else:
-        # NOTE: BestPaper model currently lacks created_by field; this filter may need adjustment if field added.
-        # fallback to all until ownership implemented
-        best_papers_query = BestPaper.query.filter_by(
-            created_by_id=current_user_id)
 
-    pending_count = best_papers_query.filter(BestPaper.status==Status.PENDING).count()
-    under_review_count = best_papers_query.filter(BestPaper.status==Status.UNDER_REVIEW).count()
-    accepted_count = best_papers_query.filter(BestPaper.status==Status.ACCEPTED).count()
-    rejected_count = best_papers_query.filter(BestPaper.status==Status.REJECTED).count()
-
-    return jsonify({
-        "pending": pending_count,
-        "under_review": under_review_count,
-        "accepted": accepted_count,
-        "rejected": rejected_count
-    }), 200
+        return jsonify({
+            "pending": pending_count,
+            "under_review": under_review_count,
+            "accepted": accepted_count,
+            "rejected": rejected_count
+        }), 200
+    except Exception as e:
+        current_app.logger.exception("Error getting best paper submission status")
+        error_msg = f"System error occurred while retrieving best paper status: {str(e)}"
+        log_audit_event(
+            event_type="best_paper.status.get.failed",
+            user_id=current_user_id,
+            details={"error": error_msg, "exception_type": type(e).__name__, "exception_message": str(e)},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 40
 
 
 # Verifier Management Routes for Best Papers
@@ -371,35 +1024,79 @@ def get_best_paper_submission_status():
 @require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
 def assign_verifier_to_best_paper(best_paper_id, user_id):
     """Assign a verifier to a best paper."""
+    current_user_id = get_jwt_identity()
+    best_paper = None
+    user = None
     try:
         # Check if best paper exists
-        best_paper = BestPaper.query.get_or_404(best_paper_id)
+        best_paper = get_best_paper_by_id_util(best_paper_id)
+        if not best_paper:
+            error_msg = f"Resource not found: Best paper with ID {best_paper_id} does not exist"
+            log_audit_event(
+                event_type="best_paper.verifier.assign.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "best_paper_id": best_paper_id, "verifier_id": user_id},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
         
         # Check if user exists and is a verifier
-        user = User.query.get_or_404(user_id)
+        user = get_user_by_id_util(user_id)
+        if not user:
+            error_msg = f"Resource not found: User with ID {user_id} does not exist"
+            log_audit_event(
+                event_type="best_paper.verifier.assign.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "best_paper_id": best_paper_id, "verifier_id": user_id},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
         if not user.has_role(Role.VERIFIER.value):
-            return jsonify({"error": "User is not a verifier"}), 400
+            error_msg = f"Validation failed: User with ID {user_id} is not a verifier"
+            log_audit_event(
+                event_type="best_paper.verifier.assign.failed",
+                user_id=current_user_id,
+                details={
+                    "error": error_msg, 
+                    "best_paper_id": best_paper_id, 
+                    "verifier_id": user_id,
+                    "user_role": user.role_associations[0].role.value if user.role_associations else "no_role"
+                },
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 40
         
-        # Check if already assigned
-        existing_assignment = BestPaperVerifiers.query.filter_by(
-            best_paper_id=best_paper_id, user_id=user_id).first()
-        
-        if existing_assignment:
-            return jsonify({"message": "Verifier already assigned to this best paper"}), 200
-        
-        # Create new assignment
-        assignment = BestPaperVerifiers(
-            best_paper_id=best_paper_id,
-            user_id=user_id
+        # Use utility function to assign verifier
+        updated_best_paper = assign_best_paper_verifier_util(
+            best_paper,
+            user,
+            actor_id=current_user_id
         )
-        db.session.add(assignment)
-        db.session.commit()
+        
+        # Log successful assignment
+        log_audit_event(
+            event_type="best_paper.verifier.assign.success",
+            user_id=current_user_id,
+            details={
+                "best_paper_id": best_paper_id,
+                "verifier_id": user_id,
+                "verifier_username": user.username,
+                "title": updated_best_paper.title
+            },
+            ip_address=request.remote_addr
+        )
         
         return jsonify({"message": "Verifier assigned successfully"}), 201
     except Exception as e:
-        db.session.rollback()
         current_app.logger.exception("Error assigning verifier to best paper")
-        return jsonify({"error": str(e)}), 400
+        error_msg = f"System error occurred while assigning verifier to best paper: {str(e)}"
+        log_audit_event(
+            event_type="best_paper.verifier.assign.failed",
+            user_id=current_user_id,
+            details={"error": error_msg, "best_paper_id": best_paper_id if best_paper else best_paper_id, "verifier_id": user_id if user else user_id, "exception_type": type(e).__name__, "exception_message": str(e)},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 400
 
 
 @research_bp.route('/best-papers/<best_paper_id>/verifiers/<user_id>', methods=['DELETE'])
@@ -407,38 +1104,88 @@ def assign_verifier_to_best_paper(best_paper_id, user_id):
 @require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
 def unassign_verifier_from_best_paper(best_paper_id, user_id):
     """Unassign a verifier from a best paper."""
+    current_user_id = get_jwt_identity()
+    best_paper = None
+    user = None
     try:
         # Check if best paper exists
-        best_paper = BestPaper.query.get_or_404(best_paper_id)
+        best_paper = get_best_paper_by_id_util(best_paper_id)
+        if not best_paper:
+            error_msg = f"Resource not found: Best paper with ID {best_paper_id} does not exist"
+            log_audit_event(
+                event_type="best_paper.verifier.unassign.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "best_paper_id": best_paper_id, "verifier_id": user_id},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
         
-        # Check if assignment exists
-        assignment = BestPaperVerifiers.query.filter_by(
-            best_paper_id=best_paper_id, user_id=user_id).first_or_404()
+        # Check if user exists
+        user = get_user_by_id_util(user_id)
+        if not user:
+            error_msg = f"Resource not found: User with ID {user_id} does not exist"
+            log_audit_event(
+                event_type="best_paper.verifier.unassign.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "best_paper_id": best_paper_id, "verifier_id": user_id},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
         
-        db.session.delete(assignment)
-        db.session.commit()
+        # Use utility function to remove verifier
+        updated_best_paper = remove_best_paper_verifier_util(
+            best_paper,
+            user,
+            actor_id=current_user_id
+        )
+        
+        # Log successful unassignment
+        log_audit_event(
+            event_type="best_paper.verifier.unassign.success",
+            user_id=current_user_id,
+            details={
+                "best_paper_id": best_paper_id,
+                "verifier_id": user_id,
+                "verifier_username": user.username,
+                "title": updated_best_paper.title
+            },
+            ip_address=request.remote_addr
+        )
         
         return jsonify({"message": "Verifier unassigned successfully"}), 200
     except Exception as e:
-        db.session.rollback()
         current_app.logger.exception("Error unassigning verifier from best paper")
-        return jsonify({"error": str(e)}), 400
+        error_msg = f"System error occurred while unassigning verifier from best paper: {str(e)}"
+        log_audit_event(
+            event_type="best_paper.verifier.unassign.failed",
+            user_id=current_user_id,
+            details={"error": error_msg, "best_paper_id": best_paper_id if best_paper else best_paper_id, "verifier_id": user_id if user else user_id, "exception_type": type(e).__name__, "exception_message": str(e)},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 400
 
 
 @research_bp.route('/best-papers/<best_paper_id>/verifiers', methods=['GET'])
 @jwt_required()
 def get_verifiers_for_best_paper(best_paper_id):
     """Get all verifiers assigned to a best paper."""
+    current_user_id = get_jwt_identity()
+    best_paper = None
     try:
         # Check if best paper exists
-        best_paper = BestPaper.query.get_or_404(best_paper_id)
+        best_paper = get_best_paper_by_id_util(best_paper_id)
+        if not best_paper:
+            error_msg = f"Resource not found: Best paper with ID {best_paper_id} does not exist"
+            log_audit_event(
+                event_type="best_paper.verifiers.get.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "best_paper_id": best_paper_id},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
         
-        # Get all verifiers for this best paper
-        verifiers = db.session.query(User).join(
-            BestPaperVerifiers, User.id == BestPaperVerifiers.user_id
-        ).filter(
-            BestPaperVerifiers.best_paper_id == best_paper_id
-        ).all()
+        # Get all verifiers for this best paper using the relationship
+        verifiers = best_paper.verifiers
         
         # Convert to simple dict format
         verifiers_data = []
@@ -450,31 +1197,84 @@ def get_verifiers_for_best_paper(best_paper_id):
                 'employee_id': verifier.employee_id
             })
         
+        # Log successful retrieval
+        log_audit_event(
+            event_type="best_paper.verifiers.get.success",
+            user_id=current_user_id,
+            details={
+                "best_paper_id": best_paper_id,
+                "verifiers_count": len(verifiers_data),
+                "verifiers": [v['username'] for v in verifiers_data]
+            },
+            ip_address=request.remote_addr
+        )
+        
         return jsonify(verifiers_data), 200
     except Exception as e:
         current_app.logger.exception("Error getting verifiers for best paper")
-        return jsonify({"error": str(e)}), 400
+        error_msg = f"System error occurred while retrieving verifiers for best paper: {str(e)}"
+        log_audit_event(
+            event_type="best_paper.verifiers.get.failed",
+            user_id=current_user_id,
+            details={"error": error_msg, "best_paper_id": best_paper_id if best_paper else best_paper_id, "exception_type": type(e).__name__, "exception_message": str(e)},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 400
 
 
 @research_bp.route('/verifiers/<user_id>/best-papers', methods=['GET'])
 @jwt_required()
 def get_best_papers_for_verifier(user_id):
     """Get all best papers assigned to a verifier."""
+    current_user_id = get_jwt_identity()
+    user = None
     try:
         # Check if user exists
-        user = User.query.get_or_404(user_id)
+        user = get_user_by_id_util(user_id)
+        if not user:
+            error_msg = f"Resource not found: User with ID {user_id} does not exist"
+            log_audit_event(
+                event_type="verifier.best_papers.get.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "verifier_id": user_id},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
         
-        # Get all best papers assigned to this verifier
+        # Get all best papers assigned to this verifier using the relationship
+        best_papers = user.best_papers_assigned  # This assumes there's a relationship defined
+        
+        # If the relationship doesn't exist, we need to query manually
+        from sqlalchemy.orm import joinedload
         best_papers = db.session.query(BestPaper).join(
             BestPaperVerifiers, BestPaper.id == BestPaperVerifiers.best_paper_id
         ).filter(
             BestPaperVerifiers.user_id == user_id
-        ).all()
+        ).options(joinedload(BestPaper.author)).all()
+        
+        # Log successful retrieval
+        log_audit_event(
+            event_type="verifier.best_papers.get.success",
+            user_id=current_user_id,
+            details={
+                "verifier_id": user_id,
+                "best_papers_count": len(best_papers),
+                "best_papers": [bp.title for bp in best_papers]
+            },
+            ip_address=request.remote_addr
+        )
         
         return jsonify(best_papers_schema.dump(best_papers)), 200
     except Exception as e:
         current_app.logger.exception("Error getting best papers for verifier")
-        return jsonify({"error": str(e)}), 400
+        error_msg = f"System error occurred while retrieving best papers for verifier: {str(e)}"
+        log_audit_event(
+            event_type="verifier.best_papers.get.failed",
+            user_id=current_user_id,
+            details={"error": error_msg, "verifier_id": user_id if user else user_id, "exception_type": type(e).__name__, "exception_message": str(e)},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 400
 
 
 @research_bp.route('/best-papers/bulk-assign-verifiers', methods=['POST'])
@@ -482,51 +1282,107 @@ def get_best_papers_for_verifier(user_id):
 @require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
 def bulk_assign_verifiers_to_best_papers():
     """Bulk assign verifiers to multiple best papers."""
+    current_user_id = get_jwt_identity()
     try:
         data = request.get_json()
         
         # Validate input
         if not data or 'best_paper_ids' not in data or 'user_ids' not in data:
-            return jsonify({"error": "Missing best_paper_ids or user_ids in request"}), 400
+            error_msg = "Request validation failed: Missing required fields 'best_paper_ids' or 'user_ids' in request body"
+            log_audit_event(
+                event_type="best_paper.verifiers.bulk_assign.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "provided_fields": list(data.keys()) if data else []},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 400
         
         best_paper_ids = data['best_paper_ids']
         user_ids = data['user_ids']
         
         # Validate that all best papers and users exist
-        best_papers = BestPaper.query.filter(BestPaper.id.in_(best_paper_ids)).all()
-        users = User.query.filter(User.id.in_(user_ids)).all()
+        best_papers = [get_best_paper_by_id_util(bpid) for bpid in best_paper_ids]
+        users = [get_user_by_id_util(uid) for uid in user_ids]
+        
+        # Check if any best papers or users are None (not found)
+        if None in best_papers:
+            missing_best_papers = [bpid for i, bpid in enumerate(best_paper_ids) if best_papers[i] is None]
+            error_msg = f"Resource validation failed: Best papers with IDs {missing_best_papers} do not exist"
+            log_audit_event(
+                event_type="best_paper.verifiers.bulk_assign.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "missing_best_papers": missing_best_papers},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
+        if None in users:
+            missing_users = [uid for i, uid in enumerate(user_ids) if users[i] is None]
+            error_msg = f"Resource validation failed: Users with IDs {missing_users} do not exist"
+            log_audit_event(
+                event_type="best_paper.verifiers.bulk_assign.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "missing_users": missing_users},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
         
         # Check if all users are verifiers
         non_verifiers = [user for user in users if not user.has_role(Role.VERIFIER.value)]
         if non_verifiers:
-            return jsonify({"error": "Some users are not verifiers"}), 400
+            non_verifier_ids = [str(user.id) for user in non_verifiers]
+            error_msg = f"Validation failed: Users with IDs {non_verifier_ids} are not verifiers"
+            log_audit_event(
+                event_type="best_paper.verifiers.bulk_assign.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "non_verifier_ids": non_verifier_ids},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 40
         
-        # Create assignments
+        # Create assignments using utility functions
         assignments_created = 0
         for best_paper_id in best_paper_ids:
             for user_id in user_ids:
+                # Get the best paper and user objects
+                best_paper = get_best_paper_by_id_util(best_paper_id)
+                user = get_user_by_id_util(user_id)
+                
                 # Check if already assigned
-                existing_assignment = BestPaperVerifiers.query.filter_by(
+                existing_assignment = db.session.query(BestPaperVerifiers).filter_by(
                     best_paper_id=best_paper_id, user_id=user_id).first()
                 
                 if not existing_assignment:
-                    assignment = BestPaperVerifiers(
-                        best_paper_id=best_paper_id,
-                        user_id=user_id
-                    )
-                    db.session.add(assignment)
+                    # Use the utility function to assign verifier
+                    assign_best_paper_verifier_util(best_paper, user, actor_id=current_user_id)
                     assignments_created += 1
         
-        db.session.commit()
+        # Log successful bulk assignment
+        log_audit_event(
+            event_type="best_paper.verifiers.bulk_assign.success",
+            user_id=current_user_id,
+            details={
+                "best_paper_ids": best_paper_ids,
+                "user_ids": user_ids,
+                "assignments_created": assignments_created,
+                "total_possible_assignments": len(best_paper_ids) * len(user_ids)
+            },
+            ip_address=request.remote_addr
+        )
         
         return jsonify({
             "message": f"Successfully created {assignments_created} assignments",
             "assignments_created": assignments_created
         }), 201
     except Exception as e:
-        db.session.rollback()
         current_app.logger.exception("Error in bulk assigning verifiers to best papers")
-        return jsonify({"error": str(e)}), 400
+        error_msg = f"System error occurred during bulk assignment of verifiers: {str(e)}"
+        log_audit_event(
+            event_type="best_paper.verifiers.bulk_assign.failed",
+            user_id=current_user_id,
+            details={"error": error_msg, "exception_type": type(e).__name__, "exception_message": str(e)},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 40
 
 
 @research_bp.route('/best-papers/bulk-unassign-verifiers', methods=['POST'])
@@ -534,23 +1390,52 @@ def bulk_assign_verifiers_to_best_papers():
 @require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
 def bulk_unassign_verifiers_from_best_papers():
     """Bulk unassign verifiers from multiple best papers."""
+    current_user_id = get_jwt_identity()
     try:
         data = request.get_json()
         
         # Validate input
         if not data or 'best_paper_ids' not in data or 'user_ids' not in data:
-            return jsonify({"error": "Missing best_paper_ids or user_ids in request"}), 400
+            error_msg = "Request validation failed: Missing required fields 'best_paper_ids' or 'user_ids' in request body"
+            log_audit_event(
+                event_type="best_paper.verifiers.bulk_unassign.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "provided_fields": list(data.keys()) if data else []},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 400
         
         best_paper_ids = data['best_paper_ids']
         user_ids = data['user_ids']
         
         # Delete assignments
-        assignments_deleted = BestPaperVerifiers.query.filter(
+        assignments_deleted = db.session.query(BestPaperVerifiers).filter(
             BestPaperVerifiers.best_paper_id.in_(best_paper_ids),
             BestPaperVerifiers.user_id.in_(user_ids)
         ).delete(synchronize_session=False)
         
-        db.session.commit()
+        # Explicitly commit the transaction
+        if not safe_commit():
+            error_msg = "Database commit failed during bulk unassignment"
+            log_audit_event(
+                event_type="best_paper.verifiers.bulk_unassign.failed",
+                user_id=current_user_id,
+                details={"error": error_msg},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 500
+        
+        # Log successful bulk unassignment
+        log_audit_event(
+            event_type="best_paper.verifiers.bulk_unassign.success",
+            user_id=current_user_id,
+            details={
+                "best_paper_ids": best_paper_ids,
+                "user_ids": user_ids,
+                "assignments_deleted": assignments_deleted
+            },
+            ip_address=request.remote_addr
+        )
         
         return jsonify({
             "message": f"Successfully deleted {assignments_deleted} assignments",
@@ -559,4 +1444,11 @@ def bulk_unassign_verifiers_from_best_papers():
     except Exception as e:
         db.session.rollback()
         current_app.logger.exception("Error in bulk unassigning verifiers from best papers")
-        return jsonify({"error": str(e)}), 400
+        error_msg = f"System error occurred during bulk unassignment of verifiers: {str(e)}"
+        log_audit_event(
+            event_type="best_paper.verifiers.bulk_unassign.failed",
+            user_id=current_user_id,
+            details={"error": error_msg, "exception_type": type(e).__name__, "exception_message": str(e)},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 400
