@@ -42,18 +42,38 @@ award_schema = AwardsSchema()
 awards_schema = AwardsSchema(many=True)
 
 def log_audit_event(event_type, user_id, details, ip_address=None, target_user_id=None):
-    """Helper function to create audit logs"""
+    """Helper function to create audit logs with proper transaction handling"""
     try:
+        # Create audit log without committing to avoid transaction issues
         create_audit_log_util(
             event=event_type,
             user_id=user_id,
             target_user_id=target_user_id,
             ip=ip_address,
             detail=json.dumps(details) if isinstance(details, dict) else details,
-            actor_id=user_id
+            actor_id=user_id,
+            commit=False  # Don't commit here to avoid transaction issues
         )
+        db.session.commit() # Commit only this specific operation
     except Exception as e:
         current_app.logger.error(f"Failed to create audit log: {str(e)}")
+        try:
+            db.session.rollback()
+        except:
+            pass  # Ignore rollback errors in error handling
+
+def safe_commit():
+    """Safely commit the database session with error handling"""
+    try:
+        db.session.commit()
+        return True
+    except Exception as e:
+        current_app.logger.error(f"Database commit failed: {str(e)}")
+        try:
+            db.session.rollback()
+        except:
+            current_app.logger.error("Database rollback also failed")
+        return False
 
 @research_bp.route('/awards', methods=['POST'])
 @jwt_required()
@@ -61,6 +81,7 @@ def create_award():
     """Create a new research award."""
     current_user_id = get_jwt_identity()
     user = None
+    award = None
     try:
         # Get the current user ID from JWT
         user = get_user_by_id_util(current_user_id)
@@ -145,7 +166,7 @@ def create_award():
                         details={"error": error_msg, "filename": fwd_file.filename},
                         ip_address=request.remote_addr
                     )
-                    return jsonify({"error": error_msg}), 40
+                    return jsonify({"error": error_msg}), 400
                 unique_filename = f"{uuid.uuid4().hex}_{filename}"
                 file_path = os.path.join(upload_folder, unique_filename)
                 fwd_file.save(file_path)
@@ -211,6 +232,31 @@ def create_award():
             )
             return jsonify({"error": error_msg}), 400
 
+        # Check if submission window is open for awards
+        cycle_id = data.get('cycle_id')
+        if cycle_id:
+            from app.utils.model_utils.cycle_utils import get_cycle_by_id as get_cycle_by_id_util
+            cycle = get_cycle_by_id_util(cycle_id)
+            if cycle:
+                from app.models.Cycle import CyclePhase
+                from app.utils.model_utils.cycle_utils import list_windows
+                from datetime import date
+                active_windows = list_windows(cycle_id=cycle_id, reference_date=date.today())
+                award_windows = [w for w in active_windows if w.phase == CyclePhase.AWARD_SUBMISSION]
+                if not award_windows:
+                    error_msg = f"Submission validation failed: Award submissions are not allowed for cycle {cycle.name} at this time"
+                    log_audit_event(
+                        event_type="award.create.failed",
+                        user_id=current_user_id,
+                        details={
+                            "error": error_msg,
+                            "cycle_id": cycle_id,
+                            "cycle_name": cycle.name
+                        },
+                        ip_address=request.remote_addr
+                    )
+                    return jsonify({"error": error_msg}), 400
+
         # Inject resolved author_id and any uploaded file paths
         data['author_id'] = author_id
         if full_paper_path:
@@ -248,17 +294,48 @@ def create_award():
             f"Dear {user.username},\n\nYour award with ID {award.id} has been created successfully and is pending submission for review.\n Details:\nTitle: {award.title}\nAward ID: {award.id}\n\nBest regards,\nResearch Section,AIIMS"
         )        
         return jsonify(award_schema.dump(award)), 201
+    except ValueError as ve:
+        # Handle specific validation errors from model constraints
+        if "Submissions are allowed only during the CyclePhase.AWARD_SUBMISSION period" in str(ve):
+            error_msg = "Submission validation failed: Award submissions are not allowed at this time. Please check the active cycle windows."
+            log_audit_event(
+                event_type="award.create.failed",
+                user_id=current_user_id if current_user_id else (user.id if user else None),
+                details={"error": error_msg, "exception_type": "ValueError", "exception_message": str(ve)},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 400
+        else:
+            current_app.logger.exception("ValueError creating award")
+            error_msg = f"Validation error occurred while creating award: {str(ve)}"
+            log_audit_event(
+                event_type="award.create.failed",
+                user_id=current_user_id if current_user_id else (user.id if user else None),
+                details={"error": error_msg, "exception_type": "ValueError", "exception_message": str(ve)},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 400
     except Exception as e:
         current_app.logger.exception("Error creating award")
         error_msg = f"System error occurred while creating award: {str(e)}"
         
-        # Log the failure
-        log_audit_event(
-            event_type="award.create.failed",
-            user_id=current_user_id if current_user_id else (user.id if user else None),
-            details={"error": error_msg},
-            ip_address=request.remote_addr
-        )
+        # Try to log the failure, but handle transaction issues gracefully
+        try:
+            log_audit_event(
+                event_type="award.create.failed",
+                user_id=current_user_id if current_user_id else (user.id if user else None),
+                details={"error": error_msg, "exception_type": type(e).__name__, "exception_message": str(e)},
+                ip_address=request.remote_addr
+            )
+        except:
+            # If logging fails, at least log to app logger
+            current_app.logger.error(f"Failed to log audit event for award creation failure: {str(e)}")
+        
+        # Perform a safe rollback
+        try:
+            db.session.rollback()
+        except:
+            current_app.logger.error("Database rollback failed during error handling")
         
         return jsonify({"error": error_msg}), 400
 
@@ -515,7 +592,7 @@ def get_awards():
                 details={"error": error_msg, "invalid_sort_by": sort_by},
                 ip_address=request.remote_addr
             )
-            return jsonify({"error": error_msg}), 40
+            return jsonify({"error": error_msg}), 400
         
         # Calculate offset
         offset = (page - 1) * page_size
@@ -579,7 +656,7 @@ def get_awards():
         log_audit_event(
             event_type="award.list.failed",
             user_id=current_user_id,
-            details={"error": error_msg},
+            details={"error": error_msg, "exception_type": type(e).__name__, "exception_message": str(e)},
             ip_address=request.remote_addr
         )
         return jsonify({"error": error_msg}), 400
@@ -628,7 +705,7 @@ def get_award(award_id):
         log_audit_event(
             event_type="award.get.failed",
             user_id=current_user_id,
-            details={"error": error_msg, "award_id": award_id},
+            details={"error": error_msg, "award_id": award_id, "exception_type": type(e).__name__, "exception_message": str(e)},
             ip_address=request.remote_addr
         )
         return jsonify({"error": error_msg}), 400
@@ -723,7 +800,7 @@ def update_award(award_id):
         log_audit_event(
             event_type="award.update.failed",
             user_id=current_user_id,
-            details={"error": error_msg, "award_id": award_id if award else award_id},
+            details={"error": error_msg, "award_id": award_id if award else award_id, "exception_type": type(e).__name__, "exception_message": str(e)},
             ip_address=request.remote_addr
         )
         return jsonify({"error": error_msg}), 400
@@ -772,7 +849,7 @@ def delete_award(award_id):
         log_audit_event(
             event_type="award.delete.failed",
             user_id=current_user_id,
-            details={"error": error_msg, "award_id": award_id if award else award_id},
+            details={"error": error_msg, "award_id": award_id if award else award_id, "exception_type": type(e).__name__, "exception_message": str(e)},
             ip_address=request.remote_addr
         )
         return jsonify({"error": error_msg}), 400
@@ -853,7 +930,7 @@ def submit_award(award_id):
         log_audit_event(
             event_type="award.submit.failed",
             user_id=current_user_id,
-            details={"error": error_msg, "award_id": award_id if award else award_id},
+            details={"error": error_msg, "award_id": award_id if award else award_id, "exception_type": type(e).__name__, "exception_message": str(e)},
             ip_address=request.remote_addr
         )
         return jsonify({"error": error_msg}), 400
@@ -942,7 +1019,7 @@ def get_award_submission_status():
         log_audit_event(
             event_type="award.status.get.failed",
             user_id=current_user_id,
-            details={"error": error_msg},
+            details={"error": error_msg, "exception_type": type(e).__name__, "exception_message": str(e)},
             ip_address=request.remote_addr
         )
         return jsonify({"error": error_msg}), 400
@@ -1024,7 +1101,7 @@ def assign_verifier_to_award(award_id, user_id):
         log_audit_event(
             event_type="award.verifier.assign.failed",
             user_id=current_user_id,
-            details={"error": error_msg, "award_id": award_id if award else award_id, "verifier_id": user_id if user else user_id},
+            details={"error": error_msg, "award_id": award_id if award else award_id, "verifier_id": user_id if user else user_id, "exception_type": type(e).__name__, "exception_message": str(e)},
             ip_address=request.remote_addr
         )
         return jsonify({"error": error_msg}), 400
@@ -1090,7 +1167,7 @@ def unassign_verifier_from_award(award_id, user_id):
         log_audit_event(
             event_type="award.verifier.unassign.failed",
             user_id=current_user_id,
-            details={"error": error_msg, "award_id": award_id if award else award_id, "verifier_id": user_id if user else user_id},
+            details={"error": error_msg, "award_id": award_id if award else award_id, "verifier_id": user_id if user else user_id, "exception_type": type(e).__name__, "exception_message": str(e)},
             ip_address=request.remote_addr
         )
         return jsonify({"error": error_msg}), 400
@@ -1147,7 +1224,7 @@ def get_verifiers_for_award(award_id):
         log_audit_event(
             event_type="award.verifiers.get.failed",
             user_id=current_user_id,
-            details={"error": error_msg, "award_id": award_id if award else award_id},
+            details={"error": error_msg, "award_id": award_id if award else award_id, "exception_type": type(e).__name__, "exception_message": str(e)},
             ip_address=request.remote_addr
         )
         return jsonify({"error": error_msg}), 400
@@ -1202,7 +1279,7 @@ def get_awards_for_verifier(user_id):
         log_audit_event(
             event_type="verifier.awards.get.failed",
             user_id=current_user_id,
-            details={"error": error_msg, "verifier_id": user_id if user else user_id},
+            details={"error": error_msg, "verifier_id": user_id if user else user_id, "exception_type": type(e).__name__, "exception_message": str(e)},
             ip_address=request.remote_addr
         )
         return jsonify({"error": error_msg}), 400
@@ -1310,7 +1387,7 @@ def bulk_assign_verifiers_to_awards():
         log_audit_event(
             event_type="award.verifiers.bulk_assign.failed",
             user_id=current_user_id,
-            details={"error": error_msg},
+            details={"error": error_msg, "exception_type": type(e).__name__, "exception_message": str(e)},
             ip_address=request.remote_addr
         )
         return jsonify({"error": error_msg}), 400
@@ -1345,7 +1422,16 @@ def bulk_unassign_verifiers_from_awards():
             AwardVerifiers.user_id.in_(user_ids)
         ).delete(synchronize_session=False)
         
-        db.session.commit()
+        # Explicitly commit the transaction
+        if not safe_commit():
+            error_msg = "Database commit failed during bulk unassignment"
+            log_audit_event(
+                event_type="award.verifiers.bulk_unassign.failed",
+                user_id=current_user_id,
+                details={"error": error_msg},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 500
         
         # Log successful bulk unassignment
         log_audit_event(
@@ -1370,7 +1456,7 @@ def bulk_unassign_verifiers_from_awards():
         log_audit_event(
             event_type="award.verifiers.bulk_unassign.failed",
             user_id=current_user_id,
-            details={"error": error_msg},
+            details={"error": error_msg, "exception_type": type(e).__name__, "exception_message": str(e)},
             ip_address=request.remote_addr
         )
         return jsonify({"error": error_msg}), 400
