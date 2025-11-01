@@ -33,20 +33,46 @@ from app.utils.model_utils.user_utils import (
     get_user_by_id as get_user_by_id_util,
     list_users as list_users_util,
 )
+from app.utils.model_utils.audit_log_utils import (
+    create_audit_log as create_audit_log_util,
+    record_event as record_event_util,
+)
 
 award_schema = AwardsSchema()
 awards_schema = AwardsSchema(many=True)
+
+def log_audit_event(event_type, user_id, details, ip_address=None, target_user_id=None):
+    """Helper function to create audit logs"""
+    try:
+        create_audit_log_util(
+            event=event_type,
+            user_id=user_id,
+            target_user_id=target_user_id,
+            ip=ip_address,
+            detail=json.dumps(details) if isinstance(details, dict) else details,
+            actor_id=user_id
+        )
+    except Exception as e:
+        current_app.logger.error(f"Failed to create audit log: {str(e)}")
 
 @research_bp.route('/awards', methods=['POST'])
 @jwt_required()
 def create_award():
     """Create a new research award."""
+    current_user_id = get_jwt_identity()
+    user = None
     try:
         # Get the current user ID from JWT
-        current_user_id = get_jwt_identity()
         user = get_user_by_id_util(current_user_id)
         if not user:
-            return jsonify({"error": "User not found"}), 404
+            error_msg = "Authentication failed: User not found"
+            log_audit_event(
+                event_type="award.create.failed",
+                user_id=current_user_id,
+                details={"error": error_msg},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
 
         # Handle both JSON and multipart form-data (for file uploads)
         if request.is_json:
@@ -56,14 +82,28 @@ def create_award():
         else:
             data_json = request.form.get('data')
             if not data_json:
-                return jsonify({"error": "No data provided"}), 400
+                error_msg = "Request validation failed: No data provided in form request"
+                log_audit_event(
+                    event_type="award.create.failed",
+                    user_id=current_user_id,
+                    details={"error": error_msg},
+                    ip_address=request.remote_addr
+                )
+                return jsonify({"error": error_msg}), 400
 
             try:
                 # Set created_by_id in data for schema load
                 data = json.loads(data_json)
                 data['created_by_id'] = current_user_id
             except json.JSONDecodeError:
-                return jsonify({"error": "Invalid JSON data"}), 400
+                error_msg = "Request validation failed: Invalid JSON data provided"
+                log_audit_event(
+                    event_type="award.create.failed",
+                    user_id=current_user_id,
+                    details={"error": error_msg},
+                    ip_address=request.remote_addr
+                )
+                return jsonify({"error": error_msg}), 400
 
             # Handle file uploads
             full_paper_path = None
@@ -75,6 +115,15 @@ def create_award():
                 upload_folder = current_app.config.get('UPLOAD_FOLDER', 'uploads')
                 os.makedirs(upload_folder, exist_ok=True)
                 filename = secure_filename(pdf_file.filename)
+                if not filename:
+                    error_msg = "File validation failed: Invalid filename provided"
+                    log_audit_event(
+                        event_type="award.create.failed",
+                        user_id=current_user_id,
+                        details={"error": error_msg, "filename": pdf_file.filename},
+                        ip_address=request.remote_addr
+                    )
+                    return jsonify({"error": error_msg}), 400
                 unique_filename = f"{uuid.uuid4().hex}_{filename}"
                 file_path = os.path.join(upload_folder, unique_filename)
                 pdf_file.save(file_path)
@@ -88,6 +137,15 @@ def create_award():
                 upload_folder = current_app.config.get('UPLOAD_FOLDER', 'uploads')
                 os.makedirs(upload_folder, exist_ok=True)
                 filename = secure_filename(fwd_file.filename)
+                if not filename:
+                    error_msg = "File validation failed: Invalid forwarding letter filename provided"
+                    log_audit_event(
+                        event_type="award.create.failed",
+                        user_id=current_user_id,
+                        details={"error": error_msg, "filename": fwd_file.filename},
+                        ip_address=request.remote_addr
+                    )
+                    return jsonify({"error": error_msg}), 40
                 unique_filename = f"{uuid.uuid4().hex}_{filename}"
                 file_path = os.path.join(upload_folder, unique_filename)
                 fwd_file.save(file_path)
@@ -114,7 +172,14 @@ def create_award():
                 a0 = authors_data[0] or {}
                 author_name = a0.get('name', '').strip()
                 if not author_name:
-                    return jsonify({"error": "Author name is required"}), 400
+                    error_msg = "Validation failed: Author name is required to create an award"
+                    log_audit_event(
+                        event_type="award.create.failed",
+                        user_id=current_user_id,
+                        details={"error": error_msg},
+                        ip_address=request.remote_addr
+                    )
+                    return jsonify({"error": error_msg}), 400
                 
                 # Use get_or_create_author utility
                 author, created = get_or_create_author_util(
@@ -126,11 +191,25 @@ def create_award():
                 author_id = str(author.id)
                 current_app.logger.info(f"{'Created' if created else 'Found'} author {author.name} with ID {author_id} for award")
             else:
-                return jsonify({"error": "Author information is required"}), 400
+                error_msg = "Validation failed: Author information is required to create an award"
+                log_audit_event(
+                    event_type="award.create.failed",
+                    user_id=current_user_id,
+                    details={"error": error_msg},
+                    ip_address=request.remote_addr
+                )
+                return jsonify({"error": error_msg}), 40
 
         # Validate required fields
         if 'paper_category_id' not in data:
-            return jsonify({"error": "paper_category_id is required"}), 400
+            error_msg = "Validation failed: paper_category_id is required to create an award"
+            log_audit_event(
+                event_type="award.create.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "missing_field": "paper_category_id"},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 400
 
         # Inject resolved author_id and any uploaded file paths
         data['author_id'] = author_id
@@ -145,6 +224,20 @@ def create_award():
             **data
         )
         
+        # Log successful creation
+        log_audit_event(
+            event_type="award.create.success",
+            user_id=current_user_id,
+            details={
+                "award_id": award.id,
+                "title": award.title,
+                "author_id": author_id,
+                "has_pdf": bool(full_paper_path),
+                "has_forwarding_letter": bool(forwarding_letter_path)
+            },
+            ip_address=request.remote_addr
+        )
+        
         # Send notification (SMS and Email) to the user who created the award
         send_sms(
             user.mobile, f"Your award id : {award.id} has been created successfully and is pending submission for review."
@@ -157,38 +250,142 @@ def create_award():
         return jsonify(award_schema.dump(award)), 201
     except Exception as e:
         current_app.logger.exception("Error creating award")
-        return jsonify({"error": str(e)}), 400
+        error_msg = f"System error occurred while creating award: {str(e)}"
+        
+        # Log the failure
+        log_audit_event(
+            event_type="award.create.failed",
+            user_id=current_user_id if current_user_id else (user.id if user else None),
+            details={"error": error_msg},
+            ip_address=request.remote_addr
+        )
+        
+        return jsonify({"error": error_msg}), 400
 
 
 @research_bp.route('/awards/<abstract_id>/pdf', methods=['GET'])
 @jwt_required()
 def get_awards_pdf(abstract_id):
-    abstract = get_award_by_id_util(abstract_id)
-    if not abstract or not abstract.full_paper_path:
-        abort(404, description="No PDF uploaded for this abstract.")
+    current_user_id = get_jwt_identity()
     try:
+        abstract = get_award_by_id_util(abstract_id)
+        if not abstract:
+            error_msg = f"Resource not found: Award with ID {abstract_id} does not exist"
+            log_audit_event(
+                event_type="award.pdf.access.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "award_id": abstract_id},
+                ip_address=request.remote_addr
+            )
+            abort(404, description="Award not found.")
+        
+        if not abstract.full_paper_path:
+            error_msg = f"File not found: No PDF uploaded for award ID {abstract_id}"
+            log_audit_event(
+                event_type="award.pdf.access.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "award_id": abstract_id},
+                ip_address=request.remote_addr
+            )
+            abort(404, description="No PDF uploaded for this award.")
+        
+        # Log successful access
+        log_audit_event(
+            event_type="award.pdf.access.success",
+            user_id=current_user_id,
+            details={
+                "award_id": abstract_id,
+                "file_path": abstract.full_paper_path
+            },
+            ip_address=request.remote_addr
+        )
+        
         return send_file(abstract.full_paper_path, mimetype='application/pdf', as_attachment=False)
+    except FileNotFoundError:
+        error_msg = f"File access error: PDF file not found at path {abstract.full_paper_path if 'abstract' in locals() else 'unknown'}"
+        log_audit_event(
+            event_type="award.pdf.access.failed",
+            user_id=current_user_id,
+            details={"error": error_msg, "award_id": abstract_id},
+            ip_address=request.remote_addr
+        )
+        abort(404, description="PDF file not found.")
     except Exception as e:
         current_app.logger.exception("Error sending PDF file")
-        abort(404, description="PDF file not found.")
+        error_msg = f"System error occurred while accessing PDF: {str(e)}"
+        log_audit_event(
+            event_type="award.pdf.access.failed",
+            user_id=current_user_id,
+            details={"error": error_msg, "award_id": abstract_id},
+            ip_address=request.remote_addr
+        )
+        abort(500, description="Internal server error.")
 
 
 @research_bp.route('/awards/<abstract_id>/forwarding_pdf', methods=['GET'])
 @jwt_required()
 def get_awards_forwarding_pdf(abstract_id):
-    abstract = get_award_by_id_util(abstract_id)
-    if not abstract or not abstract.forwarding_letter_path:
-        abort(404, description="No PDF uploaded for this abstract.")
+    current_user_id = get_jwt_identity()
     try:
+        abstract = get_award_by_id_util(abstract_id)
+        if not abstract:
+            error_msg = f"Resource not found: Award with ID {abstract_id} does not exist"
+            log_audit_event(
+                event_type="award.forwarding_pdf.access.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "award_id": abstract_id},
+                ip_address=request.remote_addr
+            )
+            abort(404, description="Award not found.")
+        
+        if not abstract.forwarding_letter_path:
+            error_msg = f"File not found: No forwarding letter PDF uploaded for award ID {abstract_id}"
+            log_audit_event(
+                event_type="award.forwarding_pdf.access.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "award_id": abstract_id},
+                ip_address=request.remote_addr
+            )
+            abort(404, description="No forwarding letter PDF uploaded for this award.")
+        
+        # Log successful access
+        log_audit_event(
+            event_type="award.forwarding_pdf.access.success",
+            user_id=current_user_id,
+            details={
+                "award_id": abstract_id,
+                "file_path": abstract.forwarding_letter_path
+            },
+            ip_address=request.remote_addr
+        )
+        
         return send_file(abstract.forwarding_letter_path, mimetype='application/pdf', as_attachment=False)
-    except Exception as e:
-        current_app.logger.exception("Error sending PDF file")
+    except FileNotFoundError:
+        error_msg = f"File access error: Forwarding letter PDF file not found at path {abstract.forwarding_letter_path if 'abstract' in locals() else 'unknown'}"
+        log_audit_event(
+            event_type="award.forwarding_pdf.access.failed",
+            user_id=current_user_id,
+            details={"error": error_msg, "award_id": abstract_id},
+            ip_address=request.remote_addr
+        )
         abort(404, description="PDF file not found.")
+    except Exception as e:
+        current_app.logger.exception("Error sending forwarding PDF file")
+        error_msg = f"System error occurred while accessing forwarding PDF: {str(e)}"
+        log_audit_event(
+            event_type="award.forwarding_pdf.access.failed",
+            user_id=current_user_id,
+            details={"error": error_msg, "award_id": abstract_id},
+            ip_address=request.remote_addr
+        )
+        abort(500, description="Internal server error.")
+
 
 @research_bp.route('/awards', methods=['GET'])
 @jwt_required()
 def get_awards():
     """Get all research awards with filtering and pagination support."""
+    current_user_id = get_jwt_identity()
     try:
         # Get query parameters
         q = request.args.get('q', '').strip()
@@ -205,10 +402,16 @@ def get_awards():
         page = max(1, page)  # Ensure page is at least 1
         
         # Get current user for permissions
-        current_user_id = get_jwt_identity()
         user = get_user_by_id_util(current_user_id)
         if not user:
-            return jsonify({"error": "User not found"}), 404
+            error_msg = "Authentication failed: User not found"
+            log_audit_event(
+                event_type="award.list.failed",
+                user_id=current_user_id,
+                details={"error": error_msg},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
 
         # Build filters based on user permissions and query parameters
         filters = []
@@ -237,6 +440,15 @@ def get_awards():
         if status in ['PENDING', 'UNDER_REVIEW', 'ACCEPTED', 'REJECTED']:
             status_value = Status[status]
             filters.append(Awards.status == status_value)
+        elif status:  # Invalid status provided
+            error_msg = f"Validation failed: Invalid status '{status}'. Valid statuses are PENDING, UNDER_REVIEW, ACCEPTED, REJECTED"
+            log_audit_event(
+                event_type="award.list.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "invalid_status": status},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 400
         
         # Apply permissions filter
         if not (
@@ -277,6 +489,15 @@ def get_awards():
                         (AwardVerifiers.award_id == Awards.id)
                     ))
                 )
+            else:
+                error_msg = f"Validation failed: Invalid verifiers parameter '{verifiers}'. Valid values are 'yes' or 'no'"
+                log_audit_event(
+                    event_type="award.list.failed",
+                    user_id=current_user_id,
+                    details={"error": error_msg, "invalid_verifiers_param": verifiers},
+                    ip_address=request.remote_addr
+                )
+                return jsonify({"error": error_msg}), 400
         
         # Apply sorting
         order_by = None
@@ -284,8 +505,17 @@ def get_awards():
             order_by = Awards.title.asc() if sort_dir.lower() == 'asc' else Awards.title.desc()
         elif sort_by == 'created_at':
             order_by = Awards.created_at.asc() if sort_dir.lower() == 'asc' else Awards.created_at.desc()
-        else:  # default to id
+        elif sort_by == 'id':
             order_by = Awards.id.asc() if sort_dir.lower() == 'asc' else Awards.id.desc()
+        else:  # invalid sort field
+            error_msg = f"Validation failed: Invalid sort field '{sort_by}'. Valid fields are 'id', 'title', 'created_at'"
+            log_audit_event(
+                event_type="award.list.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "invalid_sort_by": sort_by},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 40
         
         # Calculate offset
         offset = (page - 1) * page_size
@@ -325,41 +555,113 @@ def get_awards():
             'page_size': page_size
         }
         
+        # Log successful retrieval
+        log_audit_event(
+            event_type="award.list.success",
+            user_id=current_user_id,
+            details={
+                "filters_applied": bool(filters),
+                "search_query": q if q else None,
+                "status_filter": status if status else None,
+                "verifier_filter": verifier_filter,
+                "results_count": len(awards_data),
+                "total_count": total,
+                "page": page,
+                "page_size": page_size
+            },
+            ip_address=request.remote_addr
+        )
+        
         return jsonify(response), 200
     except Exception as e:
         current_app.logger.exception("Error listing awards with parameters")
-        return jsonify({"error": str(e)}), 400
+        error_msg = f"System error occurred while retrieving awards: {str(e)}"
+        log_audit_event(
+            event_type="award.list.failed",
+            user_id=current_user_id,
+            details={"error": error_msg},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 400
 
 @research_bp.route('/awards/<award_id>', methods=['GET'])
 @jwt_required()
 def get_award(award_id):
     """Get a specific research award."""
-    award = get_award_by_id_util(award_id)
-    if not award:
-        return jsonify({"error": "Award not found"}), 404
+    current_user_id = get_jwt_identity()
+    try:
+        award = get_award_by_id_util(award_id)
+        if not award:
+            error_msg = f"Resource not found: Award with ID {award_id} does not exist"
+            log_audit_event(
+                event_type="award.get.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "award_id": award_id},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
+            
+        data = award_schema.dump(award)
+        # Add PDF URLs if available
+        if award.full_paper_path:
+            data['pdf_url'] = f"/api/v1/research/awards/{award_id}/pdf"
+        if award.forwarding_letter_path:
+            data['forwarding_pdf_url'] = f"/api/v1/research/awards/{award_id}/forwarding_pdf"
         
-    data = award_schema.dump(award)
-    # Add PDF URLs if available
-    if award.full_paper_path:
-        data['pdf_url'] = f"/api/v1/research/awards/{award_id}/pdf"
-    if award.forwarding_letter_path:
-        data['forwarding_pdf_url'] = f"/api/v1/research/awards/{award_id}/forwarding_pdf"
-    return jsonify(data), 200
+        # Log successful retrieval
+        log_audit_event(
+            event_type="award.get.success",
+            user_id=current_user_id,
+            details={
+                "award_id": award_id,
+                "title": award.title,
+                "has_pdf": bool(award.full_paper_path),
+                "has_forwarding_letter": bool(award.forwarding_letter_path)
+            },
+            ip_address=request.remote_addr
+        )
+        
+        return jsonify(data), 200
+    except Exception as e:
+        current_app.logger.exception("Error retrieving award")
+        error_msg = f"System error occurred while retrieving award: {str(e)}"
+        log_audit_event(
+            event_type="award.get.failed",
+            user_id=current_user_id,
+            details={"error": error_msg, "award_id": award_id},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 400
 
 @research_bp.route('/awards/<award_id>', methods=['PUT'])
 @jwt_required()
 def update_award(award_id):
     """Update a research award."""
-    award = get_award_by_id_util(award_id)
-    if not award:
-        return jsonify({"error": "Award not found"}), 404
-        
+    current_user_id = get_jwt_identity()
+    award = None
     try:
+        award = get_award_by_id_util(award_id)
+        if not award:
+            error_msg = f"Resource not found: Award with ID {award_id} does not exist"
+            log_audit_event(
+                event_type="award.update.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "award_id": award_id},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
+            
         # Check if user is authorized to update this award
-        current_user_id = get_jwt_identity()
         user = get_user_by_id_util(current_user_id)
         if not user:
-            return jsonify({"error": "User not found"}), 404
+            error_msg = "Authentication failed: User not found"
+            log_audit_event(
+                event_type="award.update.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "award_id": award_id},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
             
         # In a real implementation, you might want to check if the user
         # is the author or has admin privileges
@@ -370,9 +672,30 @@ def update_award(award_id):
                 user.has_role(Role.COORDINATOR.value) or
                 award.created_by_id == current_user_id
         ):
-            return jsonify({"error": "Unauthorized to update this award"}), 403
+            error_msg = f"Authorization failed: You are not authorized to update award ID {award_id}"
+            log_audit_event(
+                event_type="award.update.failed",
+                user_id=current_user_id,
+                details={
+                    "error": error_msg, 
+                    "award_id": award_id,
+                    "user_role": user.role_associations[0].role.value if user.role_associations else "no_role",
+                    "award_creator_id": award.created_by_id
+                },
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 403
 
         data = request.get_json()
+        if not data:
+            error_msg = "Request validation failed: No JSON data provided in request body"
+            log_audit_event(
+                event_type="award.update.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "award_id": award_id},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 400
         
         # Use utility function to update award
         updated_award = update_award_util(
@@ -381,45 +704,108 @@ def update_award(award_id):
             **data
         )
         
+        # Log successful update
+        log_audit_event(
+            event_type="award.update.success",
+            user_id=current_user_id,
+            details={
+                "award_id": award_id,
+                "updated_fields": list(data.keys()),
+                "title": updated_award.title
+            },
+            ip_address=request.remote_addr
+        )
+        
         return jsonify(award_schema.dump(updated_award)), 200
     except Exception as e:
         current_app.logger.exception("Error updating award")
-        return jsonify({"error": str(e)}), 400
+        error_msg = f"System error occurred while updating award: {str(e)}"
+        log_audit_event(
+            event_type="award.update.failed",
+            user_id=current_user_id,
+            details={"error": error_msg, "award_id": award_id if award else award_id},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 400
 
 @research_bp.route('/awards/<award_id>', methods=['DELETE'])
 @jwt_required()
 @require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
 def delete_award(award_id):
     """Delete a research award."""
-    award = get_award_by_id_util(award_id)
-    if not award:
-        return jsonify({"error": "Award not found"}), 404
-        
+    current_user_id = get_jwt_identity()
+    award = None
     try:
+        award = get_award_by_id_util(award_id)
+        if not award:
+            error_msg = f"Resource not found: Award with ID {award_id} does not exist"
+            log_audit_event(
+                event_type="award.delete.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "award_id": award_id},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
+            
         # Use utility function to delete award
         delete_award_util(
             award_id,
-            actor_id=get_jwt_identity()
+            actor_id=current_user_id
         )
+        
+        # Log successful deletion
+        log_audit_event(
+            event_type="award.delete.success",
+            user_id=current_user_id,
+            details={
+                "award_id": award_id,
+                "title": award.title,
+                "deleted_by": current_user_id
+            },
+            ip_address=request.remote_addr
+        )
+        
         return jsonify({"message": "Award deleted"}), 200
     except Exception as e:
         current_app.logger.exception("Error deleting award")
-        return jsonify({"error": str(e)}), 400
+        error_msg = f"System error occurred while deleting award: {str(e)}"
+        log_audit_event(
+            event_type="award.delete.failed",
+            user_id=current_user_id,
+            details={"error": error_msg, "award_id": award_id if award else award_id},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 400
 
 @research_bp.route('/awards/<award_id>/submit', methods=['POST'])
 @jwt_required()
 def submit_award(award_id):
     """Submit an award for review."""
-    award = get_award_by_id_util(award_id)
-    if not award:
-        return jsonify({"error": "Award not found"}), 404
-        
+    current_user_id = get_jwt_identity()
+    award = None
     try:
+        award = get_award_by_id_util(award_id)
+        if not award:
+            error_msg = f"Resource not found: Award with ID {award_id} does not exist"
+            log_audit_event(
+                event_type="award.submit.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "award_id": award_id},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
+            
         # Check if user is authorized to submit this award
-        current_user_id = get_jwt_identity()
         user = get_user_by_id_util(current_user_id)
         if not user:
-            return jsonify({"error": "User not found"}), 404
+            error_msg = "Authentication failed: User not found"
+            log_audit_event(
+                event_type="award.submit.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "award_id": award_id},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
             
         # Only the creator of the award or admin can submit it
         if not (
@@ -427,7 +813,19 @@ def submit_award(award_id):
                 user.has_role(Role.ADMIN.value) or
                 user.has_role(Role.SUPERADMIN.value)
         ):
-            return jsonify({"error": "Unauthorized to submit this award"}), 403
+            error_msg = f"Authorization failed: You are not authorized to submit award ID {award_id} for review"
+            log_audit_event(
+                event_type="award.submit.failed",
+                user_id=current_user_id,
+                details={
+                    "error": error_msg, 
+                    "award_id": award_id,
+                    "user_role": user.role_associations[0].role.value if user.role_associations else "no_role",
+                    "award_creator_id": award.created_by_id
+                },
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 403
 
         # Use utility function to update award status
         updated_award = update_award_util(
@@ -436,10 +834,29 @@ def submit_award(award_id):
             actor_id=current_user_id
         )
         
+        # Log successful submission
+        log_audit_event(
+            event_type="award.submit.success",
+            user_id=current_user_id,
+            details={
+                "award_id": award_id,
+                "new_status": "UNDER_REVIEW",
+                "title": updated_award.title
+            },
+            ip_address=request.remote_addr
+        )
+        
         return jsonify({"message": "Award submitted for review"}), 200
     except Exception as e:
         current_app.logger.exception("Error submitting award")
-        return jsonify({"error": str(e)}), 400
+        error_msg = f"System error occurred while submitting award: {str(e)}"
+        log_audit_event(
+            event_type="award.submit.failed",
+            user_id=current_user_id,
+            details={"error": error_msg, "award_id": award_id if award else award_id},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 400
 
 
 @research_bp.route('/awards/status', methods=['GET'])
@@ -447,56 +864,88 @@ def submit_award(award_id):
 def get_award_submission_status():
     """Get submission status of awards for the current user."""
     current_user_id = get_jwt_identity()
-    user = get_user_by_id_util(current_user_id)
-    if not user:
-        return jsonify({"error": "User not found"}), 404
-
-    # Build filters based on user permissions
-    filters = []
-    
-    if user.has_role(Role.ADMIN.value) or user.has_role(Role.SUPERADMIN.value):
-        # Admins can see all awards
-        pass
-    elif user.has_role(Role.VERIFIER.value):
-        # Verifiers can see awards assigned to them
-        from sqlalchemy import exists
-        filters.append(
-            exists().where(
-                (AwardVerifiers.award_id == Awards.id) & 
-                (AwardVerifiers.user_id == current_user_id)
+    try:
+        user = get_user_by_id_util(current_user_id)
+        if not user:
+            error_msg = "Authentication failed: User not found"
+            log_audit_event(
+                event_type="award.status.get.failed",
+                user_id=current_user_id,
+                details={"error": error_msg},
+                ip_address=request.remote_addr
             )
+            return jsonify({"error": error_msg}), 404
+
+        # Build filters based on user permissions
+        filters = []
+        
+        if user.has_role(Role.ADMIN.value) or user.has_role(Role.SUPERADMIN.value):
+            # Admins can see all awards
+            pass
+        elif user.has_role(Role.VERIFIER.value):
+            # Verifiers can see awards assigned to them
+            from sqlalchemy import exists
+            filters.append(
+                exists().where(
+                    (AwardVerifiers.award_id == Awards.id) & 
+                    (AwardVerifiers.user_id == current_user_id)
+                )
+            )
+        else:
+            # Regular users can only see their own awards
+            filters.append(Awards.created_by_id == current_user_id)
+
+        # Count awards by status
+        pending_awards = db.session.query(Awards).filter(
+            *filters,
+            Awards.status == Status.PENDING
+        ).count()
+        
+        under_review_awards = db.session.query(Awards).filter(
+            *filters,
+            Awards.status == Status.UNDER_REVIEW
+        ).count()
+        
+        accepted_awards = db.session.query(Awards).filter(
+            *filters,
+            Awards.status == Status.ACCEPTED
+        ).count()
+        
+        rejected_awards = db.session.query(Awards).filter(
+            *filters,
+            Awards.status == Status.REJECTED
+        ).count()
+
+        # Log successful retrieval
+        log_audit_event(
+            event_type="award.status.get.success",
+            user_id=current_user_id,
+            details={
+                "user_role": user.role_associations[0].role.value if user.role_associations else "no_role",
+                "pending_count": pending_awards,
+                "under_review_count": under_review_awards,
+                "accepted_count": accepted_awards,
+                "rejected_count": rejected_awards
+            },
+            ip_address=request.remote_addr
         )
-    else:
-        # Regular users can only see their own awards
-        filters.append(Awards.created_by_id == current_user_id)
 
-    # Count awards by status
-    pending_awards = db.session.query(Awards).filter(
-        *filters,
-        Awards.status == Status.PENDING
-    ).count()
-    
-    under_review_awards = db.session.query(Awards).filter(
-        *filters,
-        Awards.status == Status.UNDER_REVIEW
-    ).count()
-    
-    accepted_awards = db.session.query(Awards).filter(
-        *filters,
-        Awards.status == Status.ACCEPTED
-    ).count()
-    
-    rejected_awards = db.session.query(Awards).filter(
-        *filters,
-        Awards.status == Status.REJECTED
-    ).count()
-
-    return jsonify({
-        "pending": pending_awards,
-        "under_review": under_review_awards,
-        "accepted": accepted_awards,
-        "rejected": rejected_awards
-    }), 200
+        return jsonify({
+            "pending": pending_awards,
+            "under_review": under_review_awards,
+            "accepted": accepted_awards,
+            "rejected": rejected_awards
+        }), 200
+    except Exception as e:
+        current_app.logger.exception("Error getting award submission status")
+        error_msg = f"System error occurred while retrieving award status: {str(e)}"
+        log_audit_event(
+            event_type="award.status.get.failed",
+            user_id=current_user_id,
+            details={"error": error_msg},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 400
 
 
 # Verifier Management Routes for Awards
@@ -506,30 +955,79 @@ def get_award_submission_status():
 @require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
 def assign_verifier_to_award(award_id, user_id):
     """Assign a verifier to an award."""
+    current_user_id = get_jwt_identity()
+    award = None
+    user = None
     try:
         # Check if award exists
         award = get_award_by_id_util(award_id)
         if not award:
-            return jsonify({"error": "Award not found"}), 404
+            error_msg = f"Resource not found: Award with ID {award_id} does not exist"
+            log_audit_event(
+                event_type="award.verifier.assign.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "award_id": award_id, "verifier_id": user_id},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
         
         # Check if user exists and is a verifier
         user = get_user_by_id_util(user_id)
         if not user:
-            return jsonify({"error": "User not found"}), 404
+            error_msg = f"Resource not found: User with ID {user_id} does not exist"
+            log_audit_event(
+                event_type="award.verifier.assign.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "award_id": award_id, "verifier_id": user_id},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
         if not user.has_role(Role.VERIFIER.value):
-            return jsonify({"error": "User is not a verifier"}), 400
+            error_msg = f"Validation failed: User with ID {user_id} is not a verifier"
+            log_audit_event(
+                event_type="award.verifier.assign.failed",
+                user_id=current_user_id,
+                details={
+                    "error": error_msg, 
+                    "award_id": award_id, 
+                    "verifier_id": user_id,
+                    "user_role": user.role_associations[0].role.value if user.role_associations else "no_role"
+                },
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 400
         
         # Use utility function to assign verifier
         updated_award = assign_award_verifier_util(
             award,
             user,
-            actor_id=get_jwt_identity()
+            actor_id=current_user_id
+        )
+        
+        # Log successful assignment
+        log_audit_event(
+            event_type="award.verifier.assign.success",
+            user_id=current_user_id,
+            details={
+                "award_id": award_id,
+                "verifier_id": user_id,
+                "verifier_username": user.username,
+                "title": updated_award.title
+            },
+            ip_address=request.remote_addr
         )
         
         return jsonify({"message": "Verifier assigned successfully"}), 201
     except Exception as e:
         current_app.logger.exception("Error assigning verifier to award")
-        return jsonify({"error": str(e)}), 400
+        error_msg = f"System error occurred while assigning verifier to award: {str(e)}"
+        log_audit_event(
+            event_type="award.verifier.assign.failed",
+            user_id=current_user_id,
+            details={"error": error_msg, "award_id": award_id if award else award_id, "verifier_id": user_id if user else user_id},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 400
 
 
 @research_bp.route('/awards/<award_id>/verifiers/<user_id>', methods=['DELETE'])
@@ -537,39 +1035,85 @@ def assign_verifier_to_award(award_id, user_id):
 @require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
 def unassign_verifier_from_award(award_id, user_id):
     """Unassign a verifier from an award."""
+    current_user_id = get_jwt_identity()
+    award = None
+    user = None
     try:
         # Check if award exists
         award = get_award_by_id_util(award_id)
         if not award:
-            return jsonify({"error": "Award not found"}), 404
+            error_msg = f"Resource not found: Award with ID {award_id} does not exist"
+            log_audit_event(
+                event_type="award.verifier.unassign.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "award_id": award_id, "verifier_id": user_id},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
         
         # Check if user exists
         user = get_user_by_id_util(user_id)
         if not user:
-            return jsonify({"error": "User not found"}), 404
+            error_msg = f"Resource not found: User with ID {user_id} does not exist"
+            log_audit_event(
+                event_type="award.verifier.unassign.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "award_id": award_id, "verifier_id": user_id},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
         
         # Use utility function to remove verifier
         updated_award = remove_award_verifier_util(
             award,
             user,
-            actor_id=get_jwt_identity()
+            actor_id=current_user_id
+        )
+        
+        # Log successful unassignment
+        log_audit_event(
+            event_type="award.verifier.unassign.success",
+            user_id=current_user_id,
+            details={
+                "award_id": award_id,
+                "verifier_id": user_id,
+                "verifier_username": user.username,
+                "title": updated_award.title
+            },
+            ip_address=request.remote_addr
         )
         
         return jsonify({"message": "Verifier unassigned successfully"}), 200
     except Exception as e:
         current_app.logger.exception("Error unassigning verifier from award")
-        return jsonify({"error": str(e)}), 400
+        error_msg = f"System error occurred while unassigning verifier from award: {str(e)}"
+        log_audit_event(
+            event_type="award.verifier.unassign.failed",
+            user_id=current_user_id,
+            details={"error": error_msg, "award_id": award_id if award else award_id, "verifier_id": user_id if user else user_id},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 400
 
 
 @research_bp.route('/awards/<award_id>/verifiers', methods=['GET'])
 @jwt_required()
 def get_verifiers_for_award(award_id):
     """Get all verifiers assigned to an award."""
+    current_user_id = get_jwt_identity()
+    award = None
     try:
         # Check if award exists
         award = get_award_by_id_util(award_id)
         if not award:
-            return jsonify({"error": "Award not found"}), 404
+            error_msg = f"Resource not found: Award with ID {award_id} does not exist"
+            log_audit_event(
+                event_type="award.verifiers.get.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "award_id": award_id},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
         
         # Get all verifiers for this award using the relationship
         verifiers = award.verifiers
@@ -584,21 +1128,49 @@ def get_verifiers_for_award(award_id):
                 'employee_id': verifier.employee_id
             })
         
+        # Log successful retrieval
+        log_audit_event(
+            event_type="award.verifiers.get.success",
+            user_id=current_user_id,
+            details={
+                "award_id": award_id,
+                "verifiers_count": len(verifiers_data),
+                "verifiers": [v['username'] for v in verifiers_data]
+            },
+            ip_address=request.remote_addr
+        )
+        
         return jsonify(verifiers_data), 200
     except Exception as e:
         current_app.logger.exception("Error getting verifiers for award")
-        return jsonify({"error": str(e)}), 400
+        error_msg = f"System error occurred while retrieving verifiers for award: {str(e)}"
+        log_audit_event(
+            event_type="award.verifiers.get.failed",
+            user_id=current_user_id,
+            details={"error": error_msg, "award_id": award_id if award else award_id},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 400
 
 
 @research_bp.route('/verifiers/<user_id>/awards', methods=['GET'])
 @jwt_required()
 def get_awards_for_verifier(user_id):
     """Get all awards assigned to a verifier."""
+    current_user_id = get_jwt_identity()
+    user = None
     try:
         # Check if user exists
         user = get_user_by_id_util(user_id)
         if not user:
-            return jsonify({"error": "User not found"}), 404
+            error_msg = f"Resource not found: User with ID {user_id} does not exist"
+            log_audit_event(
+                event_type="verifier.awards.get.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "verifier_id": user_id},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
         
         # Get all awards assigned to this verifier using the relationship
         awards = user.awards_assigned  # This assumes there's a relationship defined
@@ -611,10 +1183,29 @@ def get_awards_for_verifier(user_id):
             AwardVerifiers.user_id == user_id
         ).options(joinedload(Awards.author)).all()
         
+        # Log successful retrieval
+        log_audit_event(
+            event_type="verifier.awards.get.success",
+            user_id=current_user_id,
+            details={
+                "verifier_id": user_id,
+                "awards_count": len(awards),
+                "awards": [award.title for award in awards]
+            },
+            ip_address=request.remote_addr
+        )
+        
         return jsonify(awards_schema.dump(awards)), 200
     except Exception as e:
         current_app.logger.exception("Error getting awards for verifier")
-        return jsonify({"error": str(e)}), 400
+        error_msg = f"System error occurred while retrieving awards for verifier: {str(e)}"
+        log_audit_event(
+            event_type="verifier.awards.get.failed",
+            user_id=current_user_id,
+            details={"error": error_msg, "verifier_id": user_id if user else user_id},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 400
 
 
 @research_bp.route('/awards/bulk-assign-verifiers', methods=['POST'])
@@ -622,12 +1213,20 @@ def get_awards_for_verifier(user_id):
 @require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
 def bulk_assign_verifiers_to_awards():
     """Bulk assign verifiers to multiple awards."""
+    current_user_id = get_jwt_identity()
     try:
         data = request.get_json()
         
         # Validate input
         if not data or 'award_ids' not in data or 'user_ids' not in data:
-            return jsonify({"error": "Missing award_ids or user_ids in request"}), 400
+            error_msg = "Request validation failed: Missing required fields 'award_ids' or 'user_ids' in request body"
+            log_audit_event(
+                event_type="award.verifiers.bulk_assign.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "provided_fields": list(data.keys()) if data else []},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 400
         
         award_ids = data['award_ids']
         user_ids = data['user_ids']
@@ -638,18 +1237,41 @@ def bulk_assign_verifiers_to_awards():
         
         # Check if any awards or users are None (not found)
         if None in awards:
-            return jsonify({"error": "One or more awards not found"}), 404
+            missing_awards = [aid for i, aid in enumerate(award_ids) if awards[i] is None]
+            error_msg = f"Resource validation failed: Awards with IDs {missing_awards} do not exist"
+            log_audit_event(
+                event_type="award.verifiers.bulk_assign.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "missing_awards": missing_awards},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
         if None in users:
-            return jsonify({"error": "One or more users not found"}), 404
+            missing_users = [uid for i, uid in enumerate(user_ids) if users[i] is None]
+            error_msg = f"Resource validation failed: Users with IDs {missing_users} do not exist"
+            log_audit_event(
+                event_type="award.verifiers.bulk_assign.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "missing_users": missing_users},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
         
         # Check if all users are verifiers
         non_verifiers = [user for user in users if not user.has_role(Role.VERIFIER.value)]
         if non_verifiers:
-            return jsonify({"error": "Some users are not verifiers"}), 400
+            non_verifier_ids = [str(user.id) for user in non_verifiers]
+            error_msg = f"Validation failed: Users with IDs {non_verifier_ids} are not verifiers"
+            log_audit_event(
+                event_type="award.verifiers.bulk_assign.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "non_verifier_ids": non_verifier_ids},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 400
         
         # Create assignments using utility functions
         assignments_created = 0
-        actor_id = get_jwt_identity()
         for award_id in award_ids:
             for user_id in user_ids:
                 # Get the award and user objects
@@ -662,8 +1284,21 @@ def bulk_assign_verifiers_to_awards():
                 
                 if not existing_assignment:
                     # Use the utility function to assign verifier
-                    assign_award_verifier_util(award, user, actor_id=actor_id)
+                    assign_award_verifier_util(award, user, actor_id=current_user_id)
                     assignments_created += 1
+        
+        # Log successful bulk assignment
+        log_audit_event(
+            event_type="award.verifiers.bulk_assign.success",
+            user_id=current_user_id,
+            details={
+                "award_ids": award_ids,
+                "user_ids": user_ids,
+                "assignments_created": assignments_created,
+                "total_possible_assignments": len(award_ids) * len(user_ids)
+            },
+            ip_address=request.remote_addr
+        )
         
         return jsonify({
             "message": f"Successfully created {assignments_created} assignments",
@@ -671,7 +1306,14 @@ def bulk_assign_verifiers_to_awards():
         }), 201
     except Exception as e:
         current_app.logger.exception("Error in bulk assigning verifiers to awards")
-        return jsonify({"error": str(e)}), 400
+        error_msg = f"System error occurred during bulk assignment of verifiers: {str(e)}"
+        log_audit_event(
+            event_type="award.verifiers.bulk_assign.failed",
+            user_id=current_user_id,
+            details={"error": error_msg},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 400
 
 
 @research_bp.route('/awards/bulk-unassign-verifiers', methods=['POST'])
@@ -679,12 +1321,20 @@ def bulk_assign_verifiers_to_awards():
 @require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
 def bulk_unassign_verifiers_from_awards():
     """Bulk unassign verifiers from multiple awards."""
+    current_user_id = get_jwt_identity()
     try:
         data = request.get_json()
         
         # Validate input
         if not data or 'award_ids' not in data or 'user_ids' not in data:
-            return jsonify({"error": "Missing award_ids or user_ids in request"}), 400
+            error_msg = "Request validation failed: Missing required fields 'award_ids' or 'user_ids' in request body"
+            log_audit_event(
+                event_type="award.verifiers.bulk_unassign.failed",
+                user_id=current_user_id,
+                details={"error": error_msg, "provided_fields": list(data.keys()) if data else []},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 400
         
         award_ids = data['award_ids']
         user_ids = data['user_ids']
@@ -697,6 +1347,18 @@ def bulk_unassign_verifiers_from_awards():
         
         db.session.commit()
         
+        # Log successful bulk unassignment
+        log_audit_event(
+            event_type="award.verifiers.bulk_unassign.success",
+            user_id=current_user_id,
+            details={
+                "award_ids": award_ids,
+                "user_ids": user_ids,
+                "assignments_deleted": assignments_deleted
+            },
+            ip_address=request.remote_addr
+        )
+        
         return jsonify({
             "message": f"Successfully deleted {assignments_deleted} assignments",
             "assignments_deleted": assignments_deleted
@@ -704,4 +1366,11 @@ def bulk_unassign_verifiers_from_awards():
     except Exception as e:
         db.session.rollback()
         current_app.logger.exception("Error in bulk unassigning verifiers from awards")
-        return jsonify({"error": str(e)}), 400
+        error_msg = f"System error occurred during bulk unassignment of verifiers: {str(e)}"
+        log_audit_event(
+            event_type="award.verifiers.bulk_unassign.failed",
+            user_id=current_user_id,
+            details={"error": error_msg},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 400
