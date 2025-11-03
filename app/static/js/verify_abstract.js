@@ -1,5 +1,18 @@
 (() => {
     const BASE = '/api/v1/research';  // Fixed path
+    
+    // Console logging utilities
+    function log(message, level = 'info') {
+        console.log(`[Verify Abstract] ${level.toUpperCase()}:`, message);
+    }
+
+    function logError(message, error = null) {
+        console.error(`[Verify Abstract] ERROR: ${message}`, error);
+        if (error && error.stack) {
+            console.error('Stack trace:', error.stack);
+        }
+    }
+    
     const token = () => localStorage.getItem('token') || '';
     const headers = () => ({ 'Accept': 'application/json', 'Authorization': `Bearer ${token()}` });
     const sQ = id => document.getElementById(id);
@@ -101,12 +114,22 @@
     }
 
     async function fetchJSON(url, opts = {}) {
+        log(`Fetching: ${url}`, 'info');
         const bar = document.getElementById('globalLoading');
         bar && bar.classList.remove('hidden');
         try {
             const r = await fetch(url, { headers: headers(), ...opts });
-            if (!r.ok) throw new Error(await r.text() || r.status);
-            return r.json();
+            if (!r.ok) {
+                const errorText = await r.text();
+                logError(`Fetch error for ${url}: ${r.status}`, new Error(errorText || r.status));
+                throw new Error(errorText || r.status);
+            }
+            const response = await r.json();
+            log(`Successfully fetched data from: ${url}`, 'info');
+            return response;
+        } catch (error) {
+            logError(`Error fetching ${url}:`, error);
+            throw error;
         } finally {
             setTimeout(() => { bar && bar.classList.add('hidden'); }, 120); // slight delay for smoother perception
         }
@@ -445,12 +468,14 @@
         state.abstracts.q = (sQ('abstractSearch').value || '').trim();
         const { q, filter, page, pageSize, sort, dir } = state.abstracts;
         const url = `${BASE}/abstracts?q=${encodeURIComponent(q)}&status=${filter}&page=${page}&page_size=${pageSize}&sort_by=${sort}&sort_dir=${dir}&verifier=true`;
+        log(`Searching abstracts with URL: ${url}`, 'info');
         try {
             const data = await fetchJSON(url);
+            log(`Received ${data.items?.length || 0} abstracts`, 'info');
             renderList(abstractList, data.items || data || [], 'abstract');
             updateAbstractMeta(data);
         } catch (e) {
-            console.error(e);
+            logError('Failed to search abstracts:', e);
             toast('Failed to search abstracts: ' + (e.message || 'Unknown error'), 'error');
         }
     }
@@ -940,7 +965,7 @@
     }
 
     async function acceptAbstract(abstractId) {
-        // This function will only update the status without grading since grading is now separate
+        log(`Accepting abstract with ID: ${abstractId}`, 'info');
         try {
             // In our new approach, the status is updated when grading is submitted,
             // but we'll still need to update the status here if grading isn't required
@@ -952,7 +977,12 @@
                 headers: { ...headers(), 'Content-Type': 'application/json' },
                 body: JSON.stringify(body)
             });
-            if (!r.ok) throw new Error(await r.text() || r.status);
+            if (!r.ok) {
+                const errorText = await r.text();
+                logError(`Failed to accept abstract ${abstractId}: ${r.status}`, new Error(errorText || r.status));
+                throw new Error(errorText || r.status);
+            }
+            log(`Abstract ${abstractId} accepted successfully`, 'info');
             toast('Abstract accepted successfully!', 'success');
             await searchAbstracts();
             if (selAbstract && selAbstract.id === abstractId) {
@@ -962,11 +992,13 @@
             }
             updateVerifyActionBtns('ACCEPTED');
         } catch (e) {
+            logError(`Failed to accept abstract ${abstractId}:`, e);
             toast('Failed to accept abstract: ' + (e.message || 'Unknown error'), 'error');
         }
     }
     
     async function rejectAbstract(abstractId) {
+        log(`Prompting for rejection of abstract with ID: ${abstractId}`, 'info');
         if (!confirm('Are you sure you want to reject this abstract?')) return;
         
         try {
@@ -978,7 +1010,12 @@
                 headers: { ...headers(), 'Content-Type': 'application/json' },
                 body: JSON.stringify(body)
             });
-            if (!r.ok) throw new Error(await r.text() || r.status);
+            if (!r.ok) {
+                const errorText = await r.text();
+                logError(`Failed to reject abstract ${abstractId}: ${r.status}`, new Error(errorText || r.status));
+                throw new Error(errorText || r.status);
+            }
+            log(`Abstract ${abstractId} rejected successfully`, 'info');
             toast('Abstract rejected successfully!', 'success');
             await searchAbstracts();
             if (selAbstract && selAbstract.id === abstractId) {
@@ -988,6 +1025,7 @@
             }
             updateVerifyActionBtns('REJECTED');
         } catch (e) {
+            logError(`Failed to reject abstract ${abstractId}:`, e);
             toast('Failed to reject abstract: ' + (e.message || 'Unknown error'), 'error');
         }
     }
@@ -1049,14 +1087,35 @@
     }
 
     function init() {
+        log('Initializing abstract verification page...', 'info');
         updateStatsBar();
-        sQ('abstractSearchBtn')?.addEventListener('click', () => { state.abstracts.page = 1; searchAbstracts(); });
-        sQ('abstractSearch')?.addEventListener('keypress', (e) => { if (e.key === 'Enter') { state.abstracts.page = 1; searchAbstracts(); } });
-        sQ('abstractPrev')?.addEventListener('click', () => changeAbstractPage(-1));
-        sQ('abstractNext')?.addEventListener('click', () => changeAbstractPage(1));
-        sQ('acceptBtn')?.addEventListener('click', openGradingModal);  // Changed to open grading modal
+        sQ('abstractSearchBtn')?.addEventListener('click', () => { 
+            log('Search button clicked', 'info');
+            state.abstracts.page = 1; 
+            searchAbstracts(); 
+        });
+        sQ('abstractSearch')?.addEventListener('keypress', (e) => { 
+            if (e.key === 'Enter') { 
+                log('Enter key pressed in search', 'info');
+                state.abstracts.page = 1; 
+                searchAbstracts(); 
+            } 
+        });
+        sQ('abstractPrev')?.addEventListener('click', () => {
+            log('Previous page button clicked', 'info');
+            changeAbstractPage(-1);
+        });
+        sQ('abstractNext')?.addEventListener('click', () => {
+            log('Next page button clicked', 'info');
+            changeAbstractPage(1);
+        });
+        sQ('acceptBtn')?.addEventListener('click', () => {
+            log('Accept button clicked', 'info');
+            openGradingModal();
+        });  // Changed to open grading modal
         sQ('rejectBtn')?.addEventListener('click', () => {
             if (selAbstract) {
+                log(`Reject button clicked for abstract ID: ${selAbstract.id}`, 'info');
                 rejectAbstract(selAbstract.id);
             } else {
                 toast('Please select an abstract first', 'warn');
@@ -1064,15 +1123,36 @@
         });
 
         // Grading modal events
-        sQ('closeGradingModal')?.addEventListener('click', cancelGrading);
-        sQ('cancelGrading')?.addEventListener('click', cancelGrading);
-        sQ('submitGrading')?.addEventListener('click', submitGrading);
+        sQ('closeGradingModal')?.addEventListener('click', () => {
+            log('Grading modal close button clicked', 'info');
+            cancelGrading();
+        });
+        sQ('cancelGrading')?.addEventListener('click', () => {
+            log('Cancel grading button clicked', 'info');
+            cancelGrading();
+        });
+        sQ('submitGrading')?.addEventListener('click', () => {
+            log('Submit grading button clicked', 'info');
+            submitGrading();
+        });
 
         const master = sQ('abstractMasterChk');
-        master?.addEventListener('change', e => { e.target.checked ? selectAllPage() : clearAllPage(); });
-        sQ('invertSelection')?.addEventListener('click', invertSelection);
-        sQ('abstractSelectAll')?.addEventListener('click', selectAllPage);
-        sQ('abstractClearSel')?.addEventListener('click', clearAllPage);
+        master?.addEventListener('change', e => { 
+            log(`Master checkbox changed, checked: ${e.target.checked}`, 'info');
+            e.target.checked ? selectAllPage() : clearAllPage(); 
+        });
+        sQ('invertSelection')?.addEventListener('click', () => {
+            log('Invert selection button clicked', 'info');
+            invertSelection();
+        });
+        sQ('abstractSelectAll')?.addEventListener('click', () => {
+            log('Select all button clicked', 'info');
+            selectAllPage();
+        });
+        sQ('abstractClearSel')?.addEventListener('click', () => {
+            log('Clear selection button clicked', 'info');
+            clearAllPage();
+        });
         sQ('bulkAcceptBtn')?.addEventListener('click', async () => {
             if (bulk.abstractIds.size === 0) {
                 toast('Select abstracts to accept', 'warn');
@@ -1080,6 +1160,8 @@
             }
             
             if (!confirm(`Are you sure you want to accept ${bulk.abstractIds.size} abstract(s)?`)) return;
+            
+            log(`Bulk accepting ${bulk.abstractIds.size} abstracts`, 'info');
             
             // Show loading state
             const bulkStatus = sQ('bulkStatus');
@@ -1099,7 +1181,7 @@
                         }
                     } catch (e) {
                         // skip if error
-                        console.warn(`Failed to fetch abstract ${id}:`, e);
+                        logError(`Failed to fetch abstract ${id}:`, e);
                     }
                 }
                 
@@ -1128,7 +1210,7 @@
                             bulk.abstractIds.delete(id); // Remove from selection
                         }
                     } catch (e) {
-                        console.error(`Failed to accept abstract ${id}:`, e);
+                        logError(`Failed to accept abstract ${id}:`, e);
                     }
                 }
                 
@@ -1137,11 +1219,13 @@
                 
                 if (successCount > 0) {
                     toast(`Successfully accepted ${successCount} abstract(s)`, 'success');
+                    log(`Successfully bulk accepted ${successCount} abstracts`, 'info');
                     await searchAbstracts(); // Refresh the list
                 } else {
                     toast('Failed to accept any abstracts', 'error');
                 }
             } catch (e) {
+                logError('Error processing bulk accept:', e);
                 toast('Error processing bulk accept: ' + (e.message || 'Unknown error'), 'error');
             } finally {
                 bulkStatus.textContent = originalText;
@@ -1155,6 +1239,8 @@
             }
             
             if (!confirm(`Are you sure you want to reject ${bulk.abstractIds.size} abstract(s)?`)) return;
+            
+            log(`Bulk rejecting ${bulk.abstractIds.size} abstracts`, 'info');
             
             // Show loading state
             const bulkStatus = sQ('bulkStatus');
@@ -1174,7 +1260,7 @@
                         }
                     } catch (e) {
                         // skip if error
-                        console.warn(`Failed to fetch abstract ${id}:`, e);
+                        logError(`Failed to fetch abstract ${id}:`, e);
                     }
                 }
                 
@@ -1203,7 +1289,7 @@
                             bulk.abstractIds.delete(id); // Remove from selection
                         }
                     } catch (e) {
-                        console.error(`Failed to reject abstract ${id}:`, e);
+                        logError(`Failed to reject abstract ${id}:`, e);
                     }
                 }
                 
@@ -1212,11 +1298,13 @@
                 
                 if (successCount > 0) {
                     toast(`Successfully rejected ${successCount} abstract(s)`, 'success');
+                    log(`Successfully bulk rejected ${successCount} abstracts`, 'info');
                     await searchAbstracts(); // Refresh the list
                 } else {
                     toast('Failed to reject any abstracts', 'error');
                 }
             } catch (e) {
+                logError('Error processing bulk reject:', e);
                 toast('Error processing bulk reject: ' + (e.message || 'Unknown error'), 'error');
             } finally {
                 bulkStatus.textContent = originalText;
@@ -1225,6 +1313,7 @@
         
         wireSortGroups();
         wireSegmentedControls();
+        log('Starting initial search for abstracts...', 'info');
         searchAbstracts();
     }
     

@@ -13,6 +13,18 @@
         let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
     };
 
+    // Console logging utilities (added for debugging)
+    function log(message, level = 'info') {
+        console.log(`[Submit List] ${level.toUpperCase()}:`, message);
+    }
+
+    function logError(message, error = null) {
+        console.error(`[Submit List] ERROR: ${message}`, error);
+        if (error && error.stack) {
+            console.error('Stack trace:', error.stack);
+        }
+    }
+
     // ---- fetch helpers ----
     const headers = () => {
         const h = { "Accept": "application/json" };
@@ -161,9 +173,11 @@
 
         async refresh() {
             const s = this.state;
+            log(`Refreshing list: page=${s.page}, pageSize=${s.pageSize}, sortKey=${s.sortKey}, filter=${s.filter}, query=${s.query}`, 'info');
             this._setLoading(true);
             try {
                 const res = await this.o.fetchPage({ page: s.page, pageSize: s.pageSize, sortKey: s.sortKey, sortDir: s.sortDir, filter: s.filter, query: s.query });
+                log(`Received ${res.items?.length || 0} items, total=${res.total}, totalPages=${res.totalPages}`, 'info');
                 s.items = res.items || [];
                 s.total = res.total ?? s.items.length;
                 s.totalPages = res.totalPages ?? Math.max(1, Math.ceil((s.total || 0) / s.pageSize));
@@ -174,28 +188,42 @@
                 if (!s.selectedId && s.items.length > 0 && this.o.listEl) {
                     const firstId = String(s.items[0].id);
                     const li = this.o.listEl.querySelector(`li[data-id="${firstId}"]`) || this.o.listEl.querySelector("li[data-id]");
-                    if (li) { highlightSelection(this.o.listEl, li); this._select(s.items[0]); }
+                    if (li) { 
+                        highlightSelection(this.o.listEl, li); 
+                        this._select(s.items[0]); 
+                        log(`Auto-selected first item ID: ${firstId}`, 'info');
+                    }
                 }
             } catch (e) {
-                console.error("refresh error", e);
+                logError("refresh error:", e);
                 if (this.o.statsEl) this.o.statsEl.textContent = "Failed to load.";
                 toast("Failed to load list", "bg-red-600 text-white");
             } finally {
                 this._setLoading(false);
+                log('List refresh completed', 'info');
             }
         }
 
         _renderList() {
-            const root = this.o.listEl; if (!root) return;
+            const root = this.o.listEl; 
+            if (!root) {
+                log('List element not found, cannot render', 'warn');
+                return;
+            }
+            log(`Rendering ${this.state.items.length} items`, 'info');
             root.innerHTML = "";
             const frag = document.createDocumentFragment();
             for (const it of this.state.items) {
                 const li = this.o.renderItem(it, this.state);
-                if (!(li instanceof HTMLElement)) continue;
+                if (!(li instanceof HTMLElement)) {
+                    log(`renderItem did not return an HTMLElement for item ${it.id}`, 'warn');
+                    continue;
+                }
                 li.setAttribute("data-id", String(it.id));
                 frag.appendChild(li);
             }
             root.appendChild(frag);
+            log(`List rendering completed with ${this.state.items.length} items`, 'info');
         }
 
         _updatePager() {
@@ -204,9 +232,16 @@
                 const start = (s.page - 1) * s.pageSize + 1;
                 const end = Math.min(s.page * s.pageSize, s.total);
                 o.pageInfoEl.textContent = s.total ? `${start}–${end} of ${s.total}` : "0";
+                log(`Pager updated: ${start}–${end} of ${s.total}`, 'info');
             }
-            if (o.prevBtnEl) o.prevBtnEl.disabled = s.page <= 1;
-            if (o.nextBtnEl) o.nextBtnEl.disabled = s.page >= s.totalPages;
+            if (o.prevBtnEl) {
+                o.prevBtnEl.disabled = s.page <= 1;
+                log(`Previous button ${o.prevBtnEl.disabled ? 'disabled' : 'enabled'}`, 'info');
+            }
+            if (o.nextBtnEl) {
+                o.nextBtnEl.disabled = s.page >= s.totalPages;
+                log(`Next button ${o.nextBtnEl.disabled ? 'disabled' : 'enabled'}`, 'info');
+            }
             if (o.statsEl && !o.pageInfoEl) o.statsEl.textContent = `${s.total} item(s)`;
         }
 
@@ -224,6 +259,7 @@
         }
 
         _select(item) {
+            log(`Selecting item with ID: ${item.id}`, 'info');
             this.state.selectedId = item.id;
             if (this.o.details) {
                 this.o.details.noSelectedEl?.classList.add("hidden");
@@ -244,17 +280,81 @@
                 detailsEl: this.o.details?.containerEl || null,
                 utils: { escapeHtml, formatDate, getStatusClass, toast }
             };
-            if (typeof this.o.onSelect === "function") this.o.onSelect(item, ctx);
+            if (typeof this.o.onSelect === "function") {
+                log(`Calling onSelect for item ID: ${item.id}`, 'info');
+                this.o.onSelect(item, ctx);
+            }
         }
     }
 
     function init(opts) { return new Controller(opts).init(); }
 
+    // Additional API endpoints for abstract relationships
+    async function addAuthorToAbstract(abstractId, authorData) {
+        try {
+            const response = await fetch(`${BASE}/abstracts/${abstractId}/authors`, {
+                method: 'POST',
+                headers: { ...headers(), 'Content-Type': 'application/json' },
+                body: JSON.stringify(authorData)
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}: ${await response.text() || response.statusText}`);
+            return response.json();
+        } catch (error) {
+            logError(`Error adding author to abstract ${abstractId}:`, error);
+            throw error;
+        }
+    }
+
+    async function removeAuthorFromAbstract(abstractId, authorId) {
+        try {
+            const response = await fetch(`${BASE}/abstracts/${abstractId}/authors/${authorId}`, {
+                method: 'DELETE',
+                headers: headers()
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}: ${await response.text() || response.statusText}`);
+            return response.json();
+        } catch (error) {
+            logError(`Error removing author ${authorId} from abstract ${abstractId}:`, error);
+            throw error;
+        }
+    }
+
+    async function assignVerifiersToAbstract(abstractId, userIds) {
+        try {
+            const response = await fetch(`${BASE}/abstracts/${abstractId}/verifiers`, {
+                method: 'POST',
+                headers: { ...headers(), 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_ids: userIds })
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}: ${await response.text() || response.statusText}`);
+            return response.json();
+        } catch (error) {
+            logError(`Error assigning verifiers to abstract ${abstractId}:`, error);
+            throw error;
+        }
+    }
+
+    async function removeVerifierFromAbstract(abstractId, userId) {
+        try {
+            const response = await fetch(`${BASE}/abstracts/${abstractId}/verifiers/${userId}`, {
+                method: 'DELETE',
+                headers: headers()
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}: ${await response.text() || response.statusText}`);
+            return response.json();
+        } catch (error) {
+            logError(`Error removing verifier ${userId} from abstract ${abstractId}:`, error);
+            throw error;
+        }
+    }
+
     global.SubmitList = {
         init, Controller,
         utils: {
             $, $$, on, debounce, fetchJSON, escapeHtml, formatDate, headers, token, toast, getStatusClass,
-            wireSegmentedControls, wireSortGroups, applySortStyles, highlightSelection
+            wireSegmentedControls, wireSortGroups, applySortStyles, highlightSelection,
+            // Additional utilities for abstract relationships
+            addAuthorToAbstract, removeAuthorFromAbstract, assignVerifiersToAbstract, removeVerifierFromAbstract
         }
     };
 })(window);

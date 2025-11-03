@@ -4,6 +4,18 @@
     const { utils, init } = window.SubmitList;
     const { fetchJSON, escapeHtml, formatDate, getStatusClass } = utils;
 
+    // Console logging utilities
+    function log(message, level = 'info') {
+        console.log(`[Abstract List] ${level.toUpperCase()}:`, message);
+    }
+
+    function logError(message, error = null) {
+        console.error(`[Abstract List] ERROR: ${message}`, error);
+        if (error && error.stack) {
+            console.error('Stack trace:', error.stack);
+        }
+    }
+
     const API_LIST = "/api/v1/research/abstracts";
     const API_DETAIL = (id) => `/api/v1/research/abstracts/${encodeURIComponent(id)}`;
     const API_META = "/api/v1/research/abstracts/meta";
@@ -197,29 +209,43 @@
     }
 
     async function fetchPage({ page, pageSize, sortKey, sortDir, filter, query }) {
-        const data = await fetchJSON(API_LIST, {
-            q: query, status: filter, sort: sortKey || "created_at", dir: sortDir || "desc", page, size: pageSize
-        });
-      return { items: data.items || [], total: data.total ?? 0, totalPages: data.pages ?? 1, meta: data.meta || {} };
+        log(`Fetching page ${page} with filter: ${filter || 'all'}, query: ${query || 'none'}`, 'info');
+        try {
+            const data = await fetchJSON(API_LIST, {
+                q: query, status: filter, sort: sortKey || "created_at", dir: sortDir || "desc", page, size: pageSize
+            });
+            log(`Received ${data.items?.length || 0} items for page ${page}`, 'info');
+            return { items: data.items || [], total: data.total ?? 0, totalPages: data.pages ?? 1, meta: data.meta || {} };
+        } catch (error) {
+            logError('Error fetching page data:', error);
+            throw error;
+        }
     }
 
     // Use generated preview inside selection handler
     async function onSelect(item, ctx) {
-        const full = await fetchJSON(API_DETAIL(item.id));
+        log(`Selecting abstract with ID: ${item.id}`, 'info');
+        try {
+            const full = await fetchJSON(API_DETAIL(item.id));
+            log(`Fetched full abstract details for ID: ${item.id}`, 'info');
 
-        // Update summary badges via controller so they also reflect in UI elements
-        ctx.setDetails({
-            title: full.title || item.title || "",
-            category: full.category || item.category || (full.category?.name) || "",
-            status: full.status || item.status || "",
-            number: full.abstract_number || full.number || item.number || "",
-            author: (full.created_by?.username) || full.author || item.author || "",
-            date: formatDate(full.created_at || item.created_at),
-            previewHtml: `<div class="p-3 text-sm muted">Loading preview…</div>`
-        });
+            // Update summary badges via controller so they also reflect in UI elements
+            ctx.setDetails({
+                title: full.title || item.title || "",
+                category: full.category || item.category || (full.category?.name) || "",
+                status: full.status || item.status || "",
+                number: full.abstract_number || full.number || item.number || "",
+                author: (full.created_by?.username) || full.author || item.author || "",
+                date: formatDate(full.created_at || item.created_at),
+                previewHtml: `<div class="p-3 text-sm muted">Loading preview…</div>`
+            });
 
-        // Now render the rich details + authors + PDF using the generated function
-        window.generatePreview(full);
+            // Now render the rich details + authors + PDF using the generated function
+            window.generatePreview(full);
+        } catch (error) {
+            logError(`Error selecting abstract with ID: ${item.id}`, error);
+            throw error;
+        }
     }
 
     // -----------------------

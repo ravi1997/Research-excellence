@@ -166,6 +166,19 @@
 // Base API URL - using the correct prefix for the research API
 const BASE_API_URL = '/api/v1/research';
 
+// Console log wrapper for debugging
+function log(message, level = 'info') {
+    console.log(`[Abstract Submit] ${level.toUpperCase()}:`, message);
+}
+
+// Enhanced error logging
+function logError(message, error = null) {
+    console.error(`[Abstract Submit] ERROR: ${message}`, error);
+    if (error && error.stack) {
+        console.error('Stack trace:', error.stack);
+    }
+}
+
 // Show a toast message
 function showToast(message, type = 'info') {
     // In a real implementation, this would use the existing toast system
@@ -443,13 +456,17 @@ function hidePdfPreview() {
 // Fetch categories from the API
 async function fetchCategories() {
     const select = document.getElementById('category');
-    if (!select) return;
+    if (!select) {
+        log('Category select element not found', 'warn');
+        return;
+    }
     
     try {
         // Show loading state
         select.innerHTML = '<option value="">Loading categories...</option>';
         select.disabled = true;
         
+        log('Fetching categories from API...');
         const response = await fetch(`${BASE_API_URL}/categories`, {
             method: 'GET',
             headers: {
@@ -463,6 +480,8 @@ async function fetchCategories() {
         }
         
         const result = await response.json();
+        log(`Received ${Array.isArray(result) ? result.length : 'unknown'} categories from API`, 'info');
+        
         const categories = Array.isArray(result) ? result : (result.categories || result.data || []);
         
         // Clear and populate options
@@ -474,8 +493,10 @@ async function fetchCategories() {
             option.textContent = category.name || category.category_name || 'Unnamed Category';
             select.appendChild(option);
         });
+        
+        log(`Successfully populated ${categories.length} categories`, 'info');
     } catch (error) {
-        console.error('Error fetching categories:', error);
+        logError('Error fetching categories:', error);
         showToast('Failed to load categories. Using default options.', 'error');
         // Fallback to mock data if API fails
         select.innerHTML = '<option value="">Select a category</option>';
@@ -492,8 +513,13 @@ async function fetchCategories() {
             option.textContent = category.name;
             select.appendChild(option);
         });
+        
+        log('Using fallback categories', 'warn');
     } finally {
-        if (select) select.disabled = false;
+        if (select) {
+            select.disabled = false;
+            log('Category select re-enabled', 'info');
+        }
     }
 }
 
@@ -504,6 +530,7 @@ let verifiers = []; // Store loaded verifiers
 
 async function fetchLatestActiveCycle() {
     try {
+        log('Fetching research cycles from API...');
         const response = await fetch(`${BASE_API_URL}/cycles`, {
             method: 'GET',
             headers: {
@@ -511,9 +538,13 @@ async function fetchLatestActiveCycle() {
                 'Accept': 'application/json'
             }
         });
+        
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const result = await response.json();
         const cycles = Array.isArray(result) ? result : (result.cycles || result.data || []);
+        
+        log(`Received ${cycles.length} cycles from API`, 'info');
+        
         // Find latest active cycle (end_date in future, or latest end_date)
         const now = new Date();
         let activeCycles = cycles.filter(cycle => {
@@ -521,22 +552,28 @@ async function fetchLatestActiveCycle() {
             const endDate = new Date(cycle.end_date);
             return endDate >= now;
         });
+        
         let latestCycle = null;
         if (activeCycles.length > 0) {
             // Pick the one with the latest end_date
             latestCycle = activeCycles.reduce((a, b) => new Date(a.end_date) > new Date(b.end_date) ? a : b);
+            log(`Found ${activeCycles.length} active cycles, using the latest one`, 'info');
         } else if (cycles.length > 0) {
             // If no active, pick the latest overall
             latestCycle = cycles.reduce((a, b) => new Date(a.end_date) > new Date(b.end_date) ? a : b);
+            log('No active cycles found, using the latest cycle', 'info');
         }
+        
         if (latestCycle) {
             latestCycleId = latestCycle.id;
+            log(`Set latestCycleId to ${latestCycleId}`, 'info');
         } else {
             // Fallback: use first cycle
             latestCycleId = cycles.length > 0 ? cycles[0].id : null;
+            log('No cycles found, setting latestCycleId to null', 'info');
         }
     } catch (error) {
-        console.error('Error fetching cycles:', error);
+        logError('Error fetching cycles:', error);
         showToast('Failed to auto-select research cycle. Please contact admin.', 'error');
         latestCycleId = null;
     }
@@ -547,18 +584,24 @@ async function loadVerifiers() {
     const verifierContainer = document.getElementById('verifiers-container');
     const verifierSelect = document.getElementById('verifier-select');
     
-    if (!verifierContainer || !verifierSelect) return;
+    if (!verifierContainer || !verifierSelect) {
+        log('Verifier container or select element not found', 'warn');
+        return;
+    }
     
     try {
+        log('Loading verifiers from API...');
         // Show loading state
         verifierSelect.innerHTML = '<option value="">Loading verifiers...</option>';
         verifierSelect.disabled = true;
         
-        const response = await fetch(`${BASE_API_URL}/verifiers`, {
+        // API endpoint for verifiers - use the correct route from the backend
+        const response = await fetch(`${BASE_API_URL}/abstracts/verifiers`, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
-                'Accept': 'application/json'
+                'Accept': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
             }
         });
         
@@ -568,6 +611,7 @@ async function loadVerifiers() {
         
         const result = await response.json();
         verifiers = Array.isArray(result) ? result : (result.verifiers || result.data || []);
+        log(`Received ${verifiers.length} verifiers from API`, 'info');
         
         // Clear and populate options
         verifierSelect.innerHTML = '<option value="">Select a verifier (optional)</option>';
@@ -578,12 +622,15 @@ async function loadVerifiers() {
             option.textContent = `${verifier.username || 'Unknown User'} (${verifier.email || 'No email'})`;
             verifierSelect.appendChild(option);
         });
+        
+        log(`Successfully populated ${verifiers.length} verifiers`, 'info');
     } catch (error) {
-        console.error('Error fetching verifiers:', error);
+        logError('Error fetching verifiers:', error);
         showToast('Failed to load verifiers. You can still submit without selecting a verifier.', 'error');
         verifierSelect.innerHTML = '<option value="">Failed to load verifiers</option>';
     } finally {
         verifierSelect.disabled = false;
+        log('Verifier select re-enabled', 'info');
     }
 }
 
@@ -789,10 +836,13 @@ function collectFormData() {
 async function submitAbstract(event) {
     event.preventDefault();
     
+    log('Starting abstract submission process...', 'info');
+    
     // Get submit button and show loading state
     const submitBtn = document.querySelector('button[type="submit"]');
     // Validate authors and emails and roles before submitting (defense-in-depth)
     if (!validateAuthorsAndEmails()) {
+        log('Author validation failed', 'warn');
         return;
     }
     
@@ -804,10 +854,12 @@ async function submitAbstract(event) {
         
         // Collect and validate form data
         const jsonData = collectFormData();
+        log('Form data collected successfully', 'info');
         
         // Check if a PDF file is selected
         const pdfInput = document.getElementById('abstract_pdf');
         if (pdfInput && pdfInput.files[0]) {
+            log('PDF file detected, preparing form data...', 'info');
             // Validate again on submit to guard against edge cases
             if (!validatePdf(pdfInput.files[0], pdfInput)) {
                 throw new Error('Invalid PDF file. Please select a valid PDF under the size limit.');
@@ -817,6 +869,7 @@ async function submitAbstract(event) {
             formData.append('data', JSON.stringify(jsonData));
             formData.append('abstract_pdf', pdfInput.files[0]);
             
+            log('Submitting abstract with PDF file...', 'info');
             // Submit to API
             const response = await fetch(`${BASE_API_URL}/abstracts`, {
                 method: 'POST',
@@ -841,8 +894,10 @@ async function submitAbstract(event) {
             }
             
             const result = await response.json();
+            log('Abstract with PDF submitted successfully', 'info');
             showToast('Abstract submitted successfully!', 'success');
         } else {
+            log('No PDF file selected, submitting as JSON...', 'info');
             // No file selected, send as JSON
             const response = await fetch(`${BASE_API_URL}/abstracts`, {
                 method: 'POST',
@@ -871,26 +926,31 @@ async function submitAbstract(event) {
             }
             
             const result = await response.json();
+            log('Abstract submitted successfully as JSON', 'info');
             showToast('Abstract submitted successfully!', 'success');
         }
         
         // Redirect to research dashboard after a short delay
+        log('Redirecting to dashboard in 1.5 seconds...', 'info');
         setTimeout(() => {
             window.location.href = '/';
         }, 1500);
     } catch (error) {
-        console.error('Error submitting abstract:', error);
+        logError('Error submitting abstract:', error);
         showToast(`Failed to submit abstract: ${error.message}`, 'error');
     } finally {
         if (submitBtn) {
             submitBtn.disabled = false;
             submitBtn.innerHTML = 'Submit Abstract';
+            log('Submit button re-enabled', 'info');
         }
     }
 }
 
 // Save draft functionality
 async function saveDraft() {
+    log('Starting draft save process...', 'info');
+    
     // Get draft button and show loading state
     const draftBtn = document.getElementById('save-draft-btn');
     
@@ -902,6 +962,7 @@ async function saveDraft() {
         
         // Collect and validate form data
         const jsonData = collectFormData();
+        log('Form data for draft collected successfully', 'info');
         
         // Add draft status
         jsonData.status = 'draft';
@@ -909,6 +970,7 @@ async function saveDraft() {
         // Check if a PDF file is selected
         const pdfInput = document.getElementById('abstract_pdf');
         if (pdfInput && pdfInput.files[0]) {
+            log('PDF file detected for draft, preparing form data...', 'info');
             // Validate again on save draft
             if (!validatePdf(pdfInput.files[0], pdfInput)) {
                 throw new Error('Invalid PDF file. Please select a valid PDF under the size limit.');
@@ -942,8 +1004,10 @@ async function saveDraft() {
             }
             
             const result = await response.json();
+            log('Draft with PDF saved successfully', 'info');
             showToast('Draft saved successfully!', 'success');
         } else {
+            log('No PDF file for draft, saving as JSON...', 'info');
             // No file selected, send as JSON
             const response = await fetch(`${BASE_API_URL}/abstracts`, {
                 method: 'POST',
@@ -972,15 +1036,17 @@ async function saveDraft() {
             }
             
             const result = await response.json();
+            log('Draft saved successfully as JSON', 'info');
             showToast('Draft saved successfully!', 'success');
         }
     } catch (error) {
-        console.error('Error saving draft:', error);
+        logError('Error saving draft:', error);
         showToast(`Failed to save draft: ${error.message}`, 'error');
     } finally {
         if (draftBtn) {
             draftBtn.disabled = false;
             draftBtn.innerHTML = '<span class="flex items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg> Save as Draft</span>';
+            log('Draft button re-enabled', 'info');
         }
     }
 }

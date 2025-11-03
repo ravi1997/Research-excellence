@@ -13,6 +13,10 @@ from app.routes.v1.view_route import view_bp
 from app.routes.v1.user_route import user_bp
 from app.routes.v1.superadmin_route import super_api_bp
 from app.routes.v1.research import research_bp
+from app.routes.v1.audit_log_route import audit_log_bp
+from app.routes.v1.user_settings_route import user_settings_bp
+from app.routes.v1.user_role_route import user_role_bp
+from app.routes.v1.token_route import token_bp
 
 def register_blueprints(app):
     """Register application blueprints with the Flask app instance.
@@ -29,4 +33,8 @@ def register_blueprints(app):
     app.register_blueprint(admin_api_bp, url_prefix=f'{BASE}/api/v1/admin')
     app.register_blueprint(super_api_bp, url_prefix=f'{BASE}/api/v1/super')
     app.register_blueprint(research_bp, url_prefix=f'{BASE}/api/v1/research')
+    app.register_blueprint(audit_log_bp, url_prefix=f'{BASE}/api/v1')
+    app.register_blueprint(user_settings_bp, url_prefix=f'{BASE}/api/v1')
+    app.register_blueprint(user_role_bp, url_prefix=f'{BASE}/api/v1')
+    app.register_blueprint(token_bp, url_prefix=f'{BASE}/api/v1')
     app.logger.info("Blueprints registered (core + admin_api + super_api + research)")

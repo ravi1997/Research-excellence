@@ -6,7 +6,7 @@ from typing import Dict, Iterable, Optional, Sequence
 from sqlalchemy.orm import joinedload
 
 from app.extensions import db
-from app.models.User import Role, User, UserRole
+from app.models.User import Role, User, UserRole, UserSettings
 from app.security_utils import audit_log
 from app.utils.logging_utils import get_logger, log_context
 
@@ -299,3 +299,308 @@ def activate_user(
         )
     logger.info("activate_user complete target_id=%s", ctx.get("user_id"))
     return user
+
+
+def create_user_settings(
+    commit: bool = True,
+    *,
+    actor_id: Optional[str] = None,
+    context: Optional[Dict[str, object]] = None,
+    **attributes,
+) -> UserSettings:
+    ctx = {"function": "create_user_settings", **(context or {})}
+    sanitized = _sanitize_payload(attributes)
+    with log_context(module="user_utils", action="create_user_settings", actor_id=actor_id):
+        logger.info("create_user_settings commit=%s attributes=%s", commit, sanitized)
+    user_settings = create_instance(
+        UserSettings,
+        commit=commit,
+        actor_id=actor_id,
+        event_name="user_settings.create",
+        context=ctx,
+        **attributes,
+    )
+    logger.info("create_user_settings complete id=%s", _serialize_value(getattr(user_settings, "id", None)))
+    return user_settings
+
+
+def get_user_settings_by_id(
+    settings_id,
+    *,
+    actor_id: Optional[str] = None,
+    context: Optional[Dict[str, object]] = None,
+) -> Optional[UserSettings]:
+    ctx = {"function": "get_user_settings_by_id", **(context or {})}
+    with log_context(module="user_utils", action="get_user_settings_by_id", actor_id=actor_id):
+        logger.info("get_user_settings_by_id id=%s", _serialize_value(settings_id))
+    user_settings = get_instance(
+        UserSettings,
+        settings_id,
+        actor_id=actor_id,
+        event_name="user_settings.get",
+        context=ctx,
+    )
+    logger.info("get_user_settings_by_id resolved id=%s found=%s", _serialize_value(settings_id), user_settings is not None)
+    return user_settings
+
+
+def get_user_settings_by_user_id(
+    user_id,
+    *,
+    actor_id: Optional[str] = None,
+    context: Optional[Dict[str, object]] = None,
+) -> Optional[UserSettings]:
+    ctx = {"function": "get_user_settings_by_user_id", "user_id": _serialize_value(user_id), **(context or {})}
+    with log_context(module="user_utils", action="get_user_settings_by_user_id", actor_id=actor_id):
+        logger.info("get_user_settings_by_user_id user_id=%s", _serialize_value(user_id))
+    user_settings = db.session.query(UserSettings).filter_by(user_id=user_id).first()
+    logger.info("get_user_settings_by_user_id resolved user_id=%s found=%s", _serialize_value(user_id), user_settings is not None)
+    if user_settings:
+        _audit(
+            "user_settings.get",
+            actor_id,
+            {
+                "operation": "get_user_settings_by_user_id",
+                "user_id": _serialize_value(user_id),
+                "settings_id": _serialize_value(getattr(user_settings, "id", None)),
+            },
+        )
+    return user_settings
+
+
+def list_user_settings(
+    *,
+    filters: Optional[Sequence] = None,
+    order_by=None,
+    limit: Optional[int] = None,
+    offset: Optional[int] = None,
+    actor_id: Optional[str] = None,
+    context: Optional[Dict[str, object]] = None,
+) -> Sequence[UserSettings]:
+    ctx = {
+        "function": "list_user_settings",
+        "limit": limit,
+        "offset": offset,
+        **(context or {}),
+    }
+    user_settings_list = list_instances(
+        UserSettings,
+        filters=filters,
+        order_by=order_by,
+        limit=limit,
+        offset=offset,
+        actor_id=actor_id,
+        event_name="user_settings.list",
+        context=ctx,
+    )
+    with log_context(module="user_utils", action="list_user_settings", actor_id=actor_id):
+        logger.info(
+            "list_user_settings complete limit=%s offset=%s count=%s",
+            limit,
+            offset,
+            len(user_settings_list),
+        )
+    return user_settings_list
+
+
+def update_user_settings(
+    user_settings: UserSettings,
+    commit: bool = True,
+    *,
+    actor_id: Optional[str] = None,
+    context: Optional[Dict[str, object]] = None,
+    **attributes,
+) -> UserSettings:
+    ctx = {
+        "function": "update_user_settings",
+        "settings_id": _serialize_value(getattr(user_settings, "id", None)),
+        **(context or {}),
+    }
+    sanitized = _sanitize_payload(attributes)
+    with log_context(module="user_utils", action="update_user_settings", actor_id=actor_id):
+        logger.info("update_user_settings target_id=%s attributes=%s", ctx.get("settings_id"), sanitized)
+    updated = update_instance(
+        user_settings,
+        commit=commit,
+        actor_id=actor_id,
+        event_name="user_settings.update",
+        context=ctx,
+        **attributes,
+    )
+    logger.info("update_user_settings complete target_id=%s", ctx.get("settings_id"))
+    return updated
+
+
+def delete_user_settings(
+    user_settings_or_id,
+    commit: bool = True,
+    *,
+    actor_id: Optional[str] = None,
+    context: Optional[Dict[str, object]] = None,
+) -> None:
+    ctx = {"function": "delete_user_settings", **(context or {})}
+    with log_context(module="user_utils", action="delete_user_settings", actor_id=actor_id):
+        logger.info("delete_user_settings target=%s", _serialize_value(user_settings_or_id))
+    delete_instance(
+        UserSettings,
+        user_settings_or_id,
+        commit=commit,
+        actor_id=actor_id,
+        event_name="user_settings.delete",
+        context=ctx,
+    )
+    logger.info("delete_user_settings completed target=%s", _serialize_value(user_settings_or_id))
+
+
+def create_user_role(
+    commit: bool = True,
+    *,
+    actor_id: Optional[str] = None,
+    context: Optional[Dict[str, object]] = None,
+    **attributes,
+) -> UserRole:
+    ctx = {"function": "create_user_role", **(context or {})}
+    sanitized = _sanitize_payload(attributes)
+    with log_context(module="user_utils", action="create_user_role", actor_id=actor_id):
+        logger.info("create_user_role commit=%s attributes=%s", commit, sanitized)
+    user_role = create_instance(
+        UserRole,
+        commit=commit,
+        actor_id=actor_id,
+        event_name="user_role.create",
+        context=ctx,
+        **attributes,
+    )
+    logger.info("create_user_role complete id=%s", _serialize_value(getattr(user_role, "id", None)))
+    return user_role
+
+
+def get_user_role_by_id(
+    role_id,
+    *,
+    actor_id: Optional[str] = None,
+    context: Optional[Dict[str, object]] = None,
+) -> Optional[UserRole]:
+    ctx = {"function": "get_user_role_by_id", **(context or {})}
+    with log_context(module="user_utils", action="get_user_role_by_id", actor_id=actor_id):
+        logger.info("get_user_role_by_id id=%s", _serialize_value(role_id))
+    user_role = get_instance(
+        UserRole,
+        role_id,
+        actor_id=actor_id,
+        event_name="user_role.get",
+        context=ctx,
+    )
+    logger.info("get_user_role_by_id resolved id=%s found=%s", _serialize_value(role_id), user_role is not None)
+    return user_role
+
+
+def get_user_roles_by_user_id(
+    user_id,
+    *,
+    actor_id: Optional[str] = None,
+    context: Optional[Dict[str, object]] = None,
+) -> Sequence[UserRole]:
+    ctx = {"function": "get_user_roles_by_user_id", "user_id": _serialize_value(user_id), **(context or {})}
+    with log_context(module="user_utils", action="get_user_roles_by_user_id", actor_id=actor_id):
+        logger.info("get_user_roles_by_user_id user_id=%s", _serialize_value(user_id))
+    
+    user_roles = db.session.query(UserRole).filter_by(user_id=user_id).all()
+    logger.info("get_user_roles_by_user_id found %d roles for user_id=%s", len(user_roles), _serialize_value(user_id))
+    
+    if user_roles:
+        _audit(
+            "user_role.get_for_user",
+            actor_id,
+            {
+                "operation": "get_user_roles_by_user_id",
+                "user_id": _serialize_value(user_id),
+                "role_count": len(user_roles),
+                "role_values": [ur.role.value for ur in user_roles]
+            },
+        )
+    return user_roles
+
+
+def list_user_roles(
+    *,
+    filters: Optional[Sequence] = None,
+    order_by=None,
+    limit: Optional[int] = None,
+    offset: Optional[int] = None,
+    actor_id: Optional[str] = None,
+    context: Optional[Dict[str, object]] = None,
+) -> Sequence[UserRole]:
+    ctx = {
+        "function": "list_user_roles",
+        "limit": limit,
+        "offset": offset,
+        **(context or {}),
+    }
+    user_roles_list = list_instances(
+        UserRole,
+        filters=filters,
+        order_by=order_by,
+        limit=limit,
+        offset=offset,
+        actor_id=actor_id,
+        event_name="user_role.list",
+        context=ctx,
+    )
+    with log_context(module="user_utils", action="list_user_roles", actor_id=actor_id):
+        logger.info(
+            "list_user_roles complete limit=%s offset=%s count=%s",
+            limit,
+            offset,
+            len(user_roles_list),
+        )
+    return user_roles_list
+
+
+def update_user_role(
+    user_role: UserRole,
+    commit: bool = True,
+    *,
+    actor_id: Optional[str] = None,
+    context: Optional[Dict[str, object]] = None,
+    **attributes,
+) -> UserRole:
+    ctx = {
+        "function": "update_user_role",
+        "role_id": _serialize_value(getattr(user_role, "id", None)),
+        **(context or {}),
+    }
+    sanitized = _sanitize_payload(attributes)
+    with log_context(module="user_utils", action="update_user_role", actor_id=actor_id):
+        logger.info("update_user_role target_id=%s attributes=%s", ctx.get("role_id"), sanitized)
+    updated = update_instance(
+        user_role,
+        commit=commit,
+        actor_id=actor_id,
+        event_name="user_role.update",
+        context=ctx,
+        **attributes,
+    )
+    logger.info("update_user_role complete target_id=%s", ctx.get("role_id"))
+    return updated
+
+
+def delete_user_role(
+    user_role_or_id,
+    commit: bool = True,
+    *,
+    actor_id: Optional[str] = None,
+    context: Optional[Dict[str, object]] = None,
+) -> None:
+    ctx = {"function": "delete_user_role", **(context or {})}
+    with log_context(module="user_utils", action="delete_user_role", actor_id=actor_id):
+        logger.info("delete_user_role target=%s", _serialize_value(user_role_or_id))
+    delete_instance(
+        UserRole,
+        user_role_or_id,
+        commit=commit,
+        actor_id=actor_id,
+        event_name="user_role.delete",
+        context=ctx,
+    )
+    logger.info("delete_user_role completed target=%s", _serialize_value(user_role_or_id))
