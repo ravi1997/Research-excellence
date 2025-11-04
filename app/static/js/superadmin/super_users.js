@@ -5,6 +5,7 @@
   if(!tableBody) return; // page not present
   let currentPage = 1;
   let totalPages = 1;  // Track total pages
+  let totalUsers = 0;  // Track total users
   let lastQuery = {};
   const selected = new Set();
   const userModal = document.getElementById('user-modal');
@@ -18,7 +19,24 @@
     return { 'Content-Type':'application/json', ...authHeader() };
   }
 
+  // Show loading indicator
+  function showLoading() {
+    const loadingIndicator = document.getElementById('loading-indicator');
+    if(loadingIndicator) {
+      loadingIndicator.classList.remove('hidden');
+    }
+  }
+
+  // Hide loading indicator
+  function hideLoading() {
+    const loadingIndicator = document.getElementById('loading-indicator');
+    if(loadingIndicator) {
+      loadingIndicator.classList.add('hidden');
+    }
+  }
+
   async function fetchUsers(page=1){
+    showLoading();
     // Get filter values from the actual template elements
     const search = document.getElementById('user-search').value;
     const roleFilter = document.getElementById('role-filter').value;
@@ -30,21 +48,26 @@
     if(roleFilter && roleFilter !== 'all') params.set('role', roleFilter);
     
     const res = await fetch(`${BASE}/api/v1/super/users?${params}`, { headers: { ...authHeader() }});
-    if(!res.ok){ 
-      console.error('Failed to load users'); 
-      return; 
+    if(!res.ok){
+      console.error('Failed to load users');
+      hideLoading();
+      return;
     }
     const data = await res.json();
     renderUsers(data.items);
     renderPagination(data.current_page, data.total_pages, data.total_count);
+    hideLoading();
   }
 
   function updateBulkUI(){
     const count = selected.size;
     const bulkBtn = document.getElementById('bulk-actions-btn');
+    const selectedCount = document.getElementById('selected-count');
     if(bulkBtn) {
-      bulkBtn.textContent = `Bulk Actions (${count})`;
       bulkBtn.disabled = count === 0;
+    }
+    if(selectedCount) {
+      selectedCount.textContent = count;
     }
     
     const selectAll = document.getElementById('select-all-users');
@@ -59,26 +82,50 @@
     tableBody.innerHTML = '';
     for(const u of items){
       const tr = document.createElement('tr');
+      tr.classList.add('bg-white', 'dark:bg-gray-800', 'hover:bg-gray-50', 'dark:hover:bg-gray-700');
       const rolesArr = (u.roles||[]);
-      const roles = rolesArr.map(r=>`<span class=\"inline-block px-2 py-0.5 text-[10px] font-medium rounded-full border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200\">${escapeHtml(r)}</span>`).join(' ');
+      const roles = rolesArr.map(r=>`<span class="inline-block px-2 py-0.5 text-xs font-medium rounded-full border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200">${escapeHtml(r)}</span>`).join(' ');
       const isSelected = selected.has(u.id);
       const status = u.is_active ? 'Active' : 'Inactive';
-      const locked = u.locked ? 'Locked' : 'Unlocked';
+      const locked = u.lock_until ? 'Locked' : 'Unlocked';
       const lastLogin = u.last_login ? new Date(u.last_login).toLocaleString() : 'Never';
       
       tr.innerHTML = `
-        <td><input type="checkbox" class="row-select" value="${u.id}" ${isSelected?'checked':''}></td>
-        <td>${escapeHtml(u.username||'')}</td>
-        <td>${escapeHtml(u.email||'')}</td>
-        <td>${escapeHtml(u.employee_id||'')}</td>
-        <td class="space-x-1">${roles}</td>
-        <td>${status}</td>
-        <td>${locked}</td>
-        <td>${lastLogin}</td>
-        <td class="whitespace-nowrap px-2 py-1 space-x-1">
-          <button class="edit-user-btn px-2 py-1 text-xs border rounded border-blue-500 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900" data-id="${u.id}">Edit</button>
-          <button class="activate-user-btn px-2 py-1 text-xs border rounded border-green-500 text-green-600 hover:bg-green-50 dark:hover:bg-green-900" data-id="${u.id}">${u.is_active ? 'Deactivate' : 'Activate'}</button>
-          <button class="lock-user-btn px-2 py-1 text-xs border rounded border-red-500 text-red-600 hover:bg-red-50 dark:hover:bg-red-900" data-id="${u.id}">${locked === 'Locked' ? 'Unlock' : 'Lock'}</button>
+        <td class="px-6 py-4 whitespace-nowrap">
+          <input type="checkbox" class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600 rounded row-select" value="${u.id}" ${isSelected?'checked':''}>
+        </td>
+        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">${escapeHtml(u.username||'')}</td>
+        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">${escapeHtml(u.email||'')}</td>
+        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">${escapeHtml(u.employee_id||'')}</td>
+        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">${escapeHtml(u.mobile||'')}</td>
+        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300 space-x-1">${roles}</td>
+        <td class="px-6 py-4 whitespace-nowrap">
+          <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${u.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+            ${status}
+          </span>
+        </td>
+        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-30">
+          <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${u.lock_until ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}">
+            ${locked}
+          </span>
+        </td>
+        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">${lastLogin}</td>
+        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+          <button class="edit-user-btn text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 mr-3" data-id="${u.id}" title="Edit user">
+            <svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M1 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+            </svg>
+          </button>
+          <button class="activate-user-btn ${u.is_active ? 'text-red-600 hover:text-red-900 dark:text-red-40 dark:hover:text-red-300' : 'text-green-60 hover:text-green-900 dark:text-green-40 dark:hover:text-green-300'} mr-3" data-id="${u.id}" title="${u.is_active ? 'Deactivate user' : 'Activate user'}">
+            <svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 0-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+            </svg>
+          </button>
+          <button class="lock-user-btn ${u.lock_until ? 'text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300' : 'text-red-600 hover:text-red-900 dark:text-red-40 dark:hover:text-red-300'}" data-id="${u.id}" title="${u.lock_until ? 'Unlock user' : 'Lock user'}">
+            <svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 0-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+            </svg>
+          </button>
         </td>`;
       tableBody.appendChild(tr);
     }
@@ -88,8 +135,19 @@
   function renderPagination(page, pages, total){
     currentPage = page;
     totalPages = pages; // Store total pages for reference
-    const pageInfo = document.getElementById('page-info');
-    if(pageInfo) pageInfo.textContent = `Page ${page} of ${pages}`;
+    totalUsers = total; // Store total users
+    
+    const startItem = document.getElementById('start-item');
+    const endItem = document.getElementById('end-item');
+    const totalCount = document.getElementById('total-count');
+    const currentPageEl = document.getElementById('current-page');
+    const totalPagesEl = document.getElementById('total-pages');
+    
+    if(startItem) startItem.textContent = ((page - 1) * 10) + 1;
+    if(endItem) endItem.textContent = Math.min(page * 10, total);
+    if(totalCount) totalCount.textContent = total;
+    if(currentPageEl) currentPageEl.textContent = page;
+    if(totalPagesEl) totalPagesEl.textContent = pages;
     
     // Enable/disable pagination buttons
     const prevBtn = document.getElementById('prev-page');
@@ -124,7 +182,7 @@
     else if(activateBtn) {
       const id = activateBtn.getAttribute('data-id');
       const userRow = activateBtn.closest('tr');
-      const currentStatus = userRow.querySelector('td:nth-child(6)').textContent; // status column
+      const currentStatus = userRow.querySelector('td:nth-child(7)').textContent.trim(); // status column (now 7th)
       
       if(currentStatus === 'Active') {
         await deactivateUser(id);
@@ -140,7 +198,7 @@
       const userRes = await fetch(`${BASE}/api/v1/super/users/${id}`, { headers: authHeader() });
       if(userRes.ok) {
         const userData = await userRes.json();
-        if(userData.user.locked) {
+        if(userData.user.lock_until) {
           await unlockUser(id);
         } else {
           await lockUser(id);
@@ -154,7 +212,7 @@
   tableBody.addEventListener('change', e =>{
     const cb = e.target.closest('.row-select');
     if(!cb) return;
-    if(cb.checked) selected.add(cb.value); 
+    if(cb.checked) selected.add(cb.value);
     else selected.delete(cb.value);
     updateBulkUI();
   });
@@ -162,20 +220,19 @@
   document.getElementById('select-all-users').addEventListener('change', e =>{
     const on = e.target.checked;
     selected.clear();
-    document.querySelectorAll('.row-select').forEach(cb=>{ 
-      cb.checked = on; 
-      if(on) selected.add(cb.value); 
+    document.querySelectorAll('.row-select').forEach(cb=>{
+      cb.checked = on;
+      if(on) selected.add(cb.value);
     });
     updateBulkUI();
   });
 
   // Add user button
- document.getElementById('add-user-btn').addEventListener('click', ()=>{
+  document.getElementById('add-user-btn').addEventListener('click', ()=>{
     openUserModal(null);
   });
 
   // User modal functionality
-  const closeModalBtn = document.querySelector('#user-modal .close');
   const cancelBtn = document.getElementById('cancel-user-btn');
   const userForm = document.getElementById('user-form');
   
@@ -203,11 +260,16 @@
       document.getElementById('status').value = 'active';
     }
     
+    // Show modal
     userModal.classList.remove('hidden');
+    document.body.classList.add('overflow-hidden');
   }
   
   function closeUserModal() {
-    if(userModal) userModal.classList.add('hidden');
+    if(userModal) {
+      userModal.classList.add('hidden');
+      document.body.classList.remove('overflow-hidden');
+    }
   }
   
   async function loadUserData(userId) {
@@ -276,10 +338,10 @@
       console.error('Failed to save user');
       const errorText = await res.text();
       console.error('Error details:', errorText);
+      alert('Failed to save user: ' + errorText);
     }
   }
   
-  closeModalBtn.addEventListener('click', closeUserModal);
   cancelBtn.addEventListener('click', closeUserModal);
   userForm.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -287,7 +349,7 @@
   });
   
   // Close modal when clicking outside
-  window.addEventListener('click', (e) => {
+  userModal.addEventListener('click', (e) => {
     if(e.target === userModal) {
       closeUserModal();
     }

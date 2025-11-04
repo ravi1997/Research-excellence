@@ -1,378 +1,243 @@
 /* ==========================================================================
    Research Excellence Portal - Homepage logic
-   Works with templates/index.html as provided.
+   Updated to align with platform-wide auth, routing, and accessibility
+   patterns (2025).
    ========================================================================== */
 
 (() => {
-    // ------------------ DOM refs ------------------
-    const $ = (s, r = document) => r.querySelector(s);
-    const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+    "use strict";
 
-    const BASE = '';
+    const API_BASE = (window.API_BASE || "/api/v1").replace(/\/$/, "");
+    const STATUS_FIELDS = ["pending", "under_review", "accepted", "rejected"];
 
-    // ------------------ Init ------------------
-    function init() {
-        // Initialize any interactive  on the homepage
-        console.log("Research Excellence Portal initialized");
+    const STATUS_CONFIG = {
+        abstract: {
+            endpoint: "/research/abstracts/status",
+            fields: {
+                pending: "#abstract-pending",
+                under_review: "#abstract-under-review",
+                accepted: "#abstract-accepted",
+                rejected: "#abstract-rejected",
+            },
+        },
+        award: {
+            endpoint: "/research/awards/status",
+            fields: {
+                pending: "#award-pending",
+                under_review: "#award-under-review",
+                accepted: "#award-accepted",
+                rejected: "#award-rejected",
+            },
+        },
+        bestPaper: {
+            endpoint: "/research/best-papers/status",
+            fields: {
+                pending: "#best-paper-pending",
+                under_review: "#best-paper-under-review",
+                accepted: "#best-paper-accepted",
+                rejected: "#best-paper-rejected",
+            },
+        },
+    };
 
-        // Add any specific initialization logic here
-        setupFeatureCards();
-        setupAnnouncements();
+    const OVERVIEW_FIELDS = {
+        pending: "#pending",
+        under_review: "#under-review",
+        accepted: "#accepted",
+        rejected: "#rejected",
+    };
 
-        fetchAbstractStatus();
-        fetchAwardStatus();
-        fetchBestPaperStatus();
+    const numberFormatter = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
+    const abortController = new AbortController();
 
-        checkUserRoles(); // Check user roles to show/hide buttons
-        setTimeout(() => {
-            // Any delayed initialization if needed
+    const statusState = new Map(
+        Object.keys(STATUS_CONFIG).map((key) => [key, createEmptyTotals()])
+    );
 
+    const toast =
+        window.SubmitList?.utils?.toast ||
+        window.researchPortal?.showToast ||
+        ((message, type = "info") => {
+            (type === "error" ? console.error : console.warn)(`[Home] ${message}`);
+        });
 
-            const abstract_pendingElement = $('#abstract-pending');
-            const abstract_underReviewElement = $('#abstract-under-review');
-            const abstract_acceptedElement = $('#abstract-accepted');
-            const abstract_rejectedElement = $('#abstract-rejected');
-
-            const award_pendingElement = $('#award-pending');
-            const award_underReviewElement = $('#award-under-review');
-            const award_acceptedElement = $('#award-accepted');
-            const award_rejectedElement = $('#award-rejected');
-
-            const bestPaper_pendingElement = $('#best-paper-pending');
-            const bestPaper_underReviewElement = $('#best-paper-under-review');
-            const bestPaper_acceptedElement = $('#best-paper-accepted');
-            const bestPaper_rejectedElement = $('#best-paper-rejected');
-
-            const pendingElement = $('#pending');
-            const underReviewElement = $('#under-review');
-            const acceptedElement = $('#accepted');
-            const rejectedElement = $('#rejected');
-
-            pendingElement.textContent =
-                (parseInt(abstract_pendingElement.textContent, 10) || 0) +
-                (parseInt(award_pendingElement.textContent, 10) || 0) +
-                (parseInt(bestPaper_pendingElement.textContent, 10) || 0);
-
-            underReviewElement.textContent =
-                (parseInt(abstract_underReviewElement.textContent, 10) || 0) +
-                (parseInt(award_underReviewElement.textContent, 10) || 0) +
-                (parseInt(bestPaper_underReviewElement.textContent, 10) || 0);
-
-            acceptedElement.textContent =
-                (parseInt(abstract_acceptedElement.textContent, 10) || 0) +
-                (parseInt(award_acceptedElement.textContent, 10) || 0) +
-                (parseInt(bestPaper_acceptedElement.textContent, 10) || 0);
-
-            rejectedElement.textContent =
-                (parseInt(abstract_rejectedElement.textContent, 10) || 0) +
-                (parseInt(award_rejectedElement.textContent, 10) || 0) +
-                (parseInt(bestPaper_rejectedElement.textContent, 10) || 0);
-        }, 150);
+    function createEmptyTotals() {
+        return { pending: 0, under_review: 0, accepted: 0, rejected: 0 };
     }
 
-    // ------------------ Feature Cards ------------------
-    function setupFeatureCards() {
-        // Add any interactivity to feature cards if needed
-        const featureCards = $$('.feature-card');
-        featureCards.forEach(card => {
-            // Could add hover effects or other interactions
-            card.addEventListener('mouseenter', () => {
-                card.classList.add('hover-effect');
-            });
+    function getToken() {
+        const candidates = ["token", "access_token"];
+        for (const key of candidates) {
+            const value = localStorage.getItem(key);
+            if (value && value.trim()) return value.trim();
+        }
+        return "";
+    }
 
-            card.addEventListener('mouseleave', () => {
-                card.classList.remove('hover-effect');
-            });
+    function buildHeaders(initHeaders = {}, body) {
+        const headers = new Headers(initHeaders);
+        headers.set("Accept", "application/json");
+
+        const token = getToken();
+        if (token && !headers.has("Authorization")) {
+            headers.set("Authorization", `Bearer ${token}`);
+        }
+
+        const isJsonBody = body && !(body instanceof FormData);
+        if (isJsonBody && !headers.has("Content-Type")) {
+            headers.set("Content-Type", "application/json");
+        }
+
+        return headers;
+    }
+
+    async function request(path, { method = "GET", body, headers, signal } = {}) {
+        const url = path.startsWith("http") ? path : `${API_BASE}${path}`;
+        const resolvedHeaders = buildHeaders(headers, body);
+        const init = {
+            method,
+            headers: resolvedHeaders,
+            signal,
+        };
+
+        if (body) {
+            init.body = body instanceof FormData ? body : JSON.stringify(body);
+        }
+
+        let response;
+        try {
+            response = await fetch(url, init);
+        } catch (error) {
+            toast("Network error while contacting the service.", "error");
+            throw error;
+        }
+
+        if (response.status === 204) {
+            return {};
+        }
+
+        if (!response.ok) {
+            const message = await extractErrorMessage(response);
+            if (response.status >= 500) {
+                toast("The service is temporarily unavailable. Please try again later.", "error");
+            } else if (message) {
+                toast(message, "warn");
+            }
+            throw new Error(message || `Request failed (${response.status})`);
+        }
+
+        const contentType = response.headers.get("content-type") || "";
+        if (!contentType.includes("application/json")) {
+            return {};
+        }
+        return response.json();
+    }
+
+    async function extractErrorMessage(response) {
+        try {
+            const data = await response.clone().json();
+            return data?.error || data?.message || "";
+        } catch {
+            return response.statusText || "";
+        }
+    }
+
+    function safeCount(value) {
+        const num = Number.parseInt(value, 10);
+        return Number.isFinite(num) ? num : 0;
+    }
+
+    function normalizeStatusPayload(raw) {
+        const source = raw || {};
+        const normalised = createEmptyTotals();
+
+        for (const key of STATUS_FIELDS) {
+            if (key in source) {
+                normalised[key] = safeCount(source[key]);
+                continue;
+            }
+
+            const camelKey = key.replace(/_(\w)/g, (_, ch) => ch.toUpperCase());
+            if (camelKey in source) {
+                normalised[key] = safeCount(source[camelKey]);
+                continue;
+            }
+
+            const upperKey = key.toUpperCase();
+            if (upperKey in source) {
+                normalised[key] = safeCount(source[upperKey]);
+            }
+        }
+
+        return normalised;
+    }
+
+    function updateNodes(fieldMap, values) {
+        Object.entries(fieldMap).forEach(([field, selector]) => {
+            const element = document.querySelector(selector);
+            if (!element) return;
+            const value = values[field] ?? 0;
+            element.textContent = numberFormatter.format(value);
         });
     }
 
-    // ------------------ Announcements ------------------
-    function setupAnnouncements() {
-        // Add any interactivity to announcements if needed
-        const announcements = $$('.research-item');
-        announcements.forEach(item => {
-            // Could add expand/collapse functionality or other interactions
+    function updateOverview() {
+        const totals = createEmptyTotals();
+        statusState.forEach((values) => {
+            STATUS_FIELDS.forEach((field) => {
+                totals[field] += safeCount(values[field]);
+            });
         });
+        updateNodes(OVERVIEW_FIELDS, totals);
     }
 
-    // ------------------ Abstract Status ------------------
-    async function fetchAbstractStatus() {
-        try {
-            const response = await fetch('/api/v1/research/abstracts/status', {
-                method: 'GET',
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json'
-                },
-                credentials: 'include' // Include cookies/session data
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                updateAbstractStatus(data);
-            } else {
-                console.error('Failed to fetch abstract status:', response.status);
-            }
-        } catch (error) {
-            console.error('Error fetching abstract status:', error);
-        }
+    function applyStatus(key, payload) {
+        const config = STATUS_CONFIG[key];
+        if (!config) return;
+        const normalised = normalizeStatusPayload(payload);
+        statusState.set(key, normalised);
+        updateNodes(config.fields, normalised);
+        updateOverview();
     }
 
-    function updateAbstractStatus(data) {
-        // Update the abstract status elements
-        const pendingElement = $('#abstract-pending');
-        const underReviewElement = $('#abstract-under-review');
-        const acceptedElement = $('#abstract-accepted');
-        const rejectedElement = $('#abstract-rejected');
-
-        if (pendingElement) pendingElement.textContent = data.pending || 0;
-        if (underReviewElement) underReviewElement.textContent = data.under_review || 0;
-        if (acceptedElement) acceptedElement.textContent = data.accepted || 0;
-        if (rejectedElement) rejectedElement.textContent = data.rejected || 0;
-    }
-    // ------------------ Award Status ------------------
-    async function fetchAwardStatus() {
-        try {
-            const response = await fetch('/api/v1/research/awards/status', {
-                method: 'GET',
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json'
-                },
-                credentials: 'include' // Include cookies/session data
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                updateAwardStatus(data);
-            } else {
-                console.error('Failed to fetch award status:', response.status);
-            }
-        } catch (error) {
-            console.error('Error fetching award status:', error);
-        }
-    }
-    function updateAwardStatus(data) {
-        // Update the award status elements
-        const pendingElement = $('#award-pending');
-        const underReviewElement = $('#award-under-review');
-        const acceptedElement = $('#award-accepted');
-        const rejectedElement = $('#award-rejected');
-
-        if (pendingElement) pendingElement.textContent = data.pending || 0;
-        if (underReviewElement) underReviewElement.textContent = data.under_review || 0;
-        if (acceptedElement) acceptedElement.textContent = data.accepted || 0;
-        if (rejectedElement) rejectedElement.textContent = data.rejected || 0;
-    }
-
-
-    // ------------------ Best Paper Status ------------------
-    async function fetchBestPaperStatus() {
-        try {
-            const response = await fetch('/api/v1/research/best-papers/status', {
-                method: 'GET',
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json'
-                },
-                credentials: 'include' // Include cookies/session data
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                updateBestPaperStatus(data);
-            } else {
-                console.error('Failed to fetch best paper status:', response.status);
-            }
-        } catch (error) {
-            console.error('Error fetching best paper status:', error);
-        }
-    }
-    function updateBestPaperStatus(data) {
-        // Update the best paper status elements
-        const pendingElement = $('#best-paper-pending');
-        const underReviewElement = $('#best-paper-under-review');
-        const acceptedElement = $('#best-paper-accepted');
-        const rejectedElement = $('#best-paper-rejected');
-
-        if (pendingElement) pendingElement.textContent = data.pending || 0;
-        if (underReviewElement) underReviewElement.textContent = data.under_review || 0;
-        if (acceptedElement) acceptedElement.textContent = data.accepted || 0;
-        if (rejectedElement) rejectedElement.textContent = data.rejected || 0;
-    }
-
-
-
-    async function handleAuthFailure(resp, retryFn) {
-        if (!resp || !(resp.status === 401 || resp.status === 403)) return;
-        const status = resp.status;
-        const path = window.location.pathname;
-
-        if (status === 401) {
-            window.location.replace(`/login`);
-        }
-
-        // Special case: forced password change (403 with error=password_change_required)
-        if (status === 403) {
+    async function refreshStatuses() {
+        const tasks = Object.entries(STATUS_CONFIG).map(async ([key, config]) => {
             try {
-                const ct = resp.headers.get('content-type') || '';
-                if (ct.includes('application/json')) {
-                    const clone = resp.clone();
-                    const data = await clone.json().catch(() => null);
-                    if (data && data.error === 'password_change_required') {
-                        if (!path.startsWith(BASE + '/change-password')) {
-                            showToast('Password update required. Redirecting…', 'info', 3000);
-                            setTimeout(() => { try { window.location.replace('/change-password'); } catch { window.location.href = '/change-password'; } }, 500);
-                        }
-                        return; // Do not treat as auth expiry
-                    }
+                const data = await request(config.endpoint, { signal: abortController.signal });
+                applyStatus(key, data);
+            } catch (error) {
+                if (error?.name === "AbortError") {
+                    return;
                 }
-            } catch { /* ignore parse errors */ }
-        }
-
-        if (path.startsWith(BASE + '/login')) return; // already on login
-        // Attempt refresh once per navigation
-        if (!sessionStorage.getItem('__refresh_attempted')) {
-            sessionStorage.setItem('__refresh_attempted', '1');
-            const ok = await tryRefreshToken();
-            if (ok && typeof retryFn === 'function') {
-                try { await retryFn(); return; } catch {/* swallow and fallback */ }
+                console.warn(`[Home] Unable to load ${key} status`, error);
+                applyStatus(key, {});
             }
-        }
-        if (sessionStorage.getItem('__auth_redirect_lock') === '1') return;
-        sessionStorage.setItem('__auth_redirect_lock', '1');
-        showToast('Session expired. Redirecting to login…', 'warn', 3500);
-        clearAuthStorage();
-        const ret = encodeURIComponent(path + window.location.search);
-        setTimeout(() => { try { window.location.replace(`/login?next=${ret}`); } catch { window.location.href = `/login?next=${ret}`; } }, 1200);
+        });
+
+        await Promise.allSettled(tasks);
     }
 
-    function clearAuthStorage() {
-        try {
-            localStorage.removeItem("token");
-            localStorage.removeItem("user");
-            localStorage.removeItem("refresh_token");
-        } catch { /* ignore */ }
-    }
-    // ------------------ Role-Based Visibility ------------------
-    async function checkUserRoles() {
-        try {
-            // Fetch user info to determine roles
-            const response = await fetch('/api/v1/auth/me', {
-                method: 'GET',
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json'
-                },
-                credentials: 'include'
-            });
-
-            if (response.ok) {
-                const userData = await response.json();
-                const userRoles = userData.logged_in_as?.roles || [];
-
-                // Show/hide buttons based on roles
-                const applyButton = $('#abstract-apply');
-                const verifyButton = $('#abstract-verify');
-
-                const applyAwardButton = $('#award-apply');
-                const verifyAwardButton = $('#award-verify');
-
-                const applyBestPaperButton = $('#paper-apply');
-                const verifyBestPaperButton = $('#paper-verify');
-
-
-                // Normal users can apply
-                if (applyButton) {
-                    if (userRoles.includes('Role.USER') || userRoles.includes('Role.ADMIN') || userRoles.includes('Role.SUPERADMIN')) {
-                        applyButton.classList.remove('hidden');
-                    } else {
-                        applyButton.classList.add('hidden');
-                    }
-                }
-
-                // Only verifiers, admins, and superadmins can verify
-                if (verifyButton) {
-                    if (userRoles.includes('Role.VERIFIER') || userRoles.includes('Role.ADMIN') || userRoles.includes('Role.SUPERADMIN')) {
-                        verifyButton.classList.remove('hidden');
-                    } else {
-                        verifyButton.classList.add('hidden');
-                    }
-                }
-
-                // Awards
-                if (applyAwardButton) {
-                    if (userRoles.includes('Role.USER') || userRoles.includes('Role.ADMIN') || userRoles.includes('Role.SUPERADMIN')) {
-                        applyAwardButton.classList.remove('hidden');
-                    } else {
-                        applyAwardButton.classList.add('hidden');
-                    }
-                }
-
-                if (verifyAwardButton) {
-                    if (userRoles.includes('Role.VERIFIER') || userRoles.includes('Role.ADMIN') || userRoles.includes('Role.SUPERADMIN')) {
-                        verifyAwardButton.classList.remove('hidden');
-                    } else {
-                        verifyAwardButton.classList.add('hidden');
-                    }
-                }
-
-                // Best Papers
-                if (applyBestPaperButton) {
-                    if (userRoles.includes('Role.USER') || userRoles.includes('Role.ADMIN') || userRoles.includes('Role.SUPERADMIN')) {
-                        applyBestPaperButton.classList.remove('hidden');
-                    } else {
-                        applyBestPaperButton.classList.add('hidden');
-                    }
-                }
-
-                if (verifyBestPaperButton) {
-                    if (userRoles.includes('Role.VERIFIER') || userRoles.includes('Role.ADMIN') || userRoles.includes('Role.SUPERADMIN')) {
-                        verifyBestPaperButton.classList.remove('hidden');
-                    } else {
-                        verifyBestPaperButton.classList.add('hidden');
-                    }
-                }
-
+    function init() {
+        Object.keys(STATUS_CONFIG).forEach((key) => {
+            const snapshot = statusState.get(key);
+            applyStatus(key, snapshot);
+        });
+        refreshStatuses();
+        document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "visible") {
+                refreshStatuses();
             }
-            else if (response.status === 401 || response.status === 403) {
-                // console.error('Failed to fetch user info:', response.status);
-                handleAuthFailure(response);
-            }
-        } catch (error) {
-            console.error('Error checking user roles:', error);
-            // Hide both buttons by default if we can't determine roles
-            const applyButton = $('#abstract-apply');
-            const verifyButton = $('#abstract-verify');
-            if (applyButton) applyButton.style.display = 'none';
-            if (verifyButton) verifyButton.style.display = 'none';
-        }
+        });
     }
 
-    // ------------------ Utility Functions ------------------
-    function showToast(message, type = 'info') {
-        // Simple toast notification system
-        const toastHost = $('#toastHost') || document.body;
-        const toast = document.createElement('div');
-        toast.className = `toast toast-${type}`;
-        toast.textContent = message;
-        toastHost.appendChild(toast);
+    window.addEventListener("beforeunload", () => abortController.abort());
 
-        // Remove toast after delay
-        setTimeout(() => {
-            toast.remove();
-        }, 3000);
-    }
-
-    // ------------------ Expose API ------------------
-    // Expose minimal API for template buttons to call
-    window.researchPortal = Object.assign(window.researchPortal || {}, {
-        showToast
+    window.researchPortal = Object.assign({}, window.researchPortal, {
+        showToast: toast,
     });
 
-    // ------------------ Start ------------------
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", init);
     } else {
         init();
     }
