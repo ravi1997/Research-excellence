@@ -90,6 +90,8 @@ def list_best_papers(
     filters: Optional[Sequence] = None,
     eager: bool = False,
     order_by=None,
+    limit: Optional[int] = None,
+    offset: Optional[int] = None,
     actor_id: Optional[str] = None,
     context: Optional[Dict[str, object]] = None,
 ) -> Sequence[BestPaper]:
@@ -102,11 +104,19 @@ def list_best_papers(
         if eager
         else None
     )
-    ctx = {"function": "list_best_papers", "eager": eager, **(context or {})}
+    ctx = {
+        "function": "list_best_papers",
+        "eager": eager,
+        "limit": limit,
+        "offset": offset,
+        **(context or {}),
+    }
     best_papers = list_instances(
         BestPaper,
         filters=filters,
         order_by=order_by,
+        limit=limit,
+        offset=offset,
         query_options=options,
         actor_id=actor_id,
         event_name="best_paper.list",

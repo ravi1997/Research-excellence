@@ -1,247 +1,121 @@
-(() => {
-    const BASE = '/api/v1/research';  // Fixed path
-    const token = () => localStorage.getItem('token') || '';
-    const headers = () => ({ 'Accept': 'application/json', 'Authorization': `Bearer ${token()}` });
-    const sQ = id => document.getElementById(id);
-    const paperList = sQ('paperList');
-    let selPaper = null;
-    const bulk = { paperIds: new Set() };
+/* submit_list_paper.js — page adapter for BEST PAPERS (mirrors award list integration) */
+(function () {
+    "use strict";
 
-    const state = {
-        papers: { page: 1, pages: 1, pageSize: 20, filter: '', q: '', sort: 'id', dir: 'desc' }
-    };
-
-    function activateSeg(group, btn) {
-        group.querySelectorAll('.seg').forEach(b => b.classList.remove('active', 'bg-[color:var(--brand-600)]', 'text-white', 'dark:bg-[color:var(--brand-500)]'));
-        btn.classList.add('active', 'bg-[color:var(--brand-600)]', 'text-white', 'dark:bg-[color:var(--brand-500)]');
+    if (!window.SubmitList || typeof window.SubmitList.init !== "function") {
+        console.error("[Best Paper List] SubmitList helpers not available. Cannot initialise list controller.");
+        return;
     }
 
-    function wireSegmentedControls() {
-        const aStatusGroup = sQ('paperStatusGroup');
-        aStatusGroup?.addEventListener('click', e => {
-            const btn = e.target.closest('.seg'); if (!btn) return;
-            activateSeg(aStatusGroup, btn);
-            state.papers.filter = btn.dataset.val || '';
-            state.papers.page = 1; searchPapers();
-        });
+    const { utils, init } = window.SubmitList;
+    const { fetchJSON, escapeHtml, formatDate, getStatusClass } = utils;
 
-        const aPageGroup = sQ('paperPageSizeGroup');
-        aPageGroup?.addEventListener('click', e => {
-            const btn = e.target.closest('.seg'); if (!btn) return;
-            activateSeg(aPageGroup, btn);
-            state.papers.pageSize = +btn.dataset.size;
-            state.papers.page = 1; searchPapers();
-        });
+    function log(message, level = "info") {
+        console.log(`[Best Paper List] ${level.toUpperCase()}:`, message);
     }
-    
-    async function updateStatsBar() {
-        try {
-            const resp = await fetch(`${BASE}/best-papers/status`, {
-                headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
-            });
-            if (!resp.ok) throw new Error('Failed to fetch stats');
-            const stats = await resp.json();
-            const total = (stats.pending || 0) + (stats.under_review || 0) + (stats.accepted || 0) + (stats.rejected || 0);
-            document.getElementById('statTotal').textContent = total;
-            document.getElementById('statPending').textContent = stats.pending || 0;
-            document.getElementById('statAccepted').textContent = stats.accepted || 0;
-            document.getElementById('statRejected').textContent = stats.rejected || 0;
-        } catch (e) {
-            // fallback: show dashes
-            document.getElementById('statTotal').textContent = '-';
-            document.getElementById('statPending').textContent = '-';
-            document.getElementById('statAccepted').textContent = '-';
-            document.getElementById('statRejected').textContent = '-';
+
+    function logError(message, error = null) {
+        console.error(`[Best Paper List] ERROR: ${message}`, error);
+        if (error && error.stack) {
+            console.error("Stack trace:", error.stack);
         }
     }
 
-    function applySortStyles(groupEl, currentKey, dir) {
-        groupEl.querySelectorAll('.sort-btn').forEach(btn => {
-            const key = btn.dataset.key;
-            const arrow = btn.querySelector('.sort-arrow');
-            if (key === currentKey) {
-                btn.classList.add('bg-[color:var(--brand-600)]', 'text-white', 'dark:bg-[color:var(--brand-500)]');
-                arrow.classList.remove('opacity-40');
-                arrow.textContent = dir === 'asc' ? '↑' : '↓';
-            } else {
-                btn.classList.remove('bg-[color:var(--brand-600)]', 'text-white', 'dark:bg-[color:var(--brand-500)]');
-                arrow.classList.add('opacity-40');
-                arrow.textContent = '↕';
-            }
-        });
+    const API_LIST = "/api/v1/research/best-papers";
+    const API_DETAIL = (id) => `/api/v1/research/best-papers/${encodeURIComponent(id)}`;
+    const API_META = "/api/v1/research/best-papers/status";
+
+    const token = () => (localStorage.getItem("token") || "").trim();
+    const BASE = window.API_BASE || `${location.origin}/api/v1/research`;
+
+    function sQ(id) {
+        return document.getElementById(id);
     }
 
-    // Attach sorting behavior to best paper sort button group
-    function wireSortGroups() {
-        const aGroup = sQ('paperSortGroup');
-        if (aGroup) {
-            applySortStyles(aGroup, state.papers.sort, state.papers.dir);
-            aGroup.addEventListener('click', e => {
-                const btn = e.target.closest('.sort-btn');
-                if (!btn) return;
-                const key = btn.dataset.key;
-                if (state.papers.sort === key) {
-                    state.papers.dir = state.papers.dir === 'asc' ? 'desc' : 'asc';
-                } else {
-                    state.papers.sort = key;
-                    state.papers.dir = 'asc';
-                }
-                applySortStyles(aGroup, state.papers.sort, state.papers.dir);
-                searchPapers();
-            });
-        }
-    }
-
-    async function fetchJSON(url, opts = {}) {
-        const bar = document.getElementById('globalLoading');
-        bar && bar.classList.remove('hidden');
-        try {
-            const r = await fetch(url, { headers: headers(), ...opts });
-            if (!r.ok) throw new Error(await r.text() || r.status);
-            return r.json();
-        } finally {
-            setTimeout(() => { bar && bar.classList.add('hidden'); }, 120); // slight delay for smoother perception
-        }
-    }
-    
-    function renderList(el, items, type) {
-        el.replaceChildren();
-        if (!items.length) {
-            const empty = document.createElement('li');
-            empty.className = 'py-8 text-center text-xs uppercase tracking-wide text-[color:var(--muted)]';
-            empty.textContent = type === 'paper' ? 'No papers found' : 'No items found';
-            el.appendChild(empty);
-            return;
-        }
-        items.forEach(it => {
-            const li = document.createElement('li');
-            const selected = bulk.paperIds.has(it.id) && type === 'paper';
-            li.className = 'group py-3 px-3 hover:bg-[color:var(--brand-50)] dark:hover:bg-[color:var(--brand-900)]/40 cursor-pointer flex justify-between items-center transition-colors rounded-lg ' + (selected ? 'bg-[color:var(--brand-100)] dark:bg-[color:var(--brand-900)]' : '');
-            li.dataset.id = it.id;
-            if (type === 'paper') {
-                li.innerHTML = `
-                    <span class="flex items-center gap-3 w-full">
-                        <div class="flex-1 min-w-0">
-                            <div class="font-medium text-gray-900 dark:text-white truncate">${escapeHtml(it.title || 'Untitled Best Paper')}</div>
-                            <div class="flex flex-wrap gap-2 mt-1">
-                                <span class="text-xs text-gray-500 dark:text-gray-400 truncate">(${it.paper_category?.name || 'No Category'})</span>
-                                <span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded ${getStatusClass(it.status)}">${escapeHtml(it.status || 'PENDING')}</span>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-2 p-3 bg-white/50 dark:bg-gray-800/50 rounded-lg">
-                            <div class="p-2 rounded-md bg-blue-100 dark:bg-blue-900/30">
-                                <svg class="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24"
-                                    stroke="currentColor" aria-hidden="true">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                </svg>
-                            </div>
-                            <div>
-                                <div class="text-xs muted">Submitted By</div>
-                                <div id="summaryAuthor" class="font-medium">${escapeHtml(it.created_by?.username || 'Unknown User')}</div>
-                            </div>
-                        </div>
-                            <div class="flex items-center gap-2 p-3 bg-white/50 dark:bg-gray-800/50 rounded-lg">
-                            <div class="p-2 rounded-md bg-blue-100 dark:bg-blue-900/30">
-                                <svg class="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24"
-                                    stroke="currentColor" aria-hidden="true">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                </svg>
-                            </div>
-                            <div>
-                                <div class="text-xs muted">Submitted On</div>
-                                <div id="summaryDate" class="font-medium">${formatDate(it.created_at)}</div>
-                            </div>
-                        </div>
-                    </span>
-                `;
-                li.addEventListener('click', (e) => { 
-                    if (e.target.classList.contains('bulkChk')) return; 
-                    selPaper = it; 
-                    updatePanel(); 
-                    highlightSelection(); 
-                });
-            }
-            el.appendChild(li);
-        });
-        if (type === 'paper') {
-            el.querySelectorAll('.bulkChk').forEach(chk => {
-                chk.addEventListener('change', e => {
-                    const id = e.target.getAttribute('data-id');
-                    if (e.target.checked) bulk.paperIds.add(id); else bulk.paperIds.delete(id);
-                    updateBulkStatus();
-                });
-            });
-        }
-    }
-    
-    function getStatusClass(status) {
-        switch ((status || '').toLowerCase()) {
-            case 'accepted': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100';
-            case 'rejected': return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-100';
-            case 'under_review': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-100';
-            default: return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100';
-        }
-    }
-    
-    
-    function highlightSelection() {
-        // Clear previous highlight
-        Array.from(paperList.children).forEach(li => li.classList.remove('ring', 'ring-[color:var(--brand-600)]', 'selected-row', 'bg-[color:var(--brand-200)]', 'dark:bg-[color:var(--brand-800)]'));
-        if (selPaper) {
-            const el = paperList.querySelector(`[data-id='${selPaper.id}']`);
-            if (el) el.classList.add('ring', 'ring-[color:var(--brand-600)]', 'selected-row', 'bg-[color:var(--brand-200)]', 'dark:bg-[color:var(--brand-800)]');
-        }
-    }
-    
-    function updatePanel() {
-        const noPaperSelected = sQ('noPaperSelected');
-        const paperContent = sQ('paperContent');
-        if (selPaper) {
-            noPaperSelected.classList.add('hidden');
-            paperContent.classList.remove('hidden');
-            
-            // Generate preview content
-            generatePreview();
-        } else {
-            noPaperSelected.classList.remove('hidden');
-            paperContent.classList.add('hidden');
-        }
-    }
-    
-    // Generate preview of best paper details
-    function generatePreview() {
-        const previewContent = sQ('preview-content');
+    // ===== Generated preview =====
+    window.generatePreview = function (selPaper) {
+        const previewContent = sQ("preview-content");
         if (!previewContent || !selPaper) return;
-        
-        // Get category name
-        const categoryName = selPaper.paper_category?.name || 'No Category';
 
-        // Update summary card info
-        sQ('summaryTitle') && (sQ('summaryTitle').textContent = selPaper.title || 'Untitled Best Paper');
-        
-        sQ('summaryCategory') && (sQ('summaryCategory').textContent = categoryName);
-        sQ('summaryPaperNumber') && (sQ('summaryPaperNumber').textContent = selPaper.bestpaper_number || 'Unknown ID');
-        
-        sQ('summaryStatus') && (sQ('summaryStatus').textContent = selPaper.status || 'PENDING');
-        sQ('summaryStatus') && (sQ('summaryStatus').className = 'badge ' + getStatusClass(selPaper.status));
-        sQ('summaryAuthor') && (sQ('summaryAuthor').textContent = selPaper.created_by?.username || 'Unknown User');
-        sQ('summaryDate') && (sQ('summaryDate').textContent = formatDate(selPaper.created_at));
+        const categoryName = selPaper.paper_category?.name || selPaper.paper_category || "No Category";
 
+        if (sQ("summaryTitle")) sQ("summaryTitle").textContent = selPaper.title || "Untitled Best Paper";
+        if (sQ("summaryCategory")) sQ("summaryCategory").textContent = categoryName;
+        const paperNumber =
+            selPaper.bestpaper_number ||
+            selPaper.paper_number ||
+            selPaper.paperNumber ||
+            selPaper.id ||
+            "Unknown ID";
+        if (sQ("summaryNumber")) sQ("summaryNumber").textContent = paperNumber;
 
-        let pdfPreview = '';
-        let forpdfPreview = '';
+        if (sQ("summaryStatus")) {
+            sQ("summaryStatus").textContent = selPaper.status || "PENDING";
+            sQ("summaryStatus").className = "badge " + getStatusClass(selPaper.status);
+        }
+        if (sQ("summaryAuthor")) {
+            const authorName =
+                selPaper.created_by?.username ||
+                selPaper.author?.name ||
+                selPaper.author_name ||
+                "Unknown User";
+            sQ("summaryAuthor").textContent = authorName;
+        }
+        if (sQ("summaryDate")) {
+            sQ("summaryDate").textContent = formatDate(selPaper.created_at);
+        }
 
-        // Generate preview HTML with improved styling
-        let previewHTML = `
+        let authorsHTML = "";
+        if (selPaper.author) {
+            const author = selPaper.author;
+            const roles = [];
+            if (author.is_presenter) roles.push("Presenter");
+            if (author.is_corresponding) roles.push("Corresponding");
+            authorsHTML = `
+                <div class="border-l-4 border-blue-400 dark:border-blue-600 pl-4 py-2">
+                    <div class="flex flex-wrap justify-between gap-2">
+                        <p class="font-medium text-gray-900 dark:text-white">${escapeHtml(author.name || "")}</p>
+                        ${
+                            roles.length
+                                ? `<div class="flex flex-wrap gap-1">
+                                        ${roles
+                                            .map(
+                                                (role) => `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100">${escapeHtml(role)}</span>`
+                                            )
+                                            .join("")}
+                                   </div>`
+                                : ""
+                        }
+                    </div>
+                    ${
+                        author.email
+                            ? `<p class="text-sm text-blue-600 dark:text-blue-400 mt-1">${escapeHtml(author.email)}</p>`
+                            : ""
+                    }
+                    ${
+                        author.affiliation
+                            ? `<p class="text-sm text-gray-500 dark:text-gray-400 mt-1">${escapeHtml(author.affiliation)}</p>`
+                            : ""
+                    }
+                </div>
+            `;
+        } else {
+            authorsHTML = `<p class="text-gray-500 dark:text-gray-400 italic">No authors listed</p>`;
+        }
+
+        const aiimsAnswer = selPaper.is_aiims_work ? "Yes" : "No";
+        const aiimsDescription = selPaper.is_aiims_work
+            ? "The work was primarily conducted at AIIMS."
+            : "The work was not primarily conducted at AIIMS.";
+
+        const previewHTML = `
             <div class="divide-y divide-gray-200 dark:divide-gray-700">
                 <!-- Authors Section -->
                 <div class="p-5">
                     <div class="flex items-center mb-4">
                         <div class="flex-shrink-0 h-10 w-10 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.28 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                             </svg>
                         </div>
                         <div class="ml-4">
@@ -249,53 +123,35 @@
                             <p class="text-sm text-gray-500 dark:text-gray-400">List of contributing authors</p>
                         </div>
                     </div>
-                    
                     <div class="ml-2 space-y-4">
-        `;
-
-        if (selPaper.author) {
-            let author = selPaper.author;
-            const roles = [];
-            if (author.is_presenter) roles.push('Presenter');
-            if (author.is_corresponding) roles.push('Corresponding');
-
-            previewHTML += `
-                    <div class="border-l-4 border-blue-400 dark:border-blue-600 pl-4 py-2">
-                        <div class="flex flex-wrap justify-between gap-2">
-                            <p class="font-medium text-gray-900 dark:text-white">${escapeHtml(author.name)}</p>
-                            ${roles.length > 0 ? `<div class="flex flex-wrap gap-1">${roles.map(role =>
-                `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100">
-                                    ${role}
-                                </span>`).join('')}</div>` : ''}
-                        </div>
-                        ${author.email ? `<p class="text-sm text-blue-600 dark:text-blue-400 mt-1">${escapeHtml(author.email)}</p>` : ''}
-                        ${author.affiliation ? `<p class="text-sm text-gray-500 dark:text-gray-400 mt-1">${escapeHtml(author.affiliation)}</p>` : ''}
-                    </div>
-                `;
-        } else {
-            previewHTML += `
-                <p class="text-gray-500 dark:text-gray-400 italic">No authors listed</p>
-            `;
-        }
-
-        previewHTML += `
+                        ${authorsHTML}
                     </div>
                 </div>
-                 <!-- AIIMS & Forwarding Letter Section -->
+
+                <!-- AIIMS & Covering Letter Section -->
                 <div class="p-5">
                     <div class="flex items-center mb-4">
-                        <div class="flex-shrink-0 h-10 w-10 rounded-full bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-600 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <div class="flex-shrink-0 h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 17V7a2 2 0 012-2h6a2 2 0 012 2v10m-2 4h-4a2 2 0 01-2-2V7a2 2 0 012-2h4a2 2 0 012 2v10a2 2 0 01-2 2z" />
                             </svg>
                         </div>
                         <div class="ml-4">
-                            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Covering Letter</h3>
-                            <p class="text-sm text-gray-500 dark:text-gray-400">AIIMS involvement and covering letter</p>
+                            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Project Context</h3>
+                            <p class="text-sm text-gray-500 dark:text-gray-400">AIIMS involvement & Covering Letter</p>
                         </div>
                     </div>
-                    <div class="ml-2">
-                        ${selPaper.forwarding_letter_path ? `
+                    <div class="ml-2 space-y-4">
+                        <div class="rounded-lg bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <span class="font-medium text-blue-700 dark:text-blue-200">Work primarily done at AIIMS?</span>
+                                <span class="badge bg-white/80 dark:bg-blue-950/40 text-blue-700 dark:text-blue-200">${aiimsAnswer}</span>
+                            </div>
+                            <p class="text-sm text-blue-600 dark:text-blue-300 mt-1">${aiimsDescription}</p>
+                        </div>
+                        ${
+                            selPaper.forwarding_letter_path
+                                ? `
                             <div id="forwarding-pdf-preview-container" class="border border-gray-300 dark:border-gray-600 rounded mt-3 bg-white dark:bg-gray-800" style="max-height: 500px; overflow-y: auto;">
                                 <div class="p-4 text-center">
                                     <div class="inline-flex items-center px-4 py-2 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
@@ -303,12 +159,13 @@
                                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                                             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                         </svg>
-                                        <span class="text-blue-600 dark:text-blue-400">Loading PDF...</span>
+                                        <span class="text-blue-600 dark:text-blue-400">Loading covering letter…</span>
                                     </div>
                                 </div>
-                                <!-- Canvases for PDF pages will be rendered here -->
                             </div>
-                        ` : `<p class="text-gray-500 dark:text-gray-400 italic p-4 text-center">No Forwarding Letter PDF uploaded for this award.</p>`}
+                        `
+                                : `<p class="text-gray-500 dark:text-gray-400 italic p-4 text-center">No covering letter uploaded for this best paper.</p>`
+                        }
                     </div>
                 </div>
 
@@ -321,12 +178,14 @@
                             </svg>
                         </div>
                         <div class="ml-4">
-                            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">PDF Document</h3>
-                            <p class="text-sm text-gray-500 dark:text-gray-400">Uploaded award PDF</p>
+                            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Full Paper PDF</h3>
+                            <p class="text-sm text-gray-500 dark:text-gray-400">Uploaded manuscript for review</p>
                         </div>
                     </div>
                     <div class="ml-2">
-                        ${selPaper.full_paper_path ? `
+                        ${
+                            selPaper.full_paper_path
+                                ? `
                             <div id="pdf-preview-container" class="border border-gray-300 dark:border-gray-600 rounded mt-3 bg-white dark:bg-gray-800" style="max-height: 500px; overflow-y: auto;">
                                 <div class="p-4 text-center">
                                     <div class="inline-flex items-center px-4 py-2 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
@@ -334,480 +193,381 @@
                                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                                             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                         </svg>
-                                        <span class="text-blue-600 dark:text-blue-400">Loading PDF...</span>
+                                        <span class="text-blue-600 dark:text-blue-400">Loading PDF…</span>
                                     </div>
                                 </div>
-                                <!-- Canvases for PDF pages will be rendered here -->
                             </div>
-                        ` : `<p class="text-gray-500 dark:text-gray-400 italic p-4 text-center">No PDF uploaded for this award.</p>`}
+                        `
+                                : `<p class="text-gray-500 dark:text-gray-400 italic p-4 text-center">No PDF uploaded for this best paper.</p>`
+                        }
                     </div>
                 </div>
             </div>
         `;
-        previewContent.innerHTML = previewHTML;
-        // After rendering, if PDF exists, render preview using PDF.js
-        if (selPaper.full_paper_path) {
-            renderVerifierPdfPreview(selPaper.id);
-        }
 
+        previewContent.innerHTML = previewHTML;
+
+        if (selPaper.full_paper_path) {
+            window.renderVerifierPdfPreview(selPaper.id);
+        }
 
         if (selPaper.forwarding_letter_path) {
-            renderVerifierforwardingPdfPreview(selPaper.id);
+            window.renderVerifierforwardingPdfPreview(selPaper.id);
         }
-    }
-    
+    };
 
-    // Render PDF preview for verifier using PDF.js
-    function renderVerifierPdfPreview(awardId) {
-        if (typeof pdfjsLib === 'undefined') {
-            const container = document.getElementById('pdf-preview-container');
-            if (container) container.innerHTML = '<p class="text-red-600 dark:text-red-400 text-center p-4">PDF.js library not available. Cannot preview PDF.</p>';
+    // PDF.js rendering for main PDF
+    window.renderVerifierPdfPreview = function (bestPaperId) {
+        const container = document.getElementById("pdf-preview-container");
+
+        if (typeof pdfjsLib === "undefined") {
+            if (container)
+                container.innerHTML =
+                    '<p class="text-red-600 dark:text-red-400 text-center p-4">PDF.js library not available. Cannot preview PDF.</p>';
             return;
         }
-        pdfjsLib.GlobalWorkerOptions.workerSrc = '/static/js/pdf.worker.min.js';
-        fetch(`${BASE}/best-papers/${awardId}/pdf`, {
-            headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
+        pdfjsLib.GlobalWorkerOptions.workerSrc = "/static/js/pdf.worker.min.js";
+
+        fetch(`${BASE}/best-papers/${encodeURIComponent(bestPaperId)}/pdf`, {
+            headers: { Authorization: `Bearer ${token()}` },
         })
-            .then(response => {
-                if (!response.ok) throw new Error('Network response was not ok');
+            .then((response) => {
+                if (!response.ok) throw new Error("Network response was not ok");
                 return response.arrayBuffer();
             })
-            .then(buffer => {
+            .then((buffer) => {
                 const typedarray = new Uint8Array(buffer);
-                const loadingTask = pdfjsLib.getDocument({ data: typedarray, password: '' });
-                loadingTask.promise.then(function (pdf) {
-                    const container = document.getElementById('pdf-preview-container');
-                    if (!container) return;
-                    container.innerHTML = '';
-                    const scale = 1.5;
-                    // Render all pages
-                    let pagePromises = [];
-                    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-                        pagePromises.push(
-                            pdf.getPage(pageNum).then(function (page) {
-                                const viewport = page.getViewport({ scale: scale });
-                                const canvas = document.createElement('canvas');
-                                canvas.className = 'w-full mb-4 rounded shadow';
-                                canvas.height = viewport.height;
-                                canvas.width = viewport.width;
-                                container.appendChild(canvas);
-                                const context = canvas.getContext('2d');
-                                return page.render({ canvasContext: context, viewport: viewport }).promise;
-                            })
-                        );
-                    }
-                    Promise.all(pagePromises).catch(function (renderError) {
-                        container.innerHTML = '<p class="text-red-600 dark:text-red-400 text-center p-4">Error rendering PDF pages.</p>';
-                    });
-                }).catch(function (error) {
-                    const container = document.getElementById('pdf-preview-container');
-                    if (container) container.innerHTML = '<p class="text-red-600 dark:text-red-400 text-center p-4">Unable to load PDF: ' + (error.message || 'Unknown error') + '</p>';
-                });
+                const loadingTask = pdfjsLib.getDocument({ data: typedarray, password: "" });
+                return loadingTask.promise.then((pdf) => ({ pdf }));
             })
-            .catch(() => {
-                const container = document.getElementById('pdf-preview-container');
-                if (container) container.innerHTML = '<p class="text-red-600 dark:text-red-400 text-center p-4">Unable to fetch PDF file.</p>';
+            .then(({ pdf }) => {
+                if (!container) return;
+                container.innerHTML = "";
+                const scale = 1.5;
+                const tasks = [];
+                for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                    tasks.push(
+                        pdf.getPage(pageNum).then((page) => {
+                            const viewport = page.getViewport({ scale });
+                            const canvas = document.createElement("canvas");
+                            canvas.className = "w-full mb-4 rounded shadow";
+                            canvas.height = viewport.height;
+                            canvas.width = viewport.width;
+                            container.appendChild(canvas);
+                            const context = canvas.getContext("2d");
+                            return page.render({ canvasContext: context, viewport }).promise;
+                        })
+                    );
+                }
+                return Promise.all(tasks);
+            })
+            .catch((err) => {
+                if (container)
+                    container.innerHTML = `<p class="text-red-600 dark:text-red-400 text-center p-4">Unable to load/render PDF: ${escapeHtml(
+                        err?.message || "Unknown error"
+                    )}</p>`;
             });
-    }
+    };
 
-    function renderVerifierforwardingPdfPreview(awardId) {
-        if (typeof pdfjsLib === 'undefined') {
-            const container = document.getElementById('forwarding-pdf-preview-container');
-            if (container) container.innerHTML = '<p class="text-red-600 dark:text-red-400 text-center p-4">PDF.js library not available. Cannot preview PDF.</p>';
+    // PDF.js rendering for forwarding letter PDF
+    window.renderVerifierforwardingPdfPreview = function (bestPaperId) {
+        const container = document.getElementById("forwarding-pdf-preview-container");
+
+        if (typeof pdfjsLib === "undefined") {
+            if (container)
+                container.innerHTML =
+                    '<p class="text-red-600 dark:text-red-400 text-center p-4">PDF.js library not available. Cannot preview PDF.</p>';
             return;
         }
-        pdfjsLib.GlobalWorkerOptions.workerSrc = '/static/js/pdf.worker.min.js';
-        fetch(`${BASE}/best-papers/${awardId}/forwarding_pdf`, {
-            headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
+        pdfjsLib.GlobalWorkerOptions.workerSrc = "/static/js/pdf.worker.min.js";
+
+        fetch(`${BASE}/best-papers/${encodeURIComponent(bestPaperId)}/forwarding_pdf`, {
+            headers: { Authorization: `Bearer ${token()}` },
         })
-            .then(response => {
-                if (!response.ok) throw new Error('Network response was not ok');
+            .then((response) => {
+                if (!response.ok) throw new Error("Network response was not ok");
                 return response.arrayBuffer();
             })
-            .then(buffer => {
+            .then((buffer) => {
                 const typedarray = new Uint8Array(buffer);
-                const loadingTask = pdfjsLib.getDocument({ data: typedarray, password: '' });
-                loadingTask.promise.then(function (pdf) {
-                    const container = document.getElementById('forwarding-pdf-preview-container');
-                    if (!container) return;
-                    container.innerHTML = '';
-                    const scale = 1.5;
-                    // Render all pages
-                    let pagePromises = [];
-                    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-                        pagePromises.push(
-                            pdf.getPage(pageNum).then(function (page) {
-                                const viewport = page.getViewport({ scale: scale });
-                                const canvas = document.createElement('canvas');
-                                canvas.className = 'w-full mb-4 rounded shadow';
-                                canvas.height = viewport.height;
-                                canvas.width = viewport.width;
-                                container.appendChild(canvas);
-                                const context = canvas.getContext('2d');
-                                return page.render({ canvasContext: context, viewport: viewport }).promise;
-                            })
-                        );
-                    }
-                    Promise.all(pagePromises).catch(function (renderError) {
-                        container.innerHTML = '<p class="text-red-600 dark:text-red-400 text-center p-4">Error rendering PDF pages.</p>';
-                    });
-                }).catch(function (error) {
-                    const container = document.getElementById('forwarding-pdf-preview-container');
-                    if (container) container.innerHTML = '<p class="text-red-600 dark:text-red-400 text-center p-4">Unable to load PDF: ' + (error.message || 'Unknown error') + '</p>';
-                });
+                const loadingTask = pdfjsLib.getDocument({ data: typedarray, password: "" });
+                return loadingTask.promise.then((pdf) => ({ pdf }));
             })
-            .catch(() => {
-                const container = document.getElementById('forwarding-pdf-preview-container');
-                if (container) container.innerHTML = '<p class="text-red-600 dark:text-red-400 text-center p-4">Unable to fetch PDF file.</p>';
+            .then(({ pdf }) => {
+                if (!container) return;
+                container.innerHTML = "";
+                const scale = 1.5;
+                const tasks = [];
+                for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                    tasks.push(
+                        pdf.getPage(pageNum).then((page) => {
+                            const viewport = page.getViewport({ scale });
+                            const canvas = document.createElement("canvas");
+                            canvas.className = "w-full mb-4 rounded shadow";
+                            canvas.height = viewport.height;
+                            canvas.width = viewport.width;
+                            container.appendChild(canvas);
+                            const context = canvas.getContext("2d");
+                            return page.render({ canvasContext: context, viewport }).promise;
+                        })
+                    );
+                }
+                return Promise.all(tasks);
+            })
+            .catch((err) => {
+                if (container)
+                    container.innerHTML = `<p class="text-red-600 dark:text-red-400 text-center p-4">Unable to load/render PDF: ${escapeHtml(
+                        err?.message || "Unknown error"
+                    )}</p>`;
             });
+    };
+
+    // -----------------------
+    // List render
+    // -----------------------
+    function renderItem(item) {
+        const li = document.createElement("li");
+        li.className = "p-3 hover:bg-white/60 dark:hover:bg-gray-800/60 cursor-pointer flex items-start gap-3";
+        li.innerHTML = `
+            <div class="flex-1 min-w-0">
+                <div class="flex items-center justify-between gap-3">
+                    <h4 class="font-semibold truncate">${escapeHtml(item.title || "Untitled")}</h4>
+                    <span class="badge text-xs px-2 py-0.5 ${getStatusClass(item.status)}">${escapeHtml(item.status || "")}</span>
+                </div>
+                <div class="text-xs muted mt-1 truncate">
+                    #${escapeHtml(
+                        item.bestpaper_number ||
+                            item.paper_number ||
+                            item.paperNumber ||
+                            item.id ||
+                            "-"
+                    )} · ${escapeHtml(item.paper_category?.name || "-")} · ${escapeHtml(
+            item.created_by?.username || item.author?.name || "-"
+        )}
+                </div>
+            </div>
+            <div class="text-xs whitespace-nowrap ml-2">${escapeHtml(formatDate(item.created_at))}</div>
+        `;
+        return li;
     }
 
-    function formatDate(dateString) {
-        if (!dateString) return 'Unknown';
-        const date = new Date(dateString);
-
-        // Convert UTC to IST (UTC+5:30)
-        const istDate = new Date(date.getTime() + (5.5 * 60 * 60 * 1000));
-
-        return istDate.toLocaleDateString('en-IN', {
-            timeZone: 'Asia/Kolkata',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit'
-        }) + ' ' + istDate.toLocaleTimeString('en-IN', {
-            timeZone: 'Asia/Kolkata',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true
-        });
-    }
-
-    
-    async function searchPapers() {
-        state.papers.q = (sQ('paperSearch').value || '').trim();
-        const { q, filter, page, pageSize, sort, dir } = state.papers;
-        const url = `${BASE}/best-papers?q=${encodeURIComponent(q)}&status=${filter}&page=${page}&page_size=${pageSize}&sort_by=${sort}&sort_dir=${dir}`;
+    async function fetchPage({ page, pageSize, sortKey, sortDir, filter, query }) {
+        log(
+            `Fetching page ${page} with filter: ${filter || "all"}, query: ${query || "none"}, sort=${sortKey || "created_at"}:${sortDir || "desc"}`,
+            "info"
+        );
         try {
-            const data = await fetchJSON(url);
-            renderList(paperList, data.items || data || [], 'paper');
-            updatePaperMeta(data);
-        } catch (e) {
-            console.error(e);
-            toast('Failed to search papers: ' + (e.message || 'Unknown error'), 'error');
-        }
-    }
-    
-
-    
-    function updatePaperMeta(data) {
-        state.papers.pages = data.pages || 1;
-        const info = sQ('paperPageInfo');
-        if (info) info.textContent = `Page ${data.page || 1} / ${data.pages || 1}`;
-        const stats = sQ('paperStats');
-        if (stats) {
-            const filterLabel = state.papers.filter === '' ? 'All' : state.papers.filter.charAt(0).toUpperCase() + state.papers.filter.slice(1);
-            stats.textContent = `${data.total || 0} total • Filter: ${filterLabel}`;
-        }
-    }
-
-    function changePaperPage(delta) {
-        state.papers.page = Math.min(Math.max(1, state.papers.page + delta), state.papers.pages);
-        searchPapers();
-    }
-
-    function toast(msg, type = 'info') {
-        // Create a toast notification
-        const toastContainer = document.getElementById('toast-container') || createToastContainer();
-        
-        const toastEl = document.createElement('div');
-        toastEl.className = `mb-2 p-3 rounded-lg text-white font-medium text-sm flex items-center gap-2 transform transition-all duration-300 ${type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : type === 'warn' ? 'bg-yellow-500' : 'bg-blue-500'}`;
-        
-        const icon = document.createElement('span');
-        icon.innerHTML = type === 'success' ? 
-            '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>' :
-            type === 'error' ? 
-            '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>' :
-            '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>';
-        
-        toastEl.appendChild(icon);
-        toastEl.appendChild(document.createTextNode(msg));
-        
-        toastContainer.appendChild(toastEl);
-        
-        // Auto remove after 3 seconds
-        setTimeout(() => {
-            toastEl.classList.add('opacity-0', 'translate-y-2');
-            setTimeout(() => {
-                if (toastEl.parentNode) toastEl.parentNode.removeChild(toastEl);
-            }, 300);
-        }, 3000);
-    }
-    
-    function createToastContainer() {
-        const container = document.createElement('div');
-        container.id = 'toast-container';
-        container.className = 'fixed top-4 right-4 z-50 w-80';
-        document.body.appendChild(container);
-        return container;
-    }
-    
-    function escapeHtml(s) {
-        return String(s).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
-    }
-
-    function updateBulkStatus() {
-        const bulkStatus = sQ('bulkStatus');
-        if (bulkStatus) {
-            const count = bulk.paperIds.size;
-            bulkStatus.textContent = count > 0 ? `${count} selected` : '';
-        }
-    }
-
-    function selectAllPage() {
-        const checkboxes = paperList.querySelectorAll('.bulkChk');
-        checkboxes.forEach(chk => {
-            chk.checked = true;
-            const id = chk.getAttribute('data-id');
-            if (id) bulk.paperIds.add(id);
-        });
-        updateBulkStatus();
-    }
-
-    function clearAllPage() {
-        const checkboxes = paperList.querySelectorAll('.bulkChk');
-        checkboxes.forEach(chk => {
-            chk.checked = false;
-            const id = chk.getAttribute('data-id');
-            if (id) bulk.paperIds.delete(id);
-        });
-        updateBulkStatus();
-    }
-
-    function invertSelection() {
-        const checkboxes = paperList.querySelectorAll('.bulkChk');
-        checkboxes.forEach(chk => {
-            chk.checked = !chk.checked;
-            const id = chk.getAttribute('data-id');
-            if (id) {
-                if (chk.checked) {
-                    bulk.paperIds.add(id);
-                } else {
-                    bulk.paperIds.delete(id);
-                }
-            }
-        });
-        updateBulkStatus();
-    }
-
-    function init() {
-        updateStatsBar();
-        sQ('paperSearchBtn')?.addEventListener('click', () => { state.papers.page = 1; searchPapers(); });
-        sQ('paperSearch')?.addEventListener('keypress', (e) => { if (e.key === 'Enter') { state.papers.page = 1; searchPapers(); } });
-        sQ('paperPrev')?.addEventListener('click', () => changePaperPage(-1));
-        sQ('paperNext')?.addEventListener('click', () => changePaperPage(1));
-        
-
-        const master = sQ('paperMasterChk');
-        master?.addEventListener('change', e => { e.target.checked ? selectAllPage() : clearAllPage(); });
-        sQ('invertSelection')?.addEventListener('click', invertSelection);
-        sQ('paperSelectAll')?.addEventListener('click', selectAllPage);
-        sQ('paperClearSel')?.addEventListener('click', clearAllPage);
-        sQ('bulkAcceptBtn')?.addEventListener('click', async () => {
-            if (bulk.paperIds.size === 0) {
-                toast('Select papers to accept', 'warn');
-                return;
-            }
-            
-            if (!confirm(`Are you sure you want to accept ${bulk.paperIds.size} best paper(s)?`)) return;
-            
-            // Show loading state
-            const bulkStatus = sQ('bulkStatus');
-            const originalText = bulkStatus.textContent;
-            bulkStatus.textContent = 'Processing...';
-            
-            try {
-                // Get only pending papers
-                const ids = Array.from(bulk.paperIds);
-                let pendingIds = [];
-                
-                for (const id of ids) {
-                    try {
-                        const data = await fetchJSON(`${BASE}/best-papers/${id}`);
-                        if ((data.status || '').toUpperCase() === 'PENDING') {
-                            pendingIds.push(id);
-                        }
-                    } catch (e) {
-                        // skip if error
-                        console.warn(`Failed to fetch best paper ${id}:`, e);
-                    }
-                }
-                
-                if (pendingIds.length === 0) {
-                    toast('No selected papers are pending', 'warn');
-                    return;
-                }
-                
-                if (pendingIds.length < ids.length) {
-                    const skipped = ids.length - pendingIds.length;
-                    toast(`${skipped} best paper(s) are not pending and will be skipped.`, 'warn');
-                }
-                
-                // Process pending papers
-                let successCount = 0;
-                for (const id of pendingIds) {
-                    try {
-                        const body = { status: 'ACCEPTED' };
-                        const r = await fetch(`${BASE}/best-papers/${id}`, {
-                            method: 'PUT',
-                            headers: { ...headers(), 'Content-Type': 'application/json' },
-                            body: JSON.stringify(body)
-                        });
-                        if (r.ok) {
-                            successCount++;
-                            bulk.paperIds.delete(id); // Remove from selection
-                        }
-                    } catch (e) {
-                        console.error(`Failed to accept best paper ${id}:`, e);
-                    }
-                }
-                
-               
-                
-                
-                if (successCount > 0) {
-                    toast(`Successfully accepted ${successCount} best paper(s)`, 'success');
-                    await searchPapers(); // Refresh the list
-                } else {
-                    toast('Failed to accept any papers', 'error');
-                }
-            } catch (e) {
-                toast('Error processing bulk accept: ' + (e.message || 'Unknown error'), 'error');
-            } finally {
-                bulkStatus.textContent = originalText;
-            }
-        });
-        
-        sQ('bulkRejectBtn')?.addEventListener('click', async () => {
-            if (bulk.paperIds.size === 0) {
-                toast('Select papers to reject', 'warn');
-                return;
-            }
-            
-            if (!confirm(`Are you sure you want to reject ${bulk.paperIds.size} best paper(s)?`)) return;
-            
-            // Show loading state
-            const bulkStatus = sQ('bulkStatus');
-            const originalText = bulkStatus.textContent;
-            bulkStatus.textContent = 'Processing...';
-            
-            try {
-                // Get only pending papers
-                const ids = Array.from(bulk.paperIds);
-                let pendingIds = [];
-                
-                for (const id of ids) {
-                    try {
-                        const data = await fetchJSON(`${BASE}/best-papers/${id}`);
-                        if ((data.status || '').toUpperCase() === 'PENDING') {
-                            pendingIds.push(id);
-                        }
-                    } catch (e) {
-                        // skip if error
-                        console.warn(`Failed to fetch best paper ${id}:`, e);
-                    }
-                }
-                
-                if (pendingIds.length === 0) {
-                    toast('No selected papers are pending', 'warn');
-                    return;
-                }
-                
-                if (pendingIds.length < ids.length) {
-                    const skipped = ids.length - pendingIds.length;
-                    toast(`${skipped} best paper(s) are not pending and will be skipped.`, 'warn');
-                }
-                
-                // Process pending papers
-                let successCount = 0;
-                for (const id of pendingIds) {
-                    try {
-                        const body = { status: 'REJECTED' };
-                        const r = await fetch(`${BASE}/best-papers/${id}`, {
-                            method: 'PUT',
-                            headers: { ...headers(), 'Content-Type': 'application/json' },
-                            body: JSON.stringify(body)
-                        });
-                        if (r.ok) {
-                            successCount++;
-                            bulk.paperIds.delete(id); // Remove from selection
-                        }
-                    } catch (e) {
-                        console.error(`Failed to reject best paper ${id}:`, e);
-                    }
-                }
-                
-               
-                
-                
-                if (successCount > 0) {
-                    toast(`Successfully rejected ${successCount} best paper(s)`, 'success');
-                    await searchPapers(); // Refresh the list
-                } else {
-                    toast('Failed to reject any papers', 'error');
-                }
-            } catch (e) {
-                toast('Error processing bulk reject: ' + (e.message || 'Unknown error'), 'error');
-            } finally {
-                bulkStatus.textContent = originalText;
-            }
-        });
-        
-        wireSortGroups();
-        wireSegmentedControls();
-        searchPapers();
-    }
-    
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
-
-    // ==== EXTRA INITIALIZERS (CSP-safe) ====
-    function initSidePanelCollapse(){
-        const sidePanel = document.querySelector('#gradingModal [data-side-panel]');
-        if(!sidePanel) return;
-        const threshold = 640;
-        function adjust(){
-            if(window.innerHeight < threshold) sidePanel.classList.add('collapsed');
-            else sidePanel.classList.remove('collapsed');
-        }
-        window.addEventListener('resize', adjust);
-        adjust();
-    }
-
-    function initCriteriaFilter(){
-        const input = document.getElementById('criteriaFilter');
-        if(!input) return;
-        function apply(){
-            const q = input.value.trim().toLowerCase();
-            const cards = document.querySelectorAll('#gradingFieldsContainer [data-criteria-card]');
-            let shown = 0;
-            cards.forEach(card => {
-                const label = card.getAttribute('data-label') || card.querySelector('[data-criteria-label]')?.textContent || '';
-                if(!q || label.toLowerCase().includes(q)){
-                    card.classList.remove('hidden');
-                    shown++;
-                } else {
-                    card.classList.add('hidden');
-                }
+            const data = await fetchJSON(API_LIST, {
+                q: query,
+                status: filter ? filter.toUpperCase() : "",
+                sort_by: sortKey || "created_at",
+                sort_dir: sortDir || "desc",
+                page,
+                page_size: pageSize,
             });
-            const cont = document.getElementById('gradingFieldsContainer');
-            if(cont) cont.dataset.visibleCount = String(shown);
+            return {
+                items: data.items || [],
+                total: data.total ?? data.items?.length ?? 0,
+                totalPages: data.pages ?? 1,
+                meta: data.meta || {},
+            };
+        } catch (error) {
+            logError("Error fetching best paper list", error);
+            throw error;
         }
-        input.addEventListener('input', apply);
-        document.addEventListener('gradingCriteriaPopulated', apply);
     }
 
-    if(document.readyState === 'loading'){
-        document.addEventListener('DOMContentLoaded', () => {initCriteriaFilter(); });
-    } else {
-        initCriteriaFilter();
+    async function onSelect(item, ctx) {
+        log(`Selecting best paper with ID: ${item.id}`, "info");
+        try {
+            const full = await fetchJSON(API_DETAIL(item.id));
+            log(`Fetched full best paper details for ID: ${item.id}`, "info");
+
+            ctx.setDetails({
+                title: full.title || item.title || "",
+                category: full.paper_category || item.paper_category || (full.paper_category?.name && { name: full.paper_category.name }) || "",
+                status: full.status || item.status || "",
+                number: full.bestpaper_number || full.paper_number || item.bestpaper_number || item.paper_number || "",
+                author:
+                    full.created_by?.username ||
+                    full.author?.name ||
+                    item.created_by?.username ||
+                    item.author?.name ||
+                    "",
+                date: formatDate(full.created_at || item.created_at),
+                previewHtml: `<div class="p-3 text-sm muted">Loading preview…</div>`,
+            });
+
+            window.generatePreview(full);
+        } catch (error) {
+            logError(`Error selecting best paper with ID: ${item.id}`, error);
+            throw error;
+        }
     }
+
+    const pickEl = (...selectors) => {
+        for (const sel of selectors) {
+            if (!sel) continue;
+            const el = typeof sel === "string" ? document.querySelector(sel) : sel;
+            if (el) return el;
+        }
+        return null;
+    };
+
+    // -----------------------
+    // Controller wiring
+    // -----------------------
+    let __bestPaperListCtrl = null;
+
+    document.addEventListener("DOMContentLoaded", function () {
+        try {
+            const ctrl = init({
+                listEl: pickEl("#List", "#paperList"),
+                searchInputEl: pickEl("#abstractSearch", "#paperSearch"),
+                searchBtnEl: pickEl("#SearchBtn", "#paperSearchBtn"),
+                statusGroupEl: pickEl("#StatusGroup", "#paperStatusGroup"),
+                sortGroupEl: pickEl("#SortGroup", "#paperSortGroup"),
+                prevBtnEl: pickEl("#Prev", "#paperPrev"),
+                nextBtnEl: pickEl("#Next", "#paperNext"),
+                pageInfoEl: pickEl("#PageInfo", "#paperPageInfo"),
+                statsEl: pickEl("#Stats", "#paperStats"),
+                pageSizeGroupEl: pickEl("#PageSizeGroup", "#paperPageSizeGroup"),
+                globalLoadingEl: pickEl("#globalLoading"),
+                details: {
+                    containerEl: pickEl("#Details", "#paperDetails"),
+                    noSelectedEl: pickEl("#noSelected", "#noPaperSelected"),
+                    contentEl: pickEl("#Content", "#paperContent"),
+                    previewEl: pickEl("#preview-content"),
+                    titleEl: pickEl("#summaryTitle"),
+                    categoryEl: pickEl("#summaryCategory"),
+                    statusEl: pickEl("#summaryStatus"),
+                    numberEl: pickEl("#summaryNumber", "#summaryPaperNumber"),
+                    authorEl: pickEl("#summaryAuthor"),
+                    dateEl: pickEl("#summaryDate"),
+                },
+                statsMap: {
+                    total: "#statTotal",
+                    pending: "#statPending",
+                    accepted: "#statAccepted",
+                    rejected: "#statRejected",
+                },
+                fetchPage,
+                renderItem,
+                onSelect,
+            });
+
+            __bestPaperListCtrl = ctrl;
+            window.__bestPaperListCtrl = __bestPaperListCtrl;
+
+            window.searchBestPapers = function (q) {
+                if (!__bestPaperListCtrl) return;
+                const s = __bestPaperListCtrl.state;
+                const input = pickEl("#abstractSearch", "#paperSearch");
+                if (typeof q === "string") {
+                    if (input) input.value = q;
+                    s.query = q.trim();
+                } else {
+                    s.query = (input?.value || "").trim();
+                }
+                s.page = 1;
+                __bestPaperListCtrl.refresh();
+            };
+
+            window.changeBestPaperPage = function (deltaOrNumber) {
+                if (!__bestPaperListCtrl) return;
+                const s = __bestPaperListCtrl.state;
+                if (typeof deltaOrNumber === "number") {
+                    if (Number.isInteger(deltaOrNumber) && Math.abs(deltaOrNumber) <= 2 && deltaOrNumber !== 0) {
+                        s.page = Math.min(Math.max(1, s.page + deltaOrNumber), s.totalPages);
+                    } else {
+                        s.page = Math.min(Math.max(1, deltaOrNumber), s.totalPages);
+                    }
+                } else if (deltaOrNumber === "next") {
+                    s.page = Math.min(s.page + 1, s.totalPages);
+                } else if (deltaOrNumber === "prev") {
+                    s.page = Math.max(s.page - 1, 1);
+                }
+                __bestPaperListCtrl.refresh();
+            };
+
+            window.updateBestPaperMeta = async function () {
+                try {
+                    const meta = await fetchJSON(API_META);
+                    const pendingCount = (meta.pending || 0) + (meta.under_review || 0);
+                    const acceptedCount = meta.accepted || 0;
+                    const rejectedCount = meta.rejected || 0;
+                    const totalCount = meta.total != null ? meta.total : pendingCount + acceptedCount + rejectedCount;
+
+                    const totalEl = document.querySelector("#statTotal");
+                    if (totalEl) totalEl.textContent = String(totalCount);
+
+                    const pendingEl = document.querySelector("#statPending");
+                    if (pendingEl) pendingEl.textContent = String(pendingCount);
+
+                    const acceptedEl = document.querySelector("#statAccepted");
+                    if (acceptedEl) acceptedEl.textContent = String(acceptedCount);
+
+                    const rejectedEl = document.querySelector("#statRejected");
+                    if (rejectedEl) rejectedEl.textContent = String(rejectedCount);
+
+                    const statsLabel = pickEl("#paperStats", "#Stats");
+                    if (statsLabel) {
+                        statsLabel.textContent = `${totalCount} item(s)`;
+                    }
+                } catch (e) {
+                    console.warn("updateBestPaperMeta failed", e);
+                }
+            };
+
+            const nextBtn = pickEl("#Next", "#paperNext");
+            const prevBtn = pickEl("#Prev", "#paperPrev");
+
+            if (nextBtn) {
+                nextBtn.addEventListener("click", function () {
+                    if (__bestPaperListCtrl && __bestPaperListCtrl.state.page < __bestPaperListCtrl.state.totalPages) {
+                        __bestPaperListCtrl.state.page++;
+                        __bestPaperListCtrl.refresh();
+                    }
+                });
+            }
+
+            if (prevBtn) {
+                prevBtn.addEventListener("click", function () {
+                    if (__bestPaperListCtrl && __bestPaperListCtrl.state.page > 1) {
+                        __bestPaperListCtrl.state.page--;
+                        __bestPaperListCtrl.refresh();
+                    }
+                });
+            }
+
+            // Attempt to load status counts on first paint
+            window.updateBestPaperMeta();
+        } catch (error) {
+            logError("Error initializing best paper list controller", error);
+            const statsEl = pickEl("#paperStats", "#Stats");
+            if (statsEl) {
+                statsEl.textContent = "Error loading best paper list. Please refresh the page.";
+                statsEl.className = "text-red-600 dark:text-red-400";
+            }
+        }
+    });
+
+    // Define global helpers for pagination controls that might be referenced elsewhere
+    window.nextBestPaperPage = function () {
+        if (window.__bestPaperListCtrl && window.__bestPaperListCtrl.state.page < window.__bestPaperListCtrl.state.totalPages) {
+            window.__bestPaperListCtrl.state.page++;
+            window.__bestPaperListCtrl.refresh();
+        } else {
+            console.warn("Best paper list controller not ready or already on last page");
+        }
+    };
+
+    window.prevBestPaperPage = function () {
+        if (window.__bestPaperListCtrl && window.__bestPaperListCtrl.state.page > 1) {
+            window.__bestPaperListCtrl.state.page--;
+            window.__bestPaperListCtrl.refresh();
+        } else {
+            console.warn("Best paper list controller not ready or already on first page");
+        }
+    };
 })();

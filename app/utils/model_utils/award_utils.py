@@ -87,6 +87,8 @@ def list_awards(
     filters: Optional[Sequence] = None,
     eager: bool = False,
     order_by=None,
+    limit: Optional[int] = None,
+    offset: Optional[int] = None,
     actor_id: Optional[str] = None,
     context: Optional[Dict[str, object]] = None,
 ) -> Sequence[Awards]:
@@ -99,11 +101,19 @@ def list_awards(
         if eager
         else None
     )
-    ctx = {"function": "list_awards", "eager": eager, **(context or {})}
+    ctx = {
+        "function": "list_awards",
+        "eager": eager,
+        "limit": limit,
+        "offset": offset,
+        **(context or {}),
+    }
     awards = list_instances(
         Awards,
         filters=filters,
         order_by=order_by,
+        limit=limit,
+        offset=offset,
         query_options=options,
         actor_id=actor_id,
         event_name="award.list",

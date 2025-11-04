@@ -651,7 +651,7 @@ def get_best_papers():
             ip_address=request.remote_addr
         )
         
-        return jsonify(response), 20
+        return jsonify(response), 200
     except Exception as e:
         current_app.logger.exception("Error listing best papers with parameters")
         error_msg = f"System error occurred while retrieving best papers: {str(e)}"
@@ -661,7 +661,7 @@ def get_best_papers():
             details={"error": error_msg, "exception_type": type(e).__name__, "exception_message": str(e)},
             ip_address=request.remote_addr
         )
-        return jsonify({"error": error_msg}), 40
+        return jsonify({"error": error_msg}), 400
 
 @research_bp.route('/best-papers/<best_paper_id>', methods=['GET'])
 @jwt_required()

@@ -1,249 +1,82 @@
-(() => {
-    const BASE = '/api/v1/research';  // Fixed path
-    const token = () => localStorage.getItem('token') || '';
-    const headers = () => ({ 'Accept': 'application/json', 'Authorization': `Bearer ${token()}` });
-    const sQ = id => document.getElementById(id);
-    const awardList = sQ('awardList');
-    let selAward = null;
-    const bulk = { awardIds: new Set() };
+/* award_submit_list.js — page adapter for AWARDS (preserves old globals) */
+(function () {
+    "use strict";
+    const { utils, init } = window.SubmitList;
+    const { fetchJSON, escapeHtml, formatDate, getStatusClass } = utils;
 
-    const state = {
-        awards: { page: 1, pages: 1, pageSize: 20, filter: '', q: '', sort: 'id', dir: 'desc' }
-    };
-
-    function activateSeg(group, btn) {
-        group.querySelectorAll('.seg').forEach(b => b.classList.remove('active', 'bg-[color:var(--brand-600)]', 'text-white', 'dark:bg-[color:var(--brand-500)]'));
-        btn.classList.add('active', 'bg-[color:var(--brand-600)]', 'text-white', 'dark:bg-[color:var(--brand-500)]');
+    // Console logging utilities
+    function log(message, level = 'info') {
+        console.log(`[Award List] ${level.toUpperCase()}:`, message);
     }
 
-    function wireSegmentedControls() {
-        const aStatusGroup = sQ('awardStatusGroup');
-        aStatusGroup?.addEventListener('click', e => {
-            const btn = e.target.closest('.seg'); if (!btn) return;
-            activateSeg(aStatusGroup, btn);
-            state.awards.filter = btn.dataset.val || '';
-            state.awards.page = 1; searchAwards();
-        });
-
-        const aPageGroup = sQ('awardPageSizeGroup');
-        aPageGroup?.addEventListener('click', e => {
-            const btn = e.target.closest('.seg'); if (!btn) return;
-            activateSeg(aPageGroup, btn);
-            state.awards.pageSize = +btn.dataset.size;
-            state.awards.page = 1; searchAwards();
-        });
-    }
-
-    async function updateStatsBar() {
-        try {
-            const resp = await fetch(`${BASE}/awards/status`, {
-                headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
-            });
-            if (!resp.ok) throw new Error('Failed to fetch stats');
-            const stats = await resp.json();
-            const total = (stats.pending || 0) + (stats.under_review || 0) + (stats.accepted || 0) + (stats.rejected || 0);
-            document.getElementById('statTotal').textContent = total;
-            document.getElementById('statPending').textContent = stats.pending || 0;
-            document.getElementById('statAccepted').textContent = stats.accepted || 0;
-            document.getElementById('statRejected').textContent = stats.rejected || 0;
-        } catch (e) {
-            // fallback: show dashes
-            document.getElementById('statTotal').textContent = '-';
-            document.getElementById('statPending').textContent = '-';
-            document.getElementById('statAccepted').textContent = '-';
-            document.getElementById('statRejected').textContent = '-';
+    function logError(message, error = null) {
+        console.error(`[Award List] ERROR: ${message}`, error);
+        if (error && error.stack) {
+            console.error('Stack trace:', error.stack);
         }
     }
 
-    function applySortStyles(groupEl, currentKey, dir) {
-        groupEl.querySelectorAll('.sort-btn').forEach(btn => {
-            const key = btn.dataset.key;
-            const arrow = btn.querySelector('.sort-arrow');
-            if (key === currentKey) {
-                btn.classList.add('bg-[color:var(--brand-600)]', 'text-white', 'dark:bg-[color:var(--brand-500)]');
-                arrow.classList.remove('opacity-40');
-                arrow.textContent = dir === 'asc' ? '↑' : '↓';
-            } else {
-                btn.classList.remove('bg-[color:var(--brand-600)]', 'text-white', 'dark:bg-[color:var(--brand-500)]');
-                arrow.classList.add('opacity-40');
-                arrow.textContent = '↕';
-            }
-        });
-    }
+    const API_LIST = "/api/v1/research/awards";
+    const API_DETAIL = (id) => `/api/v1/research/awards/${encodeURIComponent(id)}`;
+    const API_META = "/api/v1/research/awards/status";
 
-    // Attach sorting behavior to award sort button group
-    function wireSortGroups() {
-        const aGroup = sQ('awardSortGroup');
-        if (aGroup) {
-            applySortStyles(aGroup, state.awards.sort, state.awards.dir);
-            aGroup.addEventListener('click', e => {
-                const btn = e.target.closest('.sort-btn');
-                if (!btn) return;
-                const key = btn.dataset.key;
-                if (state.awards.sort === key) {
-                    state.awards.dir = state.awards.dir === 'asc' ? 'desc' : 'asc';
-                } else {
-                    state.awards.sort = key;
-                    state.awards.dir = 'asc';
-                }
-                applySortStyles(aGroup, state.awards.sort, state.awards.dir);
-                searchAwards();
-            });
-        }
-    }
+    // -----------------------
+    // Helpers for preview code
+    // -----------------------
+    const token = () => (localStorage.getItem("token") || "").trim();
+    const BASE = window.API_BASE || `${location.origin}/api/v1/research`; // used by PDF fetch
 
-    async function fetchJSON(url, opts = {}) {
-        const bar = document.getElementById('globalLoading');
-        bar && bar.classList.remove('hidden');
-        try {
-            const r = await fetch(url, { headers: headers(), ...opts });
-            if (!r.ok) throw new Error(await r.text() || r.status);
-            return r.json();
-        } finally {
-            setTimeout(() => { bar && bar.classList.add('hidden'); }, 120); // slight delay for smoother perception
-        }
-    }
+    function sQ(id) { return document.getElementById(id); }
 
-    function renderList(el, items, type) {
-        el.replaceChildren();
-        if (!items.length) {
-            const empty = document.createElement('li');
-            empty.className = 'py-8 text-center text-xs uppercase tracking-wide text-[color:var(--muted)]';
-            empty.textContent = type === 'award' ? 'No awards found' : 'No items found';
-            el.appendChild(empty);
-            return;
-        }
-        items.forEach(it => {
-            const li = document.createElement('li');
-            const selected = bulk.awardIds.has(it.id) && type === 'award';
-            li.className = 'group py-3 px-3 hover:bg-[color:var(--brand-50)] dark:hover:bg-[color:var(--brand-900)]/40 cursor-pointer flex justify-between items-center transition-colors rounded-lg ' + (selected ? 'bg-[color:var(--brand-100)] dark:bg-[color:var(--brand-900)]' : '');
-            li.dataset.id = it.id;
-            if (type === 'award') {
-                li.innerHTML = `
-                    <span class="flex items-center gap-3 w-full">
-                        <div class="flex-1 min-w-0">
-                            <div class="font-medium text-gray-900 dark:text-white truncate">${escapeHtml(it.title || 'Untitled Award')}</div>
-                            <div class="flex flex-wrap gap-2 mt-1">
-                                <span class="text-xs text-gray-500 dark:text-gray-400 truncate">(${it.paper_category?.name || 'No Category'})</span>
-                                <span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded ${getStatusClass(it.status)}">${escapeHtml(it.status || 'PENDING')}</span>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-2 p-3 bg-white/50 dark:bg-gray-800/50 rounded-lg">
-                            <div class="p-2 rounded-md bg-blue-100 dark:bg-blue-900/30">
-                                <svg class="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24"
-                                    stroke="currentColor" aria-hidden="true">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                </svg>
-                            </div>
-                            <div>
-                                <div class="text-xs muted">Submitted By</div>
-                                <div id="summaryAuthor" class="font-medium">${escapeHtml(it.created_by?.username || 'Unknown User')}</div>
-                            </div>
-                        </div>
-                            <div class="flex items-center gap-2 p-3 bg-white/50 dark:bg-gray-800/50 rounded-lg">
-                            <div class="p-2 rounded-md bg-blue-100 dark:bg-blue-900/30">
-                                <svg class="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24"
-                                    stroke="currentColor" aria-hidden="true">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                </svg>
-                            </div>
-                            <div>
-                                <div class="text-xs muted">Submitted On</div>
-                                <div id="summaryDate" class="font-medium">${formatDate(it.created_at)}</div>
-                            </div>
-                        </div>
-                    </span>
-                `;
-                li.addEventListener('click', (e) => {
-                    if (e.target.classList.contains('bulkChk')) return;
-                    selAward = it;
-                    updatePanel();
-                    highlightSelection();
-                });
-            }
-            el.appendChild(li);
-        });
-        if (type === 'award') {
-            el.querySelectorAll('.bulkChk').forEach(chk => {
-                chk.addEventListener('change', e => {
-                    const id = e.target.getAttribute('data-id');
-                    if (e.target.checked) bulk.awardIds.add(id); else bulk.awardIds.delete(id);
-
-
-                });
-            });
-
-        }
-    }
-
-    function getStatusClass(status) {
-        switch ((status || '').toLowerCase()) {
-            case 'accepted': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100';
-            case 'rejected': return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-100';
-            case 'under_review': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-100';
-            default: return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100';
-        }
-    }
-
-
-    function highlightSelection() {
-        // Clear previous highlight
-        Array.from(awardList.children).forEach(li => li.classList.remove('ring', 'ring-[color:var(--brand-600)]', 'selected-row', 'bg-[color:var(--brand-200)]', 'dark:bg-[color:var(--brand-800)]'));
-        if (selAward) {
-            const el = awardList.querySelector(`[data-id='${selAward.id}']`);
-            if (el) el.classList.add('ring', 'ring-[color:var(--brand-600)]', 'selected-row', 'bg-[color:var(--brand-200)]', 'dark:bg-[color:var(--brand-800)]');
-        }
-    }
-
-    function updatePanel() {
-        const noAwardSelected = sQ('noAwardSelected');
-        const awardContent = sQ('awardContent');
-        if (selAward) {
-            noAwardSelected.classList.add('hidden');
-            awardContent.classList.remove('hidden');
-
-            // Generate preview content
-            generatePreview();
-        } else {
-            noAwardSelected.classList.remove('hidden');
-            awardContent.classList.add('hidden');
-        }
-    }
-
-    // Generate preview of award details
-    function generatePreview() {
+    // ===== Generated preview (drop-in) =====
+    window.generatePreview = function (selAward) {
         const previewContent = sQ('preview-content');
         if (!previewContent || !selAward) return;
 
-        // Get category name
-        const categoryName = selAward.paper_category?.name || 'No Category';
+        const categoryName = selAward.paper_category?.name || selAward.paper_category || 'No Category';
 
-        // Update summary card info
-        sQ('summaryTitle') && (sQ('summaryTitle').textContent = selAward.title || 'Untitled Award');
+        // Update summary card info (top badges)
+        if (sQ('summaryTitle')) sQ('summaryTitle').textContent = selAward.title || 'Untitled Award';
+        if (sQ('summaryCategory')) sQ('summaryCategory').textContent = categoryName;
+        if (sQ('summaryAwardNumber')) sQ('summaryAwardNumber').textContent = selAward.award_number || 'Unknown ID';
 
-        sQ('summaryCategory') && (sQ('summaryCategory').textContent = categoryName);
-        sQ('summaryAwardNumber') && (sQ('summaryAwardNumber').textContent = selAward.award_number || 'Unknown ID');
+        if (sQ('summaryStatus')) {
+            sQ('summaryStatus').textContent = selAward.status || 'PENDING';
+            sQ('summaryStatus').className = 'badge ' + getStatusClass(selAward.status);
+        }
+        if (sQ('summaryAuthor')) sQ('summaryAuthor').textContent = selAward.created_by?.username || selAward.author || 'Unknown User';
+        if (sQ('summaryDate')) sQ('summaryDate').textContent = formatDate(selAward.created_at);
 
-        sQ('summaryStatus') && (sQ('summaryStatus').textContent = selAward.status || 'PENDING');
-        sQ('summaryStatus') && (sQ('summaryStatus').className = 'badge ' + getStatusClass(selAward.status));
-        sQ('summaryAuthor') && (sQ('summaryAuthor').textContent = selAward.created_by?.username || 'Unknown User');
-        sQ('summaryDate') && (sQ('summaryDate').textContent = formatDate(selAward.created_at));
+        // Build Authors block
+        let authorsHTML = '';
+        if (selAward.author) {
+            const author = selAward.author;
+            const roles = [];
+            if (author.is_presenter) roles.push('Presenter');
+            if (author.is_corresponding) roles.push('Corresponding');
+            authorsHTML = `
+                <div class="border-l-4 border-blue-400 dark:border-blue-600 pl-4 py-2">
+                    <div class="flex flex-wrap justify-between gap-2">
+                        <p class="font-medium text-gray-900 dark:text-white">${escapeHtml(author.name || '')}</p>
+                        ${roles.length ? `<div class="flex flex-wrap gap-1">
+                            ${roles.map(r => `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-80 dark:text-blue-100">${r}</span>`).join('')}
+                        </div>` : ''}
+                    </div>
+                    ${author.email ? `<p class="text-sm text-blue-600 dark:text-blue-400 mt-1">${escapeHtml(author.email)}</p>` : ''}
+                    ${author.affiliation ? `<p class="text-sm text-gray-500 dark:text-gray-400 mt-1">${escapeHtml(author.affiliation)}</p>` : ''}
+                </div>`;
+        } else {
+            authorsHTML = `<p class="text-gray-500 dark:text-gray-400 italic">No authors listed</p>`;
+        }
 
-
-        let pdfPreview = '';
-        let forpdfPreview = '';
-
-        // Generate preview HTML with improved styling
-        let previewHTML = `
+        const previewHTML = `
             <div class="divide-y divide-gray-200 dark:divide-gray-700">
                 <!-- Authors Section -->
                 <div class="p-5">
                     <div class="flex items-center mb-4">
                         <div class="flex-shrink-0 h-10 w-10 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.28 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                             </svg>
                         </div>
                         <div class="ml-4">
@@ -251,39 +84,12 @@
                             <p class="text-sm text-gray-500 dark:text-gray-400">List of contributing authors</p>
                         </div>
                     </div>
-                    
                     <div class="ml-2 space-y-4">
-        `;
-
-        if (selAward.author) {
-            let author = selAward.author;
-            const roles = [];
-            if (author.is_presenter) roles.push('Presenter');
-            if (author.is_corresponding) roles.push('Corresponding');
-
-            previewHTML += `
-                    <div class="border-l-4 border-blue-400 dark:border-blue-600 pl-4 py-2">
-                        <div class="flex flex-wrap justify-between gap-2">
-                            <p class="font-medium text-gray-900 dark:text-white">${escapeHtml(author.name)}</p>
-                            ${roles.length > 0 ? `<div class="flex flex-wrap gap-1">${roles.map(role =>
-                `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100">
-                                    ${role}
-                                </span>`).join('')}</div>` : ''}
-                        </div>
-                        ${author.email ? `<p class="text-sm text-blue-600 dark:text-blue-400 mt-1">${escapeHtml(author.email)}</p>` : ''}
-                        ${author.affiliation ? `<p class="text-sm text-gray-500 dark:text-gray-400 mt-1">${escapeHtml(author.affiliation)}</p>` : ''}
-                    </div>
-                `;
-        } else {
-            previewHTML += `
-                <p class="text-gray-500 dark:text-gray-400 italic">No authors listed</p>
-            `;
-        }
-
-        previewHTML += `
+                        ${authorsHTML}
                     </div>
                 </div>
-                 <!-- AIIMS & Forwarding Letter Section -->
+
+                <!-- AIIMS & Forwarding Letter Section -->
                 <div class="p-5">
                     <div class="flex items-center mb-4">
                         <div class="flex-shrink-0 h-10 w-10 rounded-full bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
@@ -308,7 +114,6 @@
                                         <span class="text-blue-600 dark:text-blue-400">Loading PDF...</span>
                                     </div>
                                 </div>
-                                <!-- Canvases for PDF pages will be rendered here -->
                             </div>
                         ` : `<p class="text-gray-500 dark:text-gray-400 italic p-4 text-center">No Forwarding Letter PDF uploaded for this award.</p>`}
                     </div>
@@ -319,7 +124,7 @@
                     <div class="flex items-center mb-4">
                         <div class="flex-shrink-0 h-10 w-10 rounded-full bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-600 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 17V7a2 2 0 012-2h6a2 2 0 012 2v10m-2 4h-4a2 2 0 01-2-2V7a2 2 0 012-2h4a2 2 0 012 2v10a2 2 0 01-2 2z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 17V7a2 2 0 012-2h6a2 2 0 012 2v10m-2 4h-4a2 2 0 01-2V7a2 2 0 012-2h4a2 2 0 012 2v10a2 2 0 01-2 2z" />
                             </svg>
                         </div>
                         <div class="ml-4">
@@ -336,39 +141,40 @@
                                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                                             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                         </svg>
-                                        <span class="text-blue-600 dark:text-blue-400">Loading PDF...</span>
+                                        <span class="text-blue-600 dark:text-blue-40">Loading PDF...</span>
                                     </div>
                                 </div>
-                                <!-- Canvases for PDF pages will be rendered here -->
                             </div>
                         ` : `<p class="text-gray-500 dark:text-gray-400 italic p-4 text-center">No PDF uploaded for this award.</p>`}
                     </div>
                 </div>
             </div>
         `;
+
         previewContent.innerHTML = previewHTML;
+
         // After rendering, if PDF exists, render preview using PDF.js
         if (selAward.full_paper_path) {
-            renderVerifierPdfPreview(selAward.id);
+            window.renderVerifierPdfPreview(selAward.id);
         }
-
 
         if (selAward.forwarding_letter_path) {
-            renderVerifierforwardingPdfPreview(selAward.id);
+            window.renderVerifierforwardingPdfPreview(selAward.id);
         }
+    };
 
-    }
+    // PDF.js rendering for main PDF
+    window.renderVerifierPdfPreview = function (awardId) {
+        const container = document.getElementById('pdf-preview-container');
 
-    // Render PDF preview for verifier using PDF.js
-    function renderVerifierPdfPreview(awardId) {
         if (typeof pdfjsLib === 'undefined') {
-            const container = document.getElementById('pdf-preview-container');
             if (container) container.innerHTML = '<p class="text-red-600 dark:text-red-400 text-center p-4">PDF.js library not available. Cannot preview PDF.</p>';
             return;
         }
         pdfjsLib.GlobalWorkerOptions.workerSrc = '/static/js/pdf.worker.min.js';
-        fetch(`${BASE}/awards/${awardId}/pdf`, {
-            headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
+
+        fetch(`${BASE}/awards/${encodeURIComponent(awardId)}/pdf`, {
+            headers: { 'Authorization': `Bearer ${token()}` }
         })
             .then(response => {
                 if (!response.ok) throw new Error('Network response was not ok');
@@ -377,50 +183,46 @@
             .then(buffer => {
                 const typedarray = new Uint8Array(buffer);
                 const loadingTask = pdfjsLib.getDocument({ data: typedarray, password: '' });
-                loadingTask.promise.then(function (pdf) {
-                    const container = document.getElementById('pdf-preview-container');
-                    if (!container) return;
-                    container.innerHTML = '';
-                    const scale = 1.5;
-                    // Render all pages
-                    let pagePromises = [];
-                    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-                        pagePromises.push(
-                            pdf.getPage(pageNum).then(function (page) {
-                                const viewport = page.getViewport({ scale: scale });
-                                const canvas = document.createElement('canvas');
-                                canvas.className = 'w-full mb-4 rounded shadow';
-                                canvas.height = viewport.height;
-                                canvas.width = viewport.width;
-                                container.appendChild(canvas);
-                                const context = canvas.getContext('2d');
-                                return page.render({ canvasContext: context, viewport: viewport }).promise;
-                            })
-                        );
-                    }
-                    Promise.all(pagePromises).catch(function (renderError) {
-                        container.innerHTML = '<p class="text-red-600 dark:text-red-400 text-center p-4">Error rendering PDF pages.</p>';
-                    });
-                }).catch(function (error) {
-                    const container = document.getElementById('pdf-preview-container');
-                    if (container) container.innerHTML = '<p class="text-red-600 dark:text-red-400 text-center p-4">Unable to load PDF: ' + (error.message || 'Unknown error') + '</p>';
-                });
+                return loadingTask.promise.then(pdf => ({ pdf }));
             })
-            .catch(() => {
-                const container = document.getElementById('pdf-preview-container');
-                if (container) container.innerHTML = '<p class="text-red-600 dark:text-red-400 text-center p-4">Unable to fetch PDF file.</p>';
+            .then(({ pdf }) => {
+                if (!container) return;
+                container.innerHTML = '';
+                const scale = 1.5;
+                const tasks = [];
+                for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                    tasks.push(
+                        pdf.getPage(pageNum).then(page => {
+                            const viewport = page.getViewport({ scale });
+                            const canvas = document.createElement('canvas');
+                            canvas.className = 'w-full mb-4 rounded shadow';
+                            canvas.height = viewport.height;
+                            canvas.width = viewport.width;
+                            container.appendChild(canvas);
+                            const context = canvas.getContext('2d');
+                            return page.render({ canvasContext: context, viewport }).promise;
+                        })
+                    );
+                }
+                return Promise.all(tasks);
+            })
+            .catch(err => {
+                if (container) container.innerHTML = `<p class="text-red-600 dark:text-red-400 text-center p-4">Unable to load/render PDF: ${escapeHtml(err?.message || 'Unknown error')}</p>`;
             });
-    }
+    };
 
-    function renderVerifierforwardingPdfPreview(awardId) {
+    // PDF.js rendering for forwarding letter PDF
+    window.renderVerifierforwardingPdfPreview = function (awardId) {
+        const container = document.getElementById('forwarding-pdf-preview-container');
+
         if (typeof pdfjsLib === 'undefined') {
-            const container = document.getElementById('forwarding-pdf-preview-container');
             if (container) container.innerHTML = '<p class="text-red-600 dark:text-red-400 text-center p-4">PDF.js library not available. Cannot preview PDF.</p>';
             return;
         }
         pdfjsLib.GlobalWorkerOptions.workerSrc = '/static/js/pdf.worker.min.js';
-        fetch(`${BASE}/awards/${awardId}/forwarding_pdf`, {
-            headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
+
+        fetch(`${BASE}/awards/${encodeURIComponent(awardId)}/forwarding_pdf`, {
+            headers: { 'Authorization': `Bearer ${token()}` }
         })
             .then(response => {
                 if (!response.ok) throw new Error('Network response was not ok');
@@ -429,342 +231,215 @@
             .then(buffer => {
                 const typedarray = new Uint8Array(buffer);
                 const loadingTask = pdfjsLib.getDocument({ data: typedarray, password: '' });
-                loadingTask.promise.then(function (pdf) {
-                    const container = document.getElementById('forwarding-pdf-preview-container');
-                    if (!container) return;
-                    container.innerHTML = '';
-                    const scale = 1.5;
-                    // Render all pages
-                    let pagePromises = [];
-                    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-                        pagePromises.push(
-                            pdf.getPage(pageNum).then(function (page) {
-                                const viewport = page.getViewport({ scale: scale });
-                                const canvas = document.createElement('canvas');
-                                canvas.className = 'w-full mb-4 rounded shadow';
-                                canvas.height = viewport.height;
-                                canvas.width = viewport.width;
-                                container.appendChild(canvas);
-                                const context = canvas.getContext('2d');
-                                return page.render({ canvasContext: context, viewport: viewport }).promise;
-                            })
-                        );
-                    }
-                    Promise.all(pagePromises).catch(function (renderError) {
-                        container.innerHTML = '<p class="text-red-600 dark:text-red-400 text-center p-4">Error rendering PDF pages.</p>';
-                    });
-                }).catch(function (error) {
-                    const container = document.getElementById('forwarding-pdf-preview-container');
-                    if (container) container.innerHTML = '<p class="text-red-600 dark:text-red-400 text-center p-4">Unable to load PDF: ' + (error.message || 'Unknown error') + '</p>';
-                });
+                return loadingTask.promise.then(pdf => ({ pdf }));
             })
-            .catch(() => {
-                const container = document.getElementById('forwarding-pdf-preview-container');
-                if (container) container.innerHTML = '<p class="text-red-600 dark:text-red-400 text-center p-4">Unable to fetch PDF file.</p>';
+            .then(({ pdf }) => {
+                if (!container) return;
+                container.innerHTML = '';
+                const scale = 1.5;
+                const tasks = [];
+                for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                    tasks.push(
+                        pdf.getPage(pageNum).then(page => {
+                            const viewport = page.getViewport({ scale });
+                            const canvas = document.createElement('canvas');
+                            canvas.className = 'w-full mb-4 rounded shadow';
+                            canvas.height = viewport.height;
+                            canvas.width = viewport.width;
+                            container.appendChild(canvas);
+                            const context = canvas.getContext('2d');
+                            return page.render({ canvasContext: context, viewport }).promise;
+                        })
+                    );
+                }
+                return Promise.all(tasks);
+            })
+            .catch(err => {
+                if (container) container.innerHTML = `<p class="text-red-600 dark:text-red-400 text-center p-4">Unable to load/render PDF: ${escapeHtml(err?.message || 'Unknown error')}</p>`;
             });
+    };
+
+    // -----------------------
+    // List render
+    // -----------------------
+    function renderItem(item) {
+        const li = document.createElement("li");
+        li.className = "p-3 hover:bg-white/60 dark:hover:bg-gray-800/60 cursor-pointer flex items-start gap-3";
+        li.innerHTML = `
+            <div class="flex-1 min-w-0">
+                <div class="flex items-center justify-between gap-3">
+                    <h4 class="font-semibold truncate">${escapeHtml(item.title || "Untitled")}</h4>
+                    <span class="badge text-xs px-2 py-0.5 ${getStatusClass(item.status)}">${escapeHtml(item.status || "")}</span>
+                </div>
+                <div class="text-xs muted mt-1 truncate">
+                    #${escapeHtml(item.id)} · ${escapeHtml(item.paper_category?.name || "-")} · ${escapeHtml(item.created_by?.username || "-")}
+                </div>
+            </div>
+            <div class="text-xs whitespace-nowrap ml-2">${escapeHtml(formatDate(item.created_at))}</div>
+        `;
+        return li;
     }
 
-    function formatDate(dateString) {
-        if (!dateString) return 'Unknown';
-        const date = new Date(dateString);
-
-        // Convert UTC to IST (UTC+5:30)
-        const istDate = new Date(date.getTime() + (5.5 * 60 * 60 * 1000));
-
-        return istDate.toLocaleDateString('en-IN', {
-            timeZone: 'Asia/Kolkata',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit'
-        }) + ' ' + istDate.toLocaleTimeString('en-IN', {
-            timeZone: 'Asia/Kolkata',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true
-        });
-    }
-
-    async function searchAwards() {
-        state.awards.q = (sQ('awardSearch').value || '').trim();
-        const { q, filter, page, pageSize, sort, dir } = state.awards;
-        const url = `${BASE}/awards?q=${encodeURIComponent(q)}&status=${filter}&page=${page}&page_size=${pageSize}&sort_by=${sort}&sort_dir=${dir}`;
+    async function fetchPage({ page, pageSize, sortKey, sortDir, filter, query }) {
+        log(`Fetching page ${page} with filter: ${filter || 'all'}, query: ${query || 'none'}`, 'info');
         try {
-            const data = await fetchJSON(url);
-            renderList(awardList, data.items || data || [], 'award');
-            updateAwardMeta(data);
-        } catch (e) {
-            console.error(e);
-            toast('Failed to search awards: ' + (e.message || 'Unknown error'), 'error');
-        }
-    }
-
-
-
-    function updateAwardMeta(data) {
-        state.awards.pages = data.pages || 1;
-        const info = sQ('awardPageInfo');
-        if (info) info.textContent = `Page ${data.page || 1} / ${data.pages || 1}`;
-        const stats = sQ('awardStats');
-        if (stats) {
-            const filterLabel = state.awards.filter === '' ? 'All' : state.awards.filter.charAt(0).toUpperCase() + state.awards.filter.slice(1);
-            stats.textContent = `${data.total || 0} total • Filter: ${filterLabel}`;
-        }
-    }
-
-    function changeAwardPage(delta) {
-        state.awards.page = Math.min(Math.max(1, state.awards.page + delta), state.awards.pages);
-        searchAwards();
-    }
-
-    function toast(msg, type = 'info') {
-        // Create a toast notification
-        const toastContainer = document.getElementById('toast-container') || createToastContainer();
-
-        const toastEl = document.createElement('div');
-        toastEl.className = `mb-2 p-3 rounded-lg text-white font-medium text-sm flex items-center gap-2 transform transition-all duration-300 ${type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : type === 'warn' ? 'bg-yellow-500' : 'bg-blue-500'}`;
-
-        const icon = document.createElement('span');
-        icon.innerHTML = type === 'success' ?
-            '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>' :
-            type === 'error' ?
-                '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>' :
-                '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>';
-
-        toastEl.appendChild(icon);
-        toastEl.appendChild(document.createTextNode(msg));
-
-        toastContainer.appendChild(toastEl);
-
-        // Auto remove after 3 seconds
-        setTimeout(() => {
-            toastEl.classList.add('opacity-0', 'translate-y-2');
-            setTimeout(() => {
-                if (toastEl.parentNode) toastEl.parentNode.removeChild(toastEl);
-            }, 300);
-        }, 3000);
-    }
-
-    function createToastContainer() {
-        const container = document.createElement('div');
-        container.id = 'toast-container';
-        container.className = 'fixed top-4 right-4 z-50 w-80';
-        document.body.appendChild(container);
-        return container;
-    }
-
-    function escapeHtml(s) {
-        return String(s).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
-    }
-
-    function init() {
-        updateStatsBar();
-        sQ('awardSearchBtn')?.addEventListener('click', () => { state.awards.page = 1; searchAwards(); });
-        sQ('awardSearch')?.addEventListener('keypress', (e) => { if (e.key === 'Enter') { state.awards.page = 1; searchAwards(); } });
-        sQ('awardPrev')?.addEventListener('click', () => changeAwardPage(-1));
-        sQ('awardNext')?.addEventListener('click', () => changeAwardPage(1));
-
-
-        const master = sQ('awardMasterChk');
-        master?.addEventListener('change', e => { e.target.checked ? selectAllPage() : clearAllPage(); });
-        sQ('invertSelection')?.addEventListener('click', invertSelection);
-        sQ('awardSelectAll')?.addEventListener('click', selectAllPage);
-        sQ('awardClearSel')?.addEventListener('click', clearAllPage);
-        sQ('bulkAcceptBtn')?.addEventListener('click', async () => {
-            if (bulk.awardIds.size === 0) {
-                toast('Select awards to accept', 'warn');
-                return;
-            }
-
-            if (!confirm(`Are you sure you want to accept ${bulk.awardIds.size} award(s)?`)) return;
-
-            // Show loading state
-            const bulkStatus = sQ('bulkStatus');
-            const originalText = bulkStatus.textContent;
-            bulkStatus.textContent = 'Processing...';
-
-            try {
-                // Get only pending awards
-                const ids = Array.from(bulk.awardIds);
-                let pendingIds = [];
-
-                for (const id of ids) {
-                    try {
-                        const data = await fetchJSON(`/api/v1/research/awards/${id}`);
-                        if ((data.status || '').toUpperCase() === 'PENDING') {
-                            pendingIds.push(id);
-                        }
-                    } catch (e) {
-                        // skip if error
-                        console.warn(`Failed to fetch award ${id}:`, e);
-                    }
-                }
-
-                if (pendingIds.length === 0) {
-                    toast('No selected awards are pending', 'warn');
-                    return;
-                }
-
-                if (pendingIds.length < ids.length) {
-                    const skipped = ids.length - pendingIds.length;
-                    toast(`${skipped} award(s) are not pending and will be skipped.`, 'warn');
-                }
-
-                // Process pending awards
-                let successCount = 0;
-                for (const id of pendingIds) {
-                    try {
-                        const body = { status: 'ACCEPTED' };
-                        const r = await fetch(`${BASE}/awards/${id}`, {
-                            method: 'PUT',
-                            headers: { ...headers(), 'Content-Type': 'application/json' },
-                            body: JSON.stringify(body)
-                        });
-                        if (r.ok) {
-                            successCount++;
-                            bulk.awardIds.delete(id); // Remove from selection
-                        }
-                    } catch (e) {
-                        console.error(`Failed to accept award ${id}:`, e);
-                    }
-                }
-
-
-
-
-                if (successCount > 0) {
-                    toast(`Successfully accepted ${successCount} award(s)`, 'success');
-                    await searchAwards(); // Refresh the list
-                } else {
-                    toast('Failed to accept any awards', 'error');
-                }
-            } catch (e) {
-                toast('Error processing bulk accept: ' + (e.message || 'Unknown error'), 'error');
-            } finally {
-                bulkStatus.textContent = originalText;
-            }
-        });
-
-        sQ('bulkRejectBtn')?.addEventListener('click', async () => {
-            if (bulk.awardIds.size === 0) {
-                toast('Select awards to reject', 'warn');
-                return;
-            }
-
-            if (!confirm(`Are you sure you want to reject ${bulk.awardIds.size} award(s)?`)) return;
-
-            // Show loading state
-            const bulkStatus = sQ('bulkStatus');
-            const originalText = bulkStatus.textContent;
-            bulkStatus.textContent = 'Processing...';
-
-            try {
-                // Get only pending awards
-                const ids = Array.from(bulk.awardIds);
-                let pendingIds = [];
-
-                for (const id of ids) {
-                    try {
-                        const data = await fetchJSON(`/api/v1/research/awards/${id}`);
-                        if ((data.status || '').toUpperCase() === 'PENDING') {
-                            pendingIds.push(id);
-                        }
-                    } catch (e) {
-                        // skip if error
-                        console.warn(`Failed to fetch award ${id}:`, e);
-                    }
-                }
-
-                if (pendingIds.length === 0) {
-                    toast('No selected awards are pending', 'warn');
-                    return;
-                }
-
-                if (pendingIds.length < ids.length) {
-                    const skipped = ids.length - pendingIds.length;
-                    toast(`${skipped} award(s) are not pending and will be skipped.`, 'warn');
-                }
-
-                // Process pending awards
-                let successCount = 0;
-                for (const id of pendingIds) {
-                    try {
-                        const body = { status: 'REJECTED' };
-                        const r = await fetch(`${BASE}/awards/${id}`, {
-                            method: 'PUT',
-                            headers: { ...headers(), 'Content-Type': 'application/json' },
-                            body: JSON.stringify(body)
-                        });
-                        if (r.ok) {
-                            successCount++;
-                            bulk.awardIds.delete(id); // Remove from selection
-                        }
-                    } catch (e) {
-                        console.error(`Failed to reject award ${id}:`, e);
-                    }
-                }
-
-
-
-
-                if (successCount > 0) {
-                    toast(`Successfully rejected ${successCount} award(s)`, 'success');
-                    await searchAwards(); // Refresh the list
-                } else {
-                    toast('Failed to reject any awards', 'error');
-                }
-            } catch (e) {
-                toast('Error processing bulk reject: ' + (e.message || 'Unknown error'), 'error');
-            } finally {
-                bulkStatus.textContent = originalText;
-            }
-        });
-
-        wireSortGroups();
-        wireSegmentedControls();
-        searchAwards();
-    }
-
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
-
-    // ==== EXTRA INITIALIZERS (CSP-safe) ====
-    function initSidePanelCollapse() {
-        const sidePanel = document.querySelector('#gradingModal [data-side-panel]');
-        if (!sidePanel) return;
-        const threshold = 640;
-        function adjust() {
-            if (window.innerHeight < threshold) sidePanel.classList.add('collapsed');
-            else sidePanel.classList.remove('collapsed');
-        }
-        window.addEventListener('resize', adjust);
-        adjust();
-    }
-
-    function initCriteriaFilter() {
-        const input = document.getElementById('criteriaFilter');
-        if (!input) return;
-        function apply() {
-            const q = input.value.trim().toLowerCase();
-            const cards = document.querySelectorAll('#gradingFieldsContainer [data-criteria-card]');
-            let shown = 0;
-            cards.forEach(card => {
-                const label = card.getAttribute('data-label') || card.querySelector('[data-criteria-label]')?.textContent || '';
-                if (!q || label.toLowerCase().includes(q)) {
-                    card.classList.remove('hidden');
-                    shown++;
-                } else {
-                    card.classList.add('hidden');
-                }
+            const data = await fetchJSON(API_LIST, {
+                q: query, status: filter, sort: sortKey || "created_at", dir: sortDir || "desc", page, size: pageSize
             });
-            const cont = document.getElementById('gradingFieldsContainer');
-            if (cont) cont.dataset.visibleCount = String(shown);
+            log(`Received ${data.items?.length || 0} items for page ${page}`, 'info');
+            return { items: data.items || [], total: data.total ?? 0, totalPages: data.pages ?? 1, meta: data.meta || {} };
+        } catch (error) {
+            logError('Error fetching page data:', error);
+            throw error;
         }
-        input.addEventListener('input', apply);
-        document.addEventListener('gradingCriteriaPopulated', apply);
     }
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => { initCriteriaFilter(); });
-    } else {
-        initCriteriaFilter();
+    // Use generated preview inside selection handler
+    async function onSelect(item, ctx) {
+        log(`Selecting award with ID: ${item.id}`, 'info');
+        try {
+            const full = await fetchJSON(API_DETAIL(item.id));
+            log(`Fetched full award details for ID: ${item.id}`, 'info');
+
+            // Update summary badges via controller so they also reflect in UI elements
+            ctx.setDetails({
+                title: full.title || item.title || "",
+                category: full.paper_category || item.paper_category || (full.paper_category?.name) || "",
+                status: full.status || item.status || "",
+                number: full.award_number || full.number || item.number || "",
+                author: (full.created_by?.username) || full.author || item.author || "",
+                date: formatDate(full.created_at || item.created_at),
+                previewHtml: `<div class="p-3 text-sm muted">Loading preview…</div>`
+            });
+
+            // Now render the rich details + authors + PDF using the generated function
+            window.generatePreview(full);
+        } catch (error) {
+            logError(`Error selecting award with ID: ${item.id}`, error);
+            throw error;
+        }
     }
+
+    // -----------------------
+    // Controller wiring
+    // -----------------------
+    let __awardListCtrl = null;
+
+    document.addEventListener('DOMContentLoaded', function() {
+        try {
+            const ctrl = init({
+                listEl: "#List",
+                searchInputEl: "#awardSearch",
+                searchBtnEl: "#SearchBtn",
+                statusGroupEl: "#StatusGroup",
+                sortGroupEl: "#SortGroup",
+                prevBtnEl: "#Prev",
+                nextBtnEl: "#Next",
+                pageInfoEl: "#PageInfo",
+                statsEl: "#Stats",
+                pageSizeGroupEl: "#PageSizeGroup",
+                globalLoadingEl: "#globalLoading",
+                details: {
+                    containerEl: "#Details",
+                    noSelectedEl: "#noSelected",
+                    contentEl: "#Content",
+                    previewEl: "#preview-content",
+                    titleEl: "#summaryTitle",
+                    categoryEl: "#summaryCategory",
+                    statusEl: "#summaryStatus",
+                    numberEl: "#summaryNumber",
+                    authorEl: "#summaryAuthor",
+                    dateEl: "#summaryDate",
+                },
+                statsMap: { total: "#statTotal", pending: "#statPending", accepted: "#statAccepted", rejected: "#statRejected" },
+                fetchPage, renderItem, onSelect
+            });
+            
+            __awardListCtrl = ctrl;
+            
+            // ---- Old global names preserved ----
+            window.searchAwards = function (q) {
+                const s = __awardListCtrl.state;
+                if (typeof q === "string") { const input = document.querySelector("#awardSearch"); if (input) input.value = q; s.query = q.trim(); }
+                else { const input = document.querySelector("#awardSearch"); s.query = (input?.value || "").trim(); }
+                s.page = 1; __awardListCtrl.refresh();
+            };
+            window.changeAwardPage = function (deltaOrNumber) {
+                const s = __awardListCtrl.state;
+                if (typeof deltaOrNumber === "number") {
+                    if (Number.isInteger(deltaOrNumber) && Math.abs(deltaOrNumber) <= 2 && deltaOrNumber !== 0)
+                        s.page = Math.min(Math.max(1, s.page + deltaOrNumber), s.totalPages);
+                    else
+                        s.page = Math.min(Math.max(1, deltaOrNumber), s.totalPages);
+                } else if (deltaOrNumber === "next") s.page = Math.min(s.page + 1, s.totalPages);
+                else if (deltaOrNumber === "prev") s.page = Math.max(s.page - 1, 1);
+                __awardListCtrl.refresh();
+            };
+            window.updateAwardMeta = async function () {
+                try {
+                    const m = await fetchJSON(API_META);
+                    const map = { total: "#statTotal", pending: "#statPending", accepted: "#statAccepted", rejected: "#statRejected" };
+                    for (const [k, sel] of Object.entries(map)) {
+                        const el = document.querySelector(sel);
+                        if (el && m[k] != null) el.textContent = String(m[k]);
+                    }
+                    const stats = document.querySelector("#Stats");
+                    if (stats && m.total != null) stats.textContent = `${m.total} item(s)`;
+                } catch (e) { console.warn("updateAwardMeta failed", e); }
+            };
+
+            // Ensure global controller reference is accessible
+            window.__awardListCtrl = __awardListCtrl;
+            
+            // Add explicit event handlers for next/prev buttons to ensure they work
+            const nextBtn = document.querySelector("#Next");
+            const prevBtn = document.querySelector("#Prev");
+            
+            if (nextBtn) {
+                nextBtn.addEventListener('click', function() {
+                    if (__awardListCtrl && __awardListCtrl.state.page < __awardListCtrl.state.totalPages) {
+                        __awardListCtrl.state.page++;
+                        __awardListCtrl.refresh();
+                    }
+                });
+            }
+            
+            if (prevBtn) {
+                prevBtn.addEventListener('click', function() {
+                    if (__awardListCtrl && __awardListCtrl.state.page > 1) {
+                        __awardListCtrl.state.page--;
+                        __awardListCtrl.refresh();
+                    }
+                });
+            }
+        } catch (error) {
+            console.error("Error initializing award list controller:", error);
+            // Show an error message to the user
+            const statsEl = document.querySelector("#Stats");
+            if (statsEl) {
+                statsEl.textContent = "Error loading award list. Please refresh the page.";
+                statsEl.className = "text-red-600 dark:text-red-40";
+            }
+        }
+    });
+    
+    // Define global functions outside DOMContentLoaded but with checks to ensure controller is ready
+    window.nextAwardPage = function() {
+        if (window.__awardListCtrl && window.__awardListCtrl.state.page < window.__awardListCtrl.state.totalPages) {
+            window.__awardListCtrl.state.page++;
+            window.__awardListCtrl.refresh();
+        } else {
+            console.warn("Award list controller not ready or already on last page");
+        }
+    };
+    
+    window.prevAwardPage = function() {
+        if (window.__awardListCtrl && window.__awardListCtrl.state.page > 1) {
+            window.__awardListCtrl.state.page--;
+            window.__awardListCtrl.refresh();
+        } else {
+            console.warn("Award list controller not ready or already on first page");
+        }
+    };
+
 })();
