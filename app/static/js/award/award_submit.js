@@ -1112,7 +1112,7 @@ function renderPdfPreview(file, containerId = 'pdf-preview-container', canvasId 
     }
 
     // Set the worker URL for PDF.js to use the local worker
-    pdfjsLib.GlobalWorkerOptions.workerSrc = '/static/js/pdf.worker.min.js';
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '/static/js/vendor/pdf.worker.min.js';
 
     const fileReader = new FileReader();
 

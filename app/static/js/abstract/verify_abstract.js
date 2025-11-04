@@ -412,7 +412,7 @@
             if (container) container.innerHTML = '<p class="text-red-600 dark:text-red-400 text-center p-4">PDF.js library not available. Cannot preview PDF.</p>';
             return;
         }
-        pdfjsLib.GlobalWorkerOptions.workerSrc = '/static/js/pdf.worker.min.js';
+        pdfjsLib.GlobalWorkerOptions.workerSrc = '/static/js/vendor/pdf.worker.min.js';
         fetch(`${BASE}/abstracts/${abstractId}/pdf`, {
             headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
         })
