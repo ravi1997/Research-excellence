@@ -181,6 +181,14 @@ class Abstracts(db.Model):
         default=Status.PENDING.value,
     )
 
+    # Add fields to support two-phase review process
+    review_phase = db.Column(
+        db.Integer,
+        nullable=False,
+        default=1,
+        server_default="1",
+    )
+    
     created_by_id = db.Column(
         UUID(as_uuid=True),
         db.ForeignKey("users.id"),
@@ -286,6 +294,14 @@ class AbstractVerifiers(db.Model):
         nullable=False,
         default=db.func.current_timestamp(),
     )
+    # Add a field to track which review phase this verifier is assigned to
+    review_phase = db.Column(
+        db.Integer,
+        nullable=False,
+        default=1,
+        server_default="1",
+    )
+
 
 class AbstractCoordinators(db.Model):
     __tablename__ = "abstract_coordinators"
@@ -431,7 +447,6 @@ class Awards(db.Model):
     submitted_by_id = synonym("created_by_id")
     updated_on = synonym("updated_at")
 
-
 class AwardVerifiers(db.Model):
     __tablename__ = "award_verifiers"
 
@@ -461,6 +476,13 @@ class AwardVerifiers(db.Model):
         db.DateTime,
         nullable=False,
         default=db.func.current_timestamp(),
+    )
+    # Add a field to track which review phase this verifier is assigned to
+    review_phase = db.Column(
+        db.Integer,
+        nullable=False,
+        default=1,
+        server_default="1",
     )
 
 class AwardCoordinators(db.Model):
@@ -597,7 +619,6 @@ class BestPaper(db.Model):
     updated_on = synonym("updated_at")
     paper_number = synonym("bestpaper_number")
 
-
 class BestPaperVerifiers(db.Model):
     __tablename__ = "best_paper_verifiers"
 
@@ -628,7 +649,13 @@ class BestPaperVerifiers(db.Model):
         nullable=False,
         default=db.func.current_timestamp(),
     )
-
+    # Add a field to track which review phase this verifier is assigned to
+    review_phase = db.Column(
+        db.Integer,
+        nullable=False,
+        default=1,
+        server_default="1",
+    )
 
 class BestPaperCoordinators(db.Model):
     __tablename__ = "best_paper_coordinators"
@@ -736,6 +763,14 @@ class Grading(db.Model):
         nullable=True,
     )
     cycle_window = db.relationship("CycleWindow")
+    
+    # Add field to track which review phase this grade is for
+    review_phase = db.Column(
+        db.Integer,
+        nullable=False,
+        default=1,
+        server_default="1",
+    )
 
     graded_by_id = db.Column(
         UUID(as_uuid=True),

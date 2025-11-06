@@ -3,295 +3,243 @@
 {% block title %}Grade Management{% endblock %}
 
 {% block content %}
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    <!-- Breadcrumbs -->
-    <nav class="flex items-center text-sm text-gray-500 dark:text-gray-400 mb-6" aria-label="Breadcrumb">
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
+    <!-- Breadcrumb -->
+    <nav class="flex items-center text-sm text-gray-500 dark:text-gray-400" aria-label="Breadcrumb">
         <ol class="flex items-center space-x-2">
             <li>
-                <a href="{{ url_for('view_bp.index') }}" class="inline-flex items-center gap-2 transition-colors hover:text-blue-600 dark:hover:text-blue-400">
+                <a href="{{ url_for('view_bp.index') }}"
+                   class="inline-flex items-center gap-2 hover:text-blue-600 dark:hover:text-blue-400 transition">
                     <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                         <path d="M10.707 1.707a1 1 0 00-1.414 0l-7.5 7.5a1 1 0 101.414 1.414L4 9.414V17a1 1 0 001 1h3a1 1 0 001-1v-2a1 1 0 012 0v2a1 1 0 001 1h3a1 1 0 001-1V9.414l0.793 0.793a1 1 0 101.414-1.414l-7.5-7.5z"/>
                     </svg>
                     Home
                 </a>
             </li>
-            <li aria-hidden="true" class="text-gray-300 dark:text-gray-600">/</li>
-            <li>
-                <span class="text-gray-700 dark:text-gray-300 font-medium">Grade Management</span>
-            </li>
+            <li aria-hidden="true">/</li>
+            <li class="font-medium text-gray-700 dark:text-gray-300">Grade Management</li>
         </ol>
     </nav>
 
-    <!-- Page header -->
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
-        <div>
-            <h1 class="text-3xl font-bold text-gray-90 dark:text-white">Grade Management</h1>
-            <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                Manage grading criteria and scores for abstracts, awards, and best papers
+    <!-- Header -->
+    <header class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div class="space-y-2">
+            <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Grade Management</h1>
+            <p class="text-sm text-gray-600 dark:text-gray-400">
+                Configure grading criteria and record assessment scores for abstracts, awards, and best papers.
             </p>
         </div>
-        <div class="mt-4 sm:mt-0">
-            <button id="addGradingTypeBtn" type="button" class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-                <svg class="-ml-1 mr-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                    <path fill-rule="evenodd" d="M10 5a1 0 011 1v3h3a1 1 0 110 2h-3v3a1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 0 011-1z" clip-rule="evenodd" />
-                </svg>
-                Add Grading Criteria
-            </button>
-        </div>
-    </div>
+        <button
+            id="addGradingTypeBtn"
+            type="button"
+            class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-900">
+            <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/>
+            </svg>
+            Add Grading Criteria
+        </button>
+    </header>
 
     <!-- Tabs -->
     <div class="border-b border-gray-200 dark:border-gray-700">
-        <nav class="-mb-px flex space-x-8">
-            <button id="gradingTypesTab" class="border-blue-500 text-blue-600 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm active-tab" data-tab="grading-types">
+        <nav class="-mb-px flex space-x-6">
+            <button
+                id="gradingTypesTab"
+                data-tab="grading-types"
+                type="button"
+                class="whitespace-nowrap border-b-2 border-blue-500 px-1 py-3 text-sm font-medium text-blue-600 focus:outline-none active-tab">
                 Grading Criteria
             </button>
-            <button id="gradesTab" class="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="grades">
+            <button
+                id="gradesTab"
+                data-tab="grades"
+                type="button"
+                class="whitespace-nowrap border-b-2 border-transparent px-1 py-3 text-sm font-medium text-gray-500 transition hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
                 Grades
             </button>
         </nav>
     </div>
 
-    <!-- Tab content -->
-    <div class="mt-6">
-        <!-- Grading Types Tab -->
-        <div id="gradingTypesContent" class="tab-content">
-            <div class="flex flex-col">
-                <div class="-my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
-                    <div class="py-2 align-middle inline-block min-w-full sm:px-6 lg:px-8">
-                        <div class="shadow overflow-hidden border-b border-gray-200 dark:border-gray-700 sm:rounded-lg">
-                            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                                <thead class="bg-gray-50 dark:bg-gray-800">
-                                    <tr>
-                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Criteria</th>
-                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Grading For</th>
-                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Min Score</th>
-                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Max Score</th>
-                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Verification Level</th>
-                                        <th scope="col" class="relative px-6 py-3">
-                                            <span class="sr-only">Actions</span>
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody id="gradingTypesTableBody" class="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-                                    <!-- Grading types will be populated here -->
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
+    <!-- Tab Panels -->
+    <section class="space-y-6">
+        <!-- Criteria Panel -->
+        <div id="gradingTypesContent" class="space-y-4">
+            <div class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <thead class="bg-gray-50 dark:bg-gray-800">
+                        <tr class="text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-300">
+                            <th class="px-6 py-3">Criteria</th>
+                            <th class="px-6 py-3">Scope</th>
+                            <th class="px-6 py-3">Min Score</th>
+                            <th class="px-6 py-3">Max Score</th>
+                            <th class="px-6 py-3">Verification Level</th>
+                            <th class="px-6 py-3 text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="gradingTypesTableBody" class="divide-y divide-gray-200 bg-white text-sm dark:divide-gray-700 dark:bg-gray-900">
+                        <!-- Dynamic rows -->
+                    </tbody>
+                </table>
             </div>
         </div>
 
-        <!-- Grades Tab -->
-        <div id="gradesContent" class="tab-content hidden">
-            <div class="flex flex-col">
-                <div class="flex justify-end mb-4">
-                    <button id="addGradeBtn" type="button" class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-                        <svg class="-ml-1 mr-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                            <path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" />
-                        </svg>
-                        Add Grade
-                    </button>
-                </div>
-                <div class="-my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
-                    <div class="py-2 align-middle inline-block min-w-full sm:px-6 lg:px-8">
-                        <div class="shadow overflow-hidden border-b border-gray-200 dark:border-gray-700 sm:rounded-lg">
-                            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                                <thead class="bg-gray-50 dark:bg-gray-800">
-                                    <tr>
-                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Grading Criteria</th>
-                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Submission</th>
-                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Score</th>
-                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Comments</th>
-                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Graded By</th>
-                                        <th scope="col" class="relative px-6 py-3">
-                                            <span class="sr-only">Actions</span>
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody id="gradesTableBody" class="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-                                    <!-- Grades will be populated here -->
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Grading Type Modal -->
-<div id="gradingTypeModal" class="hidden fixed z-10 inset-0 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true"></div>
-
-        <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-
-        <div class="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
-            <div class="hidden sm:block absolute top-0 right-0 pt-4 pr-4">
-                <button type="button" id="closeGradingTypeModal" class="bg-white dark:bg-gray-800 rounded-md text-gray-400 hover:text-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-                    <span class="sr-only">Close</span>
-                    <svg class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        <!-- Grades Panel -->
+        <div id="gradesContent" class="hidden space-y-4">
+            <div class="flex justify-end">
+                <button
+                    id="addGradeBtn"
+                    type="button"
+                    class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-900">
+                    <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                        <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/>
                     </svg>
+                    Add Grade
                 </button>
             </div>
-            <div class="sm:flex sm:items-start">
-                <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
-                    <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white" id="gradingTypeModalTitle">Add Grading Criteria</h3>
-                    <div class="mt-4">
-                        <form id="gradingTypeForm">
-                            <div class="space-y-4">
-                                <div id="gradingTypeError" class="hidden bg-red-50 border-l-4 border-red-400 p-4">
-                                    <div class="flex">
-                                        <div class="flex-shrink-0">
-                                            <svg class="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-                                            </svg>
-                                        </div>
-                                        <div class="ml-3">
-                                            <p class="text-sm text-red-700 error-message"></p>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div>
-                                    <label for="criteria" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Criteria Name</label>
-                                    <input type="text" name="criteria" id="criteria" class="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white">
-                                </div>
-                                <div>
-                                    <label for="gradingFor" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Grading For</label>
-                                    <select id="gradingFor" name="gradingFor" class="mt-1 block w-full bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:text-white">
-                                        <option value="ABSTRACT">Abstract</option>
-                                        <option value="AWARD">Award</option>
-                                        <option value="BEST_PAPER">Best Paper</option>
-                                    </select>
-                                </div>
-                                <div class="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label for="minScore" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Min Score</label>
-                                        <input type="number" name="minScore" id="minScore" class="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white">
-                                    </div>
-                                    <div>
-                                        <label for="maxScore" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Max Score</label>
-                                        <input type="number" name="maxScore" id="maxScore" class="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white">
-                                    </div>
-                                </div>
-                                <div>
-                                    <label for="verificationLevel" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Verification Level</label>
-                                    <input type="number" name="verificationLevel" id="verificationLevel" class="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white">
-                                </div>
-                            </div>
-                        </form>
+            <div class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <thead class="bg-gray-50 dark:bg-gray-800">
+                        <tr class="text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-300">
+                            <th class="px-6 py-3">Grading Criteria</th>
+                            <th class="px-6 py-3">Submission</th>
+                            <th class="px-6 py-3">Score</th>
+                            <th class="px-6 py-3">Comments</th>
+                            <th class="px-6 py-3">Graded By</th>
+                            <th class="px-6 py-3 text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="gradesTableBody" class="divide-y divide-gray-200 bg-white text-sm dark:divide-gray-700 dark:bg-gray-900">
+                        <!-- Dynamic rows -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+</div>
+
+<!-- Grading Criteria Modal -->
+<div id="gradingTypeModal" class="hidden fixed inset-0 z-40 flex items-center justify-center bg-gray-900/70 px-4 py-8 backdrop-blur-sm">
+    <div class="relative w-full max-w-lg rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-900">
+        <button id="closeGradingTypeModal" type="button" class="absolute right-4 top-4 rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-300" aria-label="Close grading criteria modal">
+            <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 8.586l3.536-3.535a1 1 0 111.414 1.414L11.414 10l3.536 3.536a1 1 0 01-1.414 1.414L10 11.414l-3.536 3.536a1 1 0 01-1.414-1.414L8.586 10 5.05 6.464a1 1 0 011.414-1.414L10 8.586z" clip-rule="evenodd"/></svg>
+        </button>
+        <div class="px-6 py-6">
+            <h2 id="gradingTypeModalTitle" class="text-lg font-semibold text-gray-900 dark:text-white">Add Grading Criteria</h2>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Define a rubric entry linked to cycle verification levels.</p>
+            <form id="gradingTypeForm" class="mt-5 space-y-4">
+                <div id="gradingTypeError" class="hidden rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600 dark:border-red-500/70 dark:bg-red-500/10 dark:text-red-200">
+                    <p class="error-message"></p>
+                </div>
+                <div>
+                    <label for="criteria" class="text-sm font-medium text-gray-700 dark:text-gray-200">Criteria name</label>
+                    <input id="criteria" name="criteria" type="text" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white">
+                </div>
+                <div>
+                    <label for="gradingFor" class="text-sm font-medium text-gray-700 dark:text-gray-200">Grading scope</label>
+                    <select id="gradingFor" name="gradingFor" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white">
+                        <option value="ABSTRACT">Abstract</option>
+                        <option value="AWARD">Award</option>
+                        <option value="BEST_PAPER">Best Paper</option>
+                    </select>
+                </div>
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                        <label for="minScore" class="text-sm font-medium text-gray-700 dark:text-gray-200">Minimum score</label>
+                        <input id="minScore" name="minScore" type="number" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white">
                     </div>
-                    <div class="mt-5 sm:mt-6 sm:grid sm:grid-cols-2 sm:gap-3 sm:grid-flow-row-dense">
-                        <button type="button" id="saveGradingTypeBtn" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:col-start-2 sm:text-sm">
-                            Save
-                        </button>
-                        <button type="button" id="cancelGradingTypeBtn" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-30 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:col-start-1 sm:text-sm dark:bg-gray-600 dark:text-white dark:border-gray-500 dark:hover:bg-gray-700">
-                            Cancel
-                        </button>
+                    <div>
+                        <label for="maxScore" class="text-sm font-medium text-gray-700 dark:text-gray-200">Maximum score</label>
+                        <input id="maxScore" name="maxScore" type="number" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white">
                     </div>
                 </div>
+                <div>
+                    <label for="verificationLevel" class="text-sm font-medium text-gray-700 dark:text-gray-200">Verification level</label>
+                    <input id="verificationLevel" name="verificationLevel" type="number" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white">
+                </div>
+            </form>
+            <div class="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <button id="cancelGradingTypeBtn" type="button" class="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700">
+                    Cancel
+                </button>
+                <button id="saveGradingTypeBtn" type="button" class="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-blue-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-900">
+                    Save Criteria
+                </button>
             </div>
         </div>
     </div>
 </div>
 
 <!-- Grade Modal -->
-<div id="gradeModal" class="hidden fixed z-10 inset-0 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true"></div>
-
-        <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-
-        <div class="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
-            <div class="hidden sm:block absolute top-0 right-0 pt-4 pr-4">
-                <button type="button" id="closeGradeModal" class="bg-white dark:bg-gray-800 rounded-md text-gray-40 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-                    <span class="sr-only">Close</span>
-                    <svg class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
-            </div>
-            <div class="sm:flex sm:items-start">
-                <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
-                    <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white" id="gradeModalTitle">Add Grade</h3>
-                    <div class="mt-4">
-                        <form id="gradeForm">
-                            <div class="space-y-4">
-                                <div>
-                                    <label for="gradingTypeSelect" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Grading Criteria</label>
-                                    <select id="gradingTypeSelect" name="gradingTypeSelect" class="mt-1 block w-full bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-50 dark:text-white">
-                                        <option value="">Select Grading Criteria</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label for="submissionType" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Submission Type</label>
-                                    <select id="submissionType" name="submissionType" class="mt-1 block w-full bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:text-white">
-                                        <option value="abstract">Abstract</option>
-                                        <option value="award">Award</option>
-                                        <option value="best_paper">Best Paper</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label for="submissionId" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Submission ID</label>
-                                    <input type="text" name="submissionId" id="submissionId" class="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white">
-                                </div>
-                                <div>
-                                    <label for="gradeScore" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Score</label>
-                                    <input type="number" name="gradeScore" id="gradeScore" class="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white">
-                                </div>
-                                <div>
-                                    <label for="gradeComments" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Comments</label>
-                                    <textarea name="gradeComments" id="gradeComments" rows="3" class="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-50 dark:bg-gray-700 dark:text-white"></textarea>
-                                </div>
-                            </div>
-                        </form>
-                    </div>
-                    <div class="mt-5 sm:mt-6 sm:grid sm:grid-cols-2 sm:gap-3 sm:grid-flow-row-dense">
-                        <button type="button" id="saveGradeBtn" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:col-start-2 sm:text-sm">
-                            Save
-                        </button>
-                        <button type="button" id="cancelGradeBtn" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:col-start-1 sm:text-sm dark:bg-gray-600 dark:text-white dark:border-gray-500 dark:hover:bg-gray-700">
-                            Cancel
-                        </button>
-                    </div>
+<div id="gradeModal" class="hidden fixed inset-0 z-40 flex min-h-screen items-center justify-center bg-gray-900/70 px-4 backdrop-blur-sm">
+    <div class="relative w-full max-w-xl rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-900">
+        <button id="closeGradeModal" type="button" class="absolute right-4 top-4 rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-300" aria-label="Close grade modal">
+            <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 8.586l3.536-3.535a1 1 0 111.414 1.414L11.414 10l3.536 3.536a1 1 0 01-1.414 1.414L10 11.414l-3.536 3.536a1 1 0 01-1.414-1.414L8.586 10 5.05 6.464a1 1 0 011.414-1.414L10 8.586z" clip-rule="evenodd"/></svg>
+        </button>
+        <div class="px-6 py-6">
+            <h2 id="gradeModalTitle" class="text-lg font-semibold text-gray-900 dark:text-white">Add Grade</h2>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Record a score for a submission based on a configured rubric.</p>
+            <form id="gradeForm" class="mt-5 space-y-4">
+                <div id="gradeError" class="hidden rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600 dark:border-red-500/70 dark:bg-red-500/10 dark:text-red-200">
+                    <p class="error-message"></p>
                 </div>
+                <div>
+                    <label for="gradingTypeSelect" class="text-sm font-medium text-gray-700 dark:text-gray-200">Grading criteria</label>
+                    <select id="gradingTypeSelect" name="gradingTypeSelect" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white">
+                        <option value="">Select grading criteria</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="submissionType" class="text-sm font-medium text-gray-700 dark:text-gray-200">Submission type</label>
+                    <select id="submissionType" name="submissionType" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white">
+                        <option value="abstract">Abstract</option>
+                        <option value="award">Award</option>
+                        <option value="best_paper">Best Paper</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="submissionId" class="text-sm font-medium text-gray-700 dark:text-gray-200">Submission ID</label>
+                    <input id="submissionId" name="submissionId" type="text" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white">
+                </div>
+                <div>
+                    <label for="gradeScore" class="text-sm font-medium text-gray-700 dark:text-gray-200">Score</label>
+                    <input id="gradeScore" name="gradeScore" type="number" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white">
+                </div>
+                <div>
+                    <label for="gradeComments" class="text-sm font-medium text-gray-700 dark:text-gray-200">Comments</label>
+                    <textarea id="gradeComments" name="gradeComments" rows="3" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white"></textarea>
+                </div>
+            </form>
+            <div class="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <button id="cancelGradeBtn" type="button" class="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700">
+                    Cancel
+                </button>
+                <button id="saveGradeBtn" type="button" class="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-emerald-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-900">
+                    Save Grade
+                </button>
             </div>
         </div>
     </div>
 </div>
 
 <!-- Delete Confirmation Modal -->
-<div id="deleteModal" class="hidden fixed z-10 inset-0 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true"></div>
-
-        <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-
-        <div class="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
-            <div class="sm:flex sm:items-start">
-                <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
-                    <svg class="h-6 w-6 text-red-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.33.192 3 1.732 3z" />
-                    </svg>
+<div id="deleteModal" class="hidden fixed inset-0 z-40 flex items-center justify-center bg-gray-900/70 px-4 py-8 backdrop-blur-sm">
+    <div class="w-full max-w-md rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-900">
+        <div class="px-6 py-6">
+            <div class="flex items-start gap-3">
+                <div class="flex h-10 w-10 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-300">
+                    <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.721-1.36 3.486 0l5.18 9.205c.75 1.333-.213 2.996-1.742 2.996H4.82c-1.53 0-2.492-1.663-1.742-2.996l5.18-9.205zM11 13a1 1 0 10-2 0 1 1 0 002 0zm-1-8a1 1 0 00-1 1v4a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
                 </div>
-                <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
-                    <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white" id="deleteModalTitle">Delete Item</h3>
-                    <div class="mt-2">
-                        <p class="text-sm text-gray-500 dark:text-gray-400">
-                            Are you sure you want to delete this item? This action cannot be undone.
-                        </p>
-                    </div>
+                <div>
+                    <h2 id="deleteModalTitle" class="text-lg font-semibold text-gray-900 dark:text-white">Delete Item</h2>
+                    <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">This action cannot be undone. Proceed with caution.</p>
                 </div>
-            <div class="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
-                <button type="button" id="confirmDeleteBtn" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm">
-                    Delete
-                </button>
-                <button type="button" id="cancelDeleteBtn" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-30 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:w-auto sm:text-sm dark:bg-gray-600 dark:text-white dark:border-gray-500 dark:hover:bg-gray-700">
+            </div>
+            <div class="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <button id="cancelDeleteBtn" type="button" class="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700">
                     Cancel
+                </button>
+                <button id="confirmDeleteBtn" type="button" class="inline-flex items-center justify-center rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-red-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-900">
+                    Delete
                 </button>
             </div>
         </div>

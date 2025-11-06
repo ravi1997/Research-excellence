@@ -230,7 +230,7 @@ def delete_abstract_coordinator(abstract_id, user_id):
             ip_address=request.remote_addr
         )
 
-        return jsonify({"message": "Coordinator removed from abstract successfully"}), 200
+        return jsonify({"message": "Coordinator removed from abstract successfully"}), 20
     except Exception as exc:
         db.session.rollback()
         current_app.logger.exception("Error deleting abstract coordinator association")
@@ -424,6 +424,7 @@ def get_abstracts_by_coordinator(user_id):
                     'title': abstract.title,
                     'abstract_number': abstract.abstract_number,
                     'status': abstract.status.name,
+                    'review_phase': abstract.review_phase  # Include review phase info
                 })
 
         # Log successful retrieval
@@ -445,6 +446,109 @@ def get_abstracts_by_coordinator(user_id):
             event_type="coordinator_abstracts.list.failed",
             user_id=actor_id,
             details={"error": error_msg, "user_id": user_id, "exception_type": type(exc).__name__, "exception_message": str(exc)},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 400
+
+
+# New endpoint to advance abstract to next review phase
+@research_bp.route('/abstracts/<abstract_id>/advance-phase', methods=['POST'])
+@jwt_required()
+@require_roles(Role.COORDINATOR.value, Role.ADMIN.value, Role.SUPERADMIN.value)
+def advance_abstract_phase(abstract_id):
+    """Advance an abstract to the next review phase."""
+    actor_id, context = _resolve_actor_context("advance_abstract_phase")
+    
+    try:
+        # First, verify that the abstract exists
+        abstract = abstract_utils.get_abstract_by_id(abstract_id, actor_id=actor_id, context=context)
+        if not abstract:
+            error_msg = f"Resource not found: Abstract with ID {abstract_id} does not exist"
+            log_audit_event(
+                event_type="abstract.advance_phase.failed",
+                user_id=actor_id,
+                details={"error": error_msg, "abstract_id": abstract_id},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
+
+        # Check if user has permission to advance the phase
+        current_user = User.query.get(actor_id)
+        if not current_user:
+            error_msg = "Authentication failed: User not found"
+            log_audit_event(
+                event_type="abstract.advance_phase.failed",
+                user_id=actor_id,
+                details={"error": error_msg},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
+
+        # Allow if user is admin, superadmin, or a coordinator for this abstract
+        privileged = any(
+            current_user.has_role(role)
+            for role in (Role.ADMIN.value, Role.SUPERADMIN.value)
+        )
+        
+        if not privileged and not any(coordinator.id == actor_id for coordinator in abstract.coordinators):
+            error_msg = f"Authorization failed: You are not authorized to advance phase for abstract ID {abstract_id}"
+            log_audit_event(
+                event_type="abstract.advance_phase.failed",
+                user_id=actor_id,
+                details={
+                    "error": error_msg, 
+                    "abstract_id": abstract_id,
+                    "user_id": actor_id,
+                    "user_role": current_user.role_associations[0].role.value if current_user.role_associations else "no_role"
+                },
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 403
+
+        # Check if all required grades have been submitted for the current phase
+        if not abstract_utils.can_advance_to_next_phase(abstract):
+            error_msg = f"Cannot advance to next phase: Not all required grades have been submitted for phase {abstract.review_phase}"
+            log_audit_event(
+                event_type="abstract.advance_phase.failed",
+                user_id=actor_id,
+                details={
+                    "error": error_msg, 
+                    "abstract_id": abstract_id,
+                    "current_phase": abstract.review_phase
+                },
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 400
+
+        # Advance to the next phase
+        abstract = abstract_utils.advance_to_next_phase(abstract, actor_id=actor_id)
+
+        # Log successful advancement
+        log_audit_event(
+            event_type="abstract.advance_phase.success",
+            user_id=actor_id,
+            details={
+                "abstract_id": abstract_id,
+                "new_phase": abstract.review_phase,
+                "status": abstract.status.name
+            },
+            ip_address=request.remote_addr
+        )
+
+        return jsonify({
+            "message": f"Abstract advanced to phase {abstract.review_phase}",
+            "abstract_id": abstract_id,
+            "new_phase": abstract.review_phase,
+            "status": abstract.status.name
+        }), 200
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.exception("Error advancing abstract phase")
+        error_msg = f"System error occurred while advancing abstract phase: {str(exc)}"
+        log_audit_event(
+            event_type="abstract.advance_phase.failed",
+            user_id=actor_id,
+            details={"error": error_msg, "abstract_id": abstract_id, "exception_type": type(exc).__name__, "exception_message": str(exc)},
             ip_address=request.remote_addr
         )
         return jsonify({"error": error_msg}), 400

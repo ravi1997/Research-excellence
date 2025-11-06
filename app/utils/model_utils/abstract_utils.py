@@ -208,22 +208,40 @@ def assign_verifier(
     *,
     actor_id: Optional[str] = None,
     context: Optional[Dict[str, object]] = None,
+    review_phase: int = 1,
 ) -> Abstracts:
     ctx = {
         "function": "assign_verifier",
         "abstract_id": _serialize_value(getattr(abstract, "id", None)),
         "verifier_id": _serialize_value(getattr(verifier, "id", None)),
+        "review_phase": review_phase,
         **(context or {}),
     }
     changed = False
     with log_context(module="abstract_utils", action="assign_verifier", actor_id=actor_id):
         logger.info(
-            "assign_verifier abstract_id=%s verifier_id=%s",
+            "assign_verifier abstract_id=%s verifier_id=%s review_phase=%s",
             ctx["abstract_id"],
             ctx["verifier_id"],
+            review_phase,
         )
-        if verifier not in abstract.verifiers:
+        # Check if verifier is already assigned to this specific phase
+        from app.models.Cycle import AbstractVerifiers
+        existing_assignment = AbstractVerifiers.query.filter_by(
+            abstract_id=abstract.id,
+            user_id=verifier.id,
+            review_phase=review_phase
+        ).first()
+        
+        if not existing_assignment:
+            # Create a new assignment for the specific review phase
+            assignment = AbstractVerifiers(
+                abstract_id=abstract.id,
+                user_id=verifier.id,
+                review_phase=review_phase
+            )
             abstract.verifiers.append(verifier)
+            db.session.add(assignment)
             changed = True
     if changed and commit:
         db.session.commit()
@@ -234,12 +252,14 @@ def assign_verifier(
                 "operation": "assign_verifier",
                 "abstract_id": ctx["abstract_id"],
                 "verifier_id": ctx["verifier_id"],
+                "review_phase": review_phase,
             },
         )
     logger.info(
-        "assign_verifier completed abstract_id=%s verifier_id=%s changed=%s",
+        "assign_verifier completed abstract_id=%s verifier_id=%s review_phase=%s changed=%s",
         ctx["abstract_id"],
         ctx["verifier_id"],
+        review_phase,
         changed,
     )
     return abstract
@@ -296,23 +316,50 @@ def remove_verifier(
     *,
     actor_id: Optional[str] = None,
     context: Optional[Dict[str, object]] = None,
+    review_phase: Optional[int] = None,
 ) -> Abstracts:
     ctx = {
         "function": "remove_verifier",
         "abstract_id": _serialize_value(getattr(abstract, "id", None)),
         "verifier_id": _serialize_value(getattr(verifier, "id", None)),
+        "review_phase": review_phase,
         **(context or {}),
     }
     removed = False
     with log_context(module="abstract_utils", action="remove_verifier", actor_id=actor_id):
         logger.info(
-            "remove_verifier abstract_id=%s verifier_id=%s",
+            "remove_verifier abstract_id=%s verifier_id=%s review_phase=%s",
             ctx["abstract_id"],
             ctx["verifier_id"],
+            review_phase,
         )
-        if verifier in abstract.verifiers:
-            abstract.verifiers.remove(verifier)
-            removed = True
+        
+        if review_phase is not None:
+            # Remove verifier from specific review phase
+            from app.models.Cycle import AbstractVerifiers
+            assignment = AbstractVerifiers.query.filter_by(
+                abstract_id=abstract.id,
+                user_id=verifier.id,
+                review_phase=review_phase
+            ).first()
+            
+            if assignment:
+                db.session.delete(assignment)
+                # Only remove from the abstract's verifiers if this was the only phase assignment
+                other_assignments = AbstractVerifiers.query.filter_by(
+                    abstract_id=abstract.id,
+                    user_id=verifier.id
+                ).count()
+                
+                if other_assignments <= 1:
+                    if verifier in abstract.verifiers:
+                        abstract.verifiers.remove(verifier)
+                removed = True
+        else:
+            # Remove verifier from all review phases
+            if verifier in abstract.verifiers:
+                abstract.verifiers.remove(verifier)
+                removed = True
     if removed and commit:
         db.session.commit()
         _audit(
@@ -322,12 +369,14 @@ def remove_verifier(
                 "operation": "remove_verifier",
                 "abstract_id": ctx["abstract_id"],
                 "verifier_id": ctx["verifier_id"],
+                "review_phase": review_phase,
             },
         )
     logger.info(
-        "remove_verifier completed abstract_id=%s verifier_id=%s removed=%s",
+        "remove_verifier completed abstract_id=%s verifier_id=%s review_phase=%s removed=%s",
         ctx["abstract_id"],
         ctx["verifier_id"],
+        review_phase,
         removed,
     )
     return abstract
@@ -374,4 +423,254 @@ def remove_coordinator(
         ctx["coordinator_id"],
         removed,
     )
+    return abstract
+
+
+def get_grades_by_phase(abstract: Abstracts, phase: int) -> Sequence:
+    """Get all grades for a specific review phase"""
+    from app.models.Cycle import Grading
+    return Grading.query.filter_by(
+        abstract_id=abstract.id,
+        review_phase=phase
+    ).all()
+
+
+def get_all_grades_by_phase(abstract: Abstracts) -> Dict[int, Sequence]:
+    """Get all grades organized by review phase"""
+    from app.models.Cycle import Grading
+    grades = Grading.query.filter_by(abstract_id=abstract.id).all()
+    
+    grades_by_phase = {}
+    for grade in grades:
+        phase = grade.review_phase
+        if phase not in grades_by_phase:
+            grades_by_phase[phase] = []
+        grades_by_phase[phase].append(grade)
+    
+    return grades_by_phase
+
+
+def advance_to_next_phase(abstract: Abstracts, actor_id: Optional[str] = None) -> Abstracts:
+    """Advance an abstract to the next review phase"""
+    ctx = {
+        "function": "advance_to_next_phase",
+        "abstract_id": _serialize_value(getattr(abstract, "id", None)),
+        "current_phase": abstract.review_phase,
+        **({"actor_id": actor_id} if actor_id else {}),
+    }
+    
+    with log_context(module="abstract_utils", action="advance_to_next_phase", actor_id=actor_id):
+        logger.info(
+            "advance_to_next_phase abstract_id=%s current_phase=%s",
+            ctx["abstract_id"],
+            abstract.review_phase,
+        )
+        
+        # Update the review phase
+        abstract.review_phase += 1
+        abstract.status = "UNDER_REVIEW"  # Reset to under review for the next phase
+        
+        db.session.commit()
+        
+        _audit(
+            "abstract.advance_to_next_phase",
+            actor_id,
+            {
+                "operation": "advance_to_next_phase",
+                "abstract_id": ctx["abstract_id"],
+                "new_phase": abstract.review_phase,
+            },
+        )
+        
+        logger.info(
+            "advance_to_next_phase completed abstract_id=%s new_phase=%s",
+            ctx["abstract_id"],
+            abstract.review_phase,
+        )
+        
+    return abstract
+
+
+def get_current_phase_verifiers(abstract: Abstracts) -> Sequence[User]:
+    """Get verifiers assigned to the current review phase"""
+    from app.models.Cycle import AbstractVerifiers
+    current_phase = abstract.review_phase
+    
+    # Get user IDs for verifiers assigned to the current phase
+    verifier_assignments = AbstractVerifiers.query.filter_by(
+        abstract_id=abstract.id,
+        review_phase=current_phase
+    ).all()
+    
+    verifier_ids = [assignment.user_id for assignment in verifier_assignments]
+    
+    # Get the actual user objects
+    if verifier_ids:
+        from app.models.User import User
+        return User.query.filter(User.id.in_(verifier_ids)).all()
+    else:
+        return []
+
+
+def can_advance_to_next_phase(abstract: Abstracts) -> bool:
+    """Check if an abstract can advance to the next review phase based on grading completeness"""
+    from app.models.Cycle import AbstractVerifiers, Grading, GradingType
+    current_phase = abstract.review_phase
+    
+    # Get all verifiers assigned to the current phase
+    verifier_assignments = AbstractVerifiers.query.filter_by(
+        abstract_id=abstract.id,
+        review_phase=current_phase
+    ).all()
+    
+    if not verifier_assignments:
+        # If no verifiers are assigned to this phase, we can advance
+        return True
+    
+    # Get all grading types for abstracts
+    grading_types = GradingType.query.filter_by(grading_for='abstract').all()
+    
+    # For each verifier in the current phase, check if they have submitted grades
+    for assignment in verifier_assignments:
+        verifier_id = assignment.user_id
+        
+        # Check if all required grading types have been graded by this verifier in this phase
+        for grading_type in grading_types:
+            grade_exists = Grading.query.filter_by(
+                abstract_id=abstract.id,
+                grading_type_id=grading_type.id,
+                graded_by_id=verifier_id,
+                review_phase=current_phase
+            ).first()
+            
+            if not grade_exists:
+                # Not all grades have been submitted by all verifiers for this phase
+                return False
+    
+    # If all verifiers have submitted all required grades for this phase, we can advance
+    return True
+
+
+def submit_abstract_for_review(abstract: Abstracts, actor_id: Optional[str] = None) -> Abstracts:
+    """Submit an abstract for review"""
+    ctx = {
+        "function": "submit_abstract_for_review",
+        "abstract_id": _serialize_value(getattr(abstract, "id", None)),
+        "current_status": abstract.status.name,
+        **({"actor_id": actor_id} if actor_id else {}),
+    }
+    
+    with log_context(module="abstract_utils", action="submit_abstract_for_review", actor_id=actor_id):
+        logger.info(
+            "submit_abstract_for_review abstract_id=%s current_status=%s",
+            ctx["abstract_id"],
+            abstract.status.name,
+        )
+        
+        # Only allow submission if the abstract is in PENDING status and phase 1
+        if abstract.status.name != 'PENDING' or abstract.review_phase != 1:
+            raise ValueError(f"Cannot submit abstract: Abstract must be in PENDING status and phase 1 to be submitted for review. Current status: {abstract.status.name}, Current phase: {abstract.review_phase}")
+        
+        # Update the status to UNDER_REVIEW
+        abstract.status = "UNDER_REVIEW"
+        
+        db.session.commit()
+        
+        _audit(
+            "abstract.submit_for_review",
+            actor_id,
+            {
+                "operation": "submit_for_review",
+                "abstract_id": ctx["abstract_id"],
+                "new_status": "UNDER_REVIEW",
+            },
+        )
+        
+        logger.info(
+            "submit_abstract_for_review completed abstract_id=%s new_status=UNDER_REVIEW",
+            ctx["abstract_id"],
+        )
+        
+    return abstract
+
+
+def accept_abstract(abstract: Abstracts, actor_id: Optional[str] = None) -> Abstracts:
+    """Accept an abstract after review"""
+    ctx = {
+        "function": "accept_abstract",
+        "abstract_id": _serialize_value(getattr(abstract, "id", None)),
+        "current_status": abstract.status.name,
+        **({"actor_id": actor_id} if actor_id else {}),
+    }
+    
+    with log_context(module="abstract_utils", action="accept_abstract", actor_id=actor_id):
+        logger.info(
+            "accept_abstract abstract_id=%s current_status=%s",
+            ctx["abstract_id"],
+            abstract.status.name,
+        )
+        
+        # Check if all required grades have been submitted for the current phase
+        if not can_advance_to_next_phase(abstract):
+            raise ValueError(f"Cannot accept abstract: Not all required grades have been submitted for phase {abstract.review_phase}")
+        
+        # Update the status to ACCEPTED
+        abstract.status = "ACCEPTED"
+        
+        db.session.commit()
+        
+        _audit(
+            "abstract.accept",
+            actor_id,
+            {
+                "operation": "accept",
+                "abstract_id": ctx["abstract_id"],
+                "new_status": "ACCEPTED",
+            },
+        )
+        
+        logger.info(
+            "accept_abstract completed abstract_id=%s new_status=ACCEPTED",
+            ctx["abstract_id"],
+        )
+        
+    return abstract
+
+
+def reject_abstract(abstract: Abstracts, actor_id: Optional[str] = None) -> Abstracts:
+    """Reject an abstract after review"""
+    ctx = {
+        "function": "reject_abstract",
+        "abstract_id": _serialize_value(getattr(abstract, "id", None)),
+        "current_status": abstract.status.name,
+        **({"actor_id": actor_id} if actor_id else {}),
+    }
+    
+    with log_context(module="abstract_utils", action="reject_abstract", actor_id=actor_id):
+        logger.info(
+            "reject_abstract abstract_id=%s current_status=%s",
+            ctx["abstract_id"],
+            abstract.status.name,
+        )
+        
+        # Update the status to REJECTED
+        abstract.status = "REJECTED"
+        
+        db.session.commit()
+        
+        _audit(
+            "abstract.reject",
+            actor_id,
+            {
+                "operation": "reject",
+                "abstract_id": ctx["abstract_id"],
+                "new_status": "REJECTED",
+            },
+        )
+        
+        logger.info(
+            "reject_abstract completed abstract_id=%s new_status=REJECTED",
+            ctx["abstract_id"],
+        )
+        
     return abstract

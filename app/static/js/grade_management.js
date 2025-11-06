@@ -44,17 +44,18 @@ document.addEventListener('DOMContentLoaded', function() {
     const gradeCommentsInput = document.getElementById('gradeComments');
     
     // State variables
-    let currentTab = 'grading-types';
     let currentGradingType = null;
     let currentGrade = null;
     let currentDeleteItem = null;
     let currentDeleteType = null; // 'grading-type' or 'grade'
+    let gradingTypesCache = [];
     
     // Initialize the page
     init();
     
     function init() {
         setupEventListeners();
+        switchTab('grading-types');
         loadGradingTypes();
         loadGrades();
     }
@@ -71,6 +72,16 @@ document.addEventListener('DOMContentLoaded', function() {
         cancelGradeBtn.addEventListener('click', () => closeModal('grade'));
         cancelDeleteBtn.addEventListener('click', () => closeModal('delete'));
         
+        gradingTypeModal.addEventListener('click', (event) => {
+            if (event.target === gradingTypeModal) closeModal('grading-type');
+        });
+        gradeModal.addEventListener('click', (event) => {
+            if (event.target === gradeModal) closeModal('grade');
+        });
+        deleteModal.addEventListener('click', (event) => {
+            if (event.target === deleteModal) closeModal('delete');
+        });
+        
         // Save buttons
         saveGradingTypeBtn.addEventListener('click', saveGradingType);
         saveGradeBtn.addEventListener('click', saveGrade);
@@ -82,29 +93,25 @@ document.addEventListener('DOMContentLoaded', function() {
         if (addGradeBtn) {
             addGradeBtn.addEventListener('click', () => openModal('grade'));
         }
+        
+        // Dismiss modals with Escape
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                if (!gradingTypeModal.classList.contains('hidden')) closeModal('grading-type');
+                if (!gradeModal.classList.contains('hidden')) closeModal('grade');
+                if (!deleteModal.classList.contains('hidden')) closeModal('delete');
+            }
+        });
     }
     
     function switchTab(tabName) {
-        // Update active tab
-        if (tabName === 'grading-types') {
-            gradingTypesTab.classList.add('active-tab', 'border-blue-500', 'text-blue-600');
-            gradesTab.classList.remove('active-tab', 'border-blue-500', 'text-blue-600');
-            gradingTypesTab.classList.add('border-blue-500', 'text-blue-600');
-            gradesTab.classList.remove('border-transparent', 'text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300');
-            
-            gradingTypesContent.classList.remove('hidden');
-            gradesContent.classList.add('hidden');
-        } else if (tabName === 'grades') {
-            gradesTab.classList.add('active-tab', 'border-blue-500', 'text-blue-600');
-            gradingTypesTab.classList.remove('active-tab', 'border-blue-500', 'text-blue-600');
-            gradesTab.classList.add('border-blue-500', 'text-blue-600');
-            gradingTypesTab.classList.remove('border-transparent', 'text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300');
-            
-            gradesContent.classList.remove('hidden');
-            gradingTypesContent.classList.add('hidden');
-        }
+        const isCriteria = tabName === 'grading-types';
         
-        currentTab = tabName;
+        toggleTabButton(gradingTypesTab, isCriteria);
+        toggleTabButton(gradesTab, !isCriteria);
+        
+        gradingTypesContent.classList.toggle('hidden', !isCriteria);
+        gradesContent.classList.toggle('hidden', isCriteria);
     }
     
     function openModal(type, item = null) {
@@ -121,10 +128,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 verificationLevelInput.value = item.verification_level;
             }
             
-            gradingTypeModal.classList.remove('hidden');
+            showModal(gradingTypeModal);
         } else if (type === 'grade') {
+            if (!gradingTypesCache || gradingTypesCache.length === 0) {
+                showNotification('Please create a grading criteria before adding grades.', 'error');
+                return;
+            }
             currentGrade = item;
             gradeModalTitle.textContent = item ? 'Edit Grade' : 'Add Grade';
+            populateGradingTypeSelect(gradingTypesCache);
             resetGradeForm();
             
             if (item) {
@@ -136,19 +148,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 gradeCommentsInput.value = item.comments || '';
             }
             
-            gradeModal.classList.remove('hidden');
+            showModal(gradeModal);
         }
     }
     
     function closeModal(type) {
         if (type === 'grading-type') {
-            gradingTypeModal.classList.add('hidden');
+            hideModal(gradingTypeModal);
             currentGradingType = null;
         } else if (type === 'grade') {
-            gradeModal.classList.add('hidden');
+            hideModal(gradeModal);
             currentGrade = null;
         } else if (type === 'delete') {
-            deleteModal.classList.add('hidden');
+            hideModal(deleteModal);
             currentDeleteItem = null;
             currentDeleteType = null;
         }
@@ -172,6 +184,20 @@ document.addEventListener('DOMContentLoaded', function() {
         if (gradeError) {
             gradeError.classList.add('hidden');
         }
+    }
+    
+    function showModal(modal) {
+        if (!modal) return;
+        modal.classList.remove('hidden');
+        modal.style.display = 'block';
+        document.body.classList.add('overflow-hidden');
+    }
+    
+    function hideModal(modal) {
+        if (!modal) return;
+        modal.classList.add('hidden');
+        modal.style.display = 'none';
+        document.body.classList.remove('overflow-hidden');
     }
     
     function getSubmissionType(grade) {
@@ -203,7 +229,9 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
             const data = await response.json();
-            renderGradingTypes(data);
+            gradingTypesCache = Array.isArray(data) ? data : [];
+            renderGradingTypes(gradingTypesCache);
+            populateGradingTypeSelect(gradingTypesCache);
         } catch (error) {
             console.error('Error loading grading types:', error);
             showNotification('Failed to load grading types', 'error');
@@ -234,6 +262,11 @@ document.addEventListener('DOMContentLoaded', function() {
     
     function renderGradingTypes(gradingTypes) {
         gradingTypesTableBody.innerHTML = '';
+        
+        if (!gradingTypes.length) {
+            gradingTypesTableBody.appendChild(createEmptyRow(6, 'No grading criteria yet. Add one to get started.'));
+            return;
+        }
         
         gradingTypes.forEach(type => {
             const row = document.createElement('tr');
@@ -272,8 +305,34 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
+    function populateGradingTypeSelect(gradingTypes) {
+        if (!gradingTypeSelect) return;
+        
+        gradingTypeSelect.innerHTML = '<option value="">Select grading criteria</option>';
+        
+        gradingTypes.forEach(type => {
+            const option = document.createElement('option');
+            option.value = type.id;
+            option.textContent = type.criteria;
+            gradingTypeSelect.appendChild(option);
+        });
+        
+        if (!gradingTypes.length) {
+            const noOption = document.createElement('option');
+            noOption.value = '';
+            noOption.textContent = 'No grading criteria available';
+            noOption.disabled = true;
+            gradingTypeSelect.appendChild(noOption);
+        }
+    }
+    
     function renderGrades(grades) {
         gradesTableBody.innerHTML = '';
+        
+        if (!grades.length) {
+            gradesTableBody.appendChild(createEmptyRow(6, 'No grades recorded yet.'));
+            return;
+        }
         
         grades.forEach(grade => {
             const row = document.createElement('tr');
@@ -293,12 +352,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 submissionId = grade.best_paper_id;
             }
             
-            // Format date
-            const formattedDate = new Date(grade.created_at).toLocaleDateString();
-            
             row.innerHTML = `
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">${grade.grading_type?.criteria || 'N/A'}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">${submissionType} (${submissionId.substring(0, 8)}...)</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">${formatSubmission(submissionType, submissionId)}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">${grade.score}</td>
                 <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400 max-w-xs truncate">${grade.comments || 'No comments'}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">${grade.graded_by?.name || 'N/A'}</td>
@@ -409,6 +465,11 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
+        if (score < 0) {
+            showNotification('Score cannot be negative.', 'error');
+            return;
+        }
+        
         try {
             // Prepare the payload based on submission type
             const payload = {
@@ -469,7 +530,7 @@ document.addEventListener('DOMContentLoaded', function() {
         currentDeleteType = type;
         document.getElementById('deleteModalTitle').textContent = 
             `Delete ${type === 'grading-type' ? 'Grading Criteria' : 'Grade'}`;
-        deleteModal.classList.remove('hidden');
+        showModal(deleteModal);
     }
     
     async function deleteItem() {
@@ -537,4 +598,59 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     `;
     document.head.appendChild(activeTabStyle);
+    
+    function toggleTabButton(button, isActive) {
+        const baseClasses = [
+            'whitespace-nowrap',
+            'border-b-2',
+            'px-1',
+            'py-3',
+            'text-sm',
+            'font-medium',
+            'transition',
+            'focus:outline-none',
+            'focus-visible:ring-2',
+            'focus-visible:ring-blue-500',
+            'focus-visible:ring-offset-2',
+            'dark:focus-visible:ring-offset-gray-900'
+        ];
+        
+        if (isActive) {
+            button.className = [
+                ...baseClasses,
+                'border-blue-500',
+                'text-blue-600',
+                'active-tab'
+            ].join(' ');
+        } else {
+            button.className = [
+                ...baseClasses,
+                'border-transparent',
+                'text-gray-500',
+                'hover:border-gray-300',
+                'hover:text-gray-700',
+                'dark:text-gray-400',
+                'dark:hover:text-gray-200'
+            ].join(' ');
+        }
+    }
+    
+    function createEmptyRow(colspan, message) {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td colspan="${colspan}" class="px-6 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                ${message}
+            </td>
+        `;
+        return row;
+    }
+    
+    function formatSubmission(type, id) {
+        if (!type || !id) {
+            return '—';
+        }
+        
+        const trimmed = id.length > 12 ? `${id.slice(0, 12)}…` : id;
+        return `${type} (${trimmed})`;
+    }
 });

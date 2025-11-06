@@ -93,7 +93,7 @@ def create_abstract_verifier():
                     details={"error": error_msg, "missing_field": field},
                     ip_address=request.remote_addr
                 )
-                return jsonify({"error": error_msg}), 400
+                return jsonify({"error": error_msg}), 40
 
         # Validate abstract exists
         abstract = abstract_utils.get_abstract_by_id(payload['abstract_id'], actor_id=actor_id, context=context)
@@ -191,7 +191,7 @@ def create_abstract_verifier():
         return jsonify({"error": error_msg}), 400
 
 
-@research_bp.route('/abstract_verifiers/<abstract_id>/<user_id>', methods=['DELETE'])
+@research_bp.route('/abstracts/<abstract_id>/verifiers/<user_id>', methods=['DELETE'])
 @jwt_required()
 @require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
 def delete_abstract_verifier(abstract_id, user_id):
@@ -230,7 +230,7 @@ def delete_abstract_verifier(abstract_id, user_id):
             ip_address=request.remote_addr
         )
 
-        return jsonify({"message": "Verifier removed from abstract successfully"}), 200
+        return jsonify({"message": "Verifier removed from abstract successfully"}), 20
     except Exception as exc:
         db.session.rollback()
         current_app.logger.exception("Error deleting abstract verifier association")
@@ -241,7 +241,7 @@ def delete_abstract_verifier(abstract_id, user_id):
             details={"error": error_msg, "abstract_id": abstract_id, "user_id": user_id, "exception_type": type(exc).__name__, "exception_message": str(exc)},
             ip_address=request.remote_addr
         )
-        return jsonify({"error": error_msg}), 400
+        return jsonify({"error": error_msg}), 40
 
 
 @research_bp.route('/abstracts/<abstract_id>/verifiers', methods=['GET'])
@@ -424,6 +424,7 @@ def get_abstracts_by_verifier(user_id):
                     'title': abstract.title,
                     'abstract_number': abstract.abstract_number,
                     'status': abstract.status.name,
+                    'review_phase': abstract.review_phase  # Include review phase info
                 })
 
         # Log successful retrieval
@@ -447,4 +448,4 @@ def get_abstracts_by_verifier(user_id):
             details={"error": error_msg, "user_id": user_id, "exception_type": type(exc).__name__, "exception_message": str(exc)},
             ip_address=request.remote_addr
         )
-        return jsonify({"error": error_msg}), 400
+        return jsonify({"error": error_msg}), 40

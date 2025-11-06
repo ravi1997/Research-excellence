@@ -578,6 +578,7 @@ def get_abstract_pdf(abstract_id):
         )
         abort(500, description="Internal server error.")
 
+
 @research_bp.route('/abstracts', methods=['GET'])
 @jwt_required()
 def get_abstracts():
@@ -592,6 +593,8 @@ def get_abstracts():
         sort_by = request.args.get('sort', 'id')
         sort_dir = request.args.get('dir', 'desc').lower()
         verifier_filter = request.args.get('verifier', '').strip().lower() == 'true'
+        # Add review_phase filter
+        review_phase = request.args.get('review_phase', '').strip()
 
         # Get current user for permissions
         user = User.query.get(actor_id)
@@ -628,6 +631,21 @@ def get_abstracts():
                 ip_address=request.remote_addr
             )
             return jsonify({"error": error_msg}), 400
+
+        # Add review phase filter
+        if review_phase:
+            try:
+                phase_int = int(review_phase)
+                filters.append(Abstracts.review_phase == phase_int)
+            except ValueError:
+                error_msg = f"Validation failed: Invalid review phase '{review_phase}'. Review phase must be a number."
+                log_audit_event(
+                    event_type="abstract.list.failed",
+                    user_id=actor_id,
+                    details={"error": error_msg, "invalid_review_phase": review_phase},
+                    ip_address=request.remote_addr
+                )
+                return jsonify({"error": error_msg}), 400
 
         privileged = any(
             user.has_role(role)
@@ -667,8 +685,10 @@ def get_abstracts():
             order_by = Abstracts.created_at.asc() if sort_dir == 'asc' else Abstracts.created_at.desc()
         elif sort_by == 'id':
             order_by = Abstracts.id.asc() if sort_dir == 'asc' else Abstracts.id.desc()
-        else:  # invalid sort field
-            error_msg = f"Validation failed: Invalid sort field '{sort_by}'. Valid fields are 'id', 'title', 'created_at'"
+        elif sort_by == 'review_phase':  # Add sorting by review phase
+            order_by = Abstracts.review_phase.asc() if sort_dir == 'asc' else Abstracts.review_phase.desc()
+        else: # invalid sort field
+            error_msg = f"Validation failed: Invalid sort field '{sort_by}'. Valid fields are 'id', 'title', 'created_at', 'review_phase'"
             log_audit_event(
                 event_type="abstract.list.failed",
                 user_id=actor_id,
@@ -695,6 +715,7 @@ def get_abstracts():
         for abstract in paginated:
             abstract_dict = abstract_schema.dump(abstract)
             abstract_dict['verifiers_count'] = len(abstract.verifiers or [])
+            abstract_dict['review_phase'] = abstract.review_phase  # Include review phase in response
             abstracts_data.append(abstract_dict)
 
         response = {
@@ -713,6 +734,7 @@ def get_abstracts():
                 "filters_applied": bool(filters),
                 "search_query": q if q else None,
                 "status_filter": status if status else None,
+                "review_phase_filter": review_phase if review_phase else None,
                 "verifier_filter": verifier_filter,
                 "results_count": len(abstracts_data),
                 "total_count": total,
@@ -733,6 +755,7 @@ def get_abstracts():
             ip_address=request.remote_addr
         )
         return jsonify({"error": error_msg}), 40
+
 
 @research_bp.route('/abstracts/<abstract_id>', methods=['GET'])
 @jwt_required()
@@ -759,6 +782,8 @@ def get_abstract(abstract_id):
         data = abstract_schema.dump(abstract)
         if abstract.pdf_path:
             data['pdf_url'] = f"/api/v1/research/abstracts/{abstract_id}/pdf"
+        # Include review phase in the response
+        data['review_phase'] = abstract.review_phase
 
         # Log successful retrieval
         log_audit_event(
@@ -767,7 +792,8 @@ def get_abstract(abstract_id):
             details={
                 "abstract_id": abstract_id,
                 "title": abstract.title,
-                "has_pdf": bool(abstract.pdf_path)
+                "has_pdf": bool(abstract.pdf_path),
+                "review_phase": abstract.review_phase
             },
             ip_address=request.remote_addr
         )
@@ -783,6 +809,7 @@ def get_abstract(abstract_id):
             ip_address=request.remote_addr
         )
         return jsonify({"error": error_msg}), 400
+
 
 @research_bp.route('/abstracts/<abstract_id>', methods=['DELETE'])
 @jwt_required()
@@ -838,6 +865,7 @@ def delete_abstract(abstract_id):
         )
         return jsonify({"error": error_msg}), 40
 
+
 @research_bp.route('/abstracts/<abstract_id>/submit', methods=['POST'])
 @jwt_required()
 def submit_abstract(abstract_id):
@@ -891,6 +919,22 @@ def submit_abstract(abstract_id):
                 ip_address=request.remote_addr
             )
             return jsonify({"error": error_msg}), 403
+
+        # Only allow submission if the abstract is in PENDING status and phase 1
+        if abstract.status != Status.PENDING or abstract.review_phase != 1:
+            error_msg = f"Cannot submit abstract: Abstract must be in PENDING status and phase 1 to be submitted for review. Current status: {abstract.status.name}, Current phase: {abstract.review_phase}"
+            log_audit_event(
+                event_type="abstract.submit.failed",
+                user_id=actor_id,
+                details={
+                    "error": error_msg,
+                    "abstract_id": abstract_id,
+                    "current_status": abstract.status.name,
+                    "current_phase": abstract.review_phase
+                },
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 400
 
         abstract_utils.update_abstract(
             abstract,
@@ -955,6 +999,13 @@ def get_abstract_submission_status():
                 actor_id=actor_id,
                 context={**context, "scope": "verifier"},
             )
+        elif user.has_role(Role.COORDINATOR.value):
+            current_app.logger.info("Fetching abstracts for coordinator user ID: %s", actor_id)
+            abstracts = abstract_utils.list_abstracts(
+                filters=[Abstracts.coordinators.any(User.id == actor_id)],
+                actor_id=actor_id,
+                context={**context, "scope": "coordinator"},
+            )
         else:
             abstracts = abstract_utils.list_abstracts(
                 filters=[Abstracts.created_by_id == actor_id],
@@ -988,7 +1039,7 @@ def get_abstract_submission_status():
             ip_address=request.remote_addr
         )
         
-        return jsonify(payload), 200
+        return jsonify(payload), 20
     except Exception as exc:
         current_app.logger.exception("Error retrieving abstract submission status")
         error_msg = f"System error occurred while retrieving abstract status: {str(exc)}"
@@ -1051,7 +1102,7 @@ def assign_verifier_to_abstract(abstract_id, user_id):
                 },
                 ip_address=request.remote_addr
             )
-            return jsonify({"error": error_msg}), 400
+            return jsonify({"error": error_msg}), 40
 
         if any(verifier.id == user.id for verifier in abstract.verifiers):
             error_msg = "Verifier already assigned to this abstract"
@@ -1061,7 +1112,7 @@ def assign_verifier_to_abstract(abstract_id, user_id):
                 details={"error": error_msg, "abstract_id": abstract_id, "verifier_id": user_id},
                 ip_address=request.remote_addr
             )
-            return jsonify({"message": error_msg}), 200
+            return jsonify({"message": error_msg}), 20
 
         abstract_utils.assign_verifier(
             abstract,
@@ -1094,7 +1145,7 @@ def assign_verifier_to_abstract(abstract_id, user_id):
             details={"error": error_msg, "abstract_id": abstract_id if abstract else abstract_id, "verifier_id": user_id if user else user_id, "exception_type": type(exc).__name__, "exception_message": str(exc)},
             ip_address=request.remote_addr
         )
-        return jsonify({"error": error_msg}), 400
+        return jsonify({"error": error_msg}), 40
 
 
 @research_bp.route('/abstracts/<abstract_id>/verifiers/<user_id>', methods=['DELETE'])
@@ -1173,7 +1224,7 @@ def unassign_verifier_from_abstract(abstract_id, user_id):
             details={"error": error_msg, "abstract_id": abstract_id if abstract else abstract_id, "verifier_id": user_id if user else user_id, "exception_type": type(exc).__name__, "exception_message": str(exc)},
             ip_address=request.remote_addr
         )
-        return jsonify({"error": error_msg}), 400
+        return jsonify({"error": error_msg}), 40
 
 
 @research_bp.route('/abstracts/<abstract_id>/verifiers', methods=['GET'])
@@ -1279,7 +1330,7 @@ def get_abstracts_for_verifier(user_id):
             details={"error": error_msg, "verifier_id": user_id if user else user_id, "exception_type": type(exc).__name__, "exception_message": str(exc)},
             ip_address=request.remote_addr
         )
-        return jsonify({"error": error_msg}), 400
+        return jsonify({"error": error_msg}), 40
 
 
 @research_bp.route('/abstracts/bulk-assign-verifiers', methods=['POST'])
@@ -1302,7 +1353,7 @@ def bulk_assign_verifiers():
                 details={"error": error_msg, "provided_fields": list(data.keys()) if data else []},
                 ip_address=request.remote_addr
             )
-            return jsonify({"error": error_msg}), 400
+            return jsonify({"error": error_msg}), 40
 
         abstract_ids = [str(abstract_id) for abstract_id in abstract_ids]
         user_ids = [str(user_id) for user_id in user_ids]
@@ -1414,7 +1465,7 @@ def bulk_unassign_verifiers():
                 details={"error": error_msg, "provided_fields": list(data.keys()) if data else []},
                 ip_address=request.remote_addr
             )
-            return jsonify({"error": error_msg}), 400
+            return jsonify({"error": error_msg}), 40
 
         abstract_ids = [str(abstract_id) for abstract_id in abstract_ids]
         user_ids = [str(user_id) for user_id in user_ids]
@@ -1497,6 +1548,203 @@ def bulk_unassign_verifiers():
             event_type="abstract.verifiers.bulk_unassign.failed",
             user_id=actor_id,
             details={"error": error_msg, "exception_type": type(exc).__name__, "exception_message": str(exc)},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 40
+
+
+# New endpoint to accept an abstract with grades
+@research_bp.route('/abstracts/<abstract_id>/accept', methods=['POST'])
+@jwt_required()
+@require_roles(Role.COORDINATOR.value, Role.ADMIN.value, Role.SUPERADMIN.value)
+def accept_abstract(abstract_id):
+    """Accept an abstract after review."""
+    actor_id, context = _resolve_actor_context("accept_abstract")
+    abstract = None
+    try:
+        abstract = abstract_utils.get_abstract_by_id(
+            abstract_id,
+            actor_id=actor_id,
+            context=context,
+        )
+        if abstract is None:
+            error_msg = f"Resource not found: Abstract with ID {abstract_id} does not exist"
+            log_audit_event(
+                event_type="abstract.accept.failed",
+                user_id=actor_id,
+                details={"error": error_msg, "abstract_id": abstract_id},
+                ip_address=request.remote_addr
+            )
+            abort(404, description="Abstract not found.")
+
+        # Check if user is authorized to accept this abstract
+        user = User.query.get(actor_id)
+        if not user:
+            error_msg = "Authentication failed: User not found"
+            log_audit_event(
+                event_type="abstract.accept.failed",
+                user_id=actor_id,
+                details={"error": error_msg, "abstract_id": abstract_id},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
+
+        # Allow if user is admin, superadmin, or a coordinator for this abstract
+        privileged = any(
+            user.has_role(role)
+            for role in (Role.ADMIN.value, Role.SUPERADMIN.value)
+        )
+        
+        if not privileged and not any(coordinator.id == actor_id for coordinator in abstract.coordinators):
+            error_msg = f"Authorization failed: You are not authorized to accept abstract ID {abstract_id}"
+            log_audit_event(
+                event_type="abstract.accept.failed",
+                user_id=actor_id,
+                details={
+                    "error": error_msg, 
+                    "abstract_id": abstract_id,
+                    "user_id": actor_id,
+                    "user_role": user.role_associations[0].role.value if user.role_associations else "no_role"
+                },
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 403
+
+        # Check if all required grades have been submitted for the current phase
+        if not abstract_utils.can_advance_to_next_phase(abstract):
+            error_msg = f"Cannot accept abstract: Not all required grades have been submitted for phase {abstract.review_phase}"
+            log_audit_event(
+                event_type="abstract.accept.failed",
+                user_id=actor_id,
+                details={
+                    "error": error_msg, 
+                    "abstract_id": abstract_id,
+                    "current_phase": abstract.review_phase
+                },
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 400
+
+        # Update the status to ACCEPTED
+        abstract_utils.update_abstract(
+            abstract,
+            actor_id=actor_id,
+            context=context,
+            status=Status.ACCEPTED,
+        )
+        
+        # Log successful acceptance
+        log_audit_event(
+            event_type="abstract.accept.success",
+            user_id=actor_id,
+            details={
+                "abstract_id": abstract_id,
+                "new_status": "ACCEPTED",
+                "title": abstract.title
+            },
+            ip_address=request.remote_addr
+        )
+        
+        return jsonify({"message": "Abstract accepted successfully"}), 20
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.exception("Error accepting abstract")
+        error_msg = f"System error occurred while accepting abstract: {str(exc)}"
+        log_audit_event(
+            event_type="abstract.accept.failed",
+            user_id=actor_id,
+            details={"error": error_msg, "abstract_id": abstract_id if abstract else abstract_id, "exception_type": type(exc).__name__, "exception_message": str(exc)},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 400
+
+
+# New endpoint to reject an abstract
+@research_bp.route('/abstracts/<abstract_id>/reject', methods=['POST'])
+@jwt_required()
+@require_roles(Role.COORDINATOR.value, Role.ADMIN.value, Role.SUPERADMIN.value)
+def reject_abstract(abstract_id):
+    """Reject an abstract after review."""
+    actor_id, context = _resolve_actor_context("reject_abstract")
+    abstract = None
+    try:
+        abstract = abstract_utils.get_abstract_by_id(
+            abstract_id,
+            actor_id=actor_id,
+            context=context,
+        )
+        if abstract is None:
+            error_msg = f"Resource not found: Abstract with ID {abstract_id} does not exist"
+            log_audit_event(
+                event_type="abstract.reject.failed",
+                user_id=actor_id,
+                details={"error": error_msg, "abstract_id": abstract_id},
+                ip_address=request.remote_addr
+            )
+            abort(404, description="Abstract not found.")
+
+        # Check if user is authorized to reject this abstract
+        user = User.query.get(actor_id)
+        if not user:
+            error_msg = "Authentication failed: User not found"
+            log_audit_event(
+                event_type="abstract.reject.failed",
+                user_id=actor_id,
+                details={"error": error_msg, "abstract_id": abstract_id},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
+
+        # Allow if user is admin, superadmin, or a coordinator for this abstract
+        privileged = any(
+            user.has_role(role)
+            for role in (Role.ADMIN.value, Role.SUPERADMIN.value)
+        )
+        
+        if not privileged and not any(coordinator.id == actor_id for coordinator in abstract.coordinators):
+            error_msg = f"Authorization failed: You are not authorized to reject abstract ID {abstract_id}"
+            log_audit_event(
+                event_type="abstract.reject.failed",
+                user_id=actor_id,
+                details={
+                    "error": error_msg, 
+                    "abstract_id": abstract_id,
+                    "user_id": actor_id,
+                    "user_role": user.role_associations[0].role.value if user.role_associations else "no_role"
+                },
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 403
+
+        # Update the status to REJECTED
+        abstract_utils.update_abstract(
+            abstract,
+            actor_id=actor_id,
+            context=context,
+            status=Status.REJECTED,
+        )
+        
+        # Log successful rejection
+        log_audit_event(
+            event_type="abstract.reject.success",
+            user_id=actor_id,
+            details={
+                "abstract_id": abstract_id,
+                "new_status": "REJECTED",
+                "title": abstract.title
+            },
+            ip_address=request.remote_addr
+        )
+        
+        return jsonify({"message": "Abstract rejected successfully"}), 200
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.exception("Error rejecting abstract")
+        error_msg = f"System error occurred while rejecting abstract: {str(exc)}"
+        log_audit_event(
+            event_type="abstract.reject.failed",
+            user_id=actor_id,
+            details={"error": error_msg, "abstract_id": abstract_id if abstract else abstract_id, "exception_type": type(exc).__name__, "exception_message": str(exc)},
             ip_address=request.remote_addr
         )
         return jsonify({"error": error_msg}), 40
