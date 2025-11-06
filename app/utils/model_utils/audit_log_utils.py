@@ -31,6 +31,11 @@ def create_audit_log(
     sanitized = _sanitize_payload(attributes)
     with log_context(module="audit_log_utils", action="create_audit_log", actor_id=actor_id):
         logger.info("create_audit_log commit=%s attributes=%s", commit, sanitized)
+    # If detail is provided in attributes, validate and format it
+    if 'detail' in attributes:
+        attributes = attributes.copy()  # Don't modify the original
+        attributes['detail'] = AuditLog.validate_detail_format(attributes['detail'])
+    
     log_entry = create_instance(
         AuditLog,
         commit=commit,
@@ -74,12 +79,15 @@ def record_event(
     with log_context(module="audit_log_utils", action="record_event", actor_id=actor_id):
         logger.info("record_event payload=%s commit=%s", sanitized, commit)
 
+    # Validate and format the detail field to ensure it's properly formatted for JSON
+    validated_detail = AuditLog.validate_detail_format(detail)
+    
     log_entry = AuditLog(
         event=event,
         user_id=user_id,
         target_user_id=target_user_id,
         ip=ip,
-        detail=detail,
+        detail=validated_detail,
         created_at=datetime.now(timezone.utc),
     )
     db.session.add(log_entry)

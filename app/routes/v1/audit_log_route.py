@@ -28,7 +28,7 @@ def log_audit_event(event_type, user_id, details, ip_address=None, target_user_i
             user_id=user_id,
             target_user_id=target_user_id,
             ip=ip_address,
-            detail=json.dumps(details) if isinstance(details, dict) else details,
+            detail=AuditLog.validate_detail_format(json.dumps(details) if isinstance(details, dict) else details),
             actor_id=user_id,
             commit=False  # Don't commit here to avoid transaction issues
         )

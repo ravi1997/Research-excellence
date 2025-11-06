@@ -1,0 +1,162 @@
+/* Grade Management Page Styles */
+
+/* Modal Styles */
+.grade-modal-overlay {
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+.grade-modal {
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+/* Table Styles */
+.grade-table {
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.grade-table th {
+    background-color: #f9fafb;
+    padding: 1rem;
+    text-align: left;
+    font-weight: 600;
+    color: #4b5563;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+}
+
+.grade-table td {
+    padding: 1rem;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.grade-table tr:last-child td {
+    border-bottom: none;
+}
+
+.grade-table tr:hover {
+    background-color: #f9fafb;
+}
+
+/* Button Styles */
+.grade-btn {
+    @apply inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2;
+}
+
+.grade-btn-primary {
+    @apply text-white bg-indigo-600 hover:bg-indigo-700 focus:ring-indigo-500;
+}
+
+.grade-btn-secondary {
+    @apply text-gray-700 bg-white hover:bg-gray-50 border-gray-300 focus:ring-indigo-500;
+}
+
+.grade-btn-danger {
+    @apply text-white bg-red-600 hover:bg-red-700 focus:ring-red-500;
+}
+
+/* Input Styles */
+.grade-input {
+    @apply block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm;
+}
+
+.grade-input:focus {
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+/* Form Error Styles */
+.grade-error-message {
+    @apply text-xs text-red-600 mt-1;
+}
+
+/* Notification Styles */
+.grade-notification {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.grade-notification-success {
+    border-left-color: #10b981;
+}
+
+.grade-notification-error {
+    border-left-color: #ef4444;
+}
+
+/* Loading Spinner */
+.grade-spinner {
+    border-top-color: #4f46e5;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Filter Controls */
+.grade-filters {
+    @apply grid grid-cols-1 md:grid-cols-4 gap-4 mb-4;
+}
+
+/* Grade Value Badge */
+.grade-value-badge {
+    @apply px-2 inline-flex text-xs leading-5 font-semibold rounded-full;
+}
+
+.grade-value-high {
+    @apply bg-green-100 text-green-800;
+}
+
+.grade-value-medium {
+    @apply bg-yellow-100 text-yellow-800;
+}
+
+.grade-value-low {
+    @apply bg-red-100 text-red-800;
+}
+
+/* Responsive Table */
+@media (max-width: 768px) {
+    .grade-table {
+        display: block;
+        overflow-x: auto;
+    }
+    
+    .grade-filters {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Accessibility Enhancements */
+.grade-focus:focus {
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+}
+
+.grade-focus:focus-visible {
+    outline: 2px solid #4f46e5;
+    outline-offset: 2px;
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+    .grade-modal {
+        background-color: #1f2937;
+        color: #f9fafb;
+    }
+    
+    .grade-table th {
+        background-color: #374151;
+        color: #d1d5db;
+    }
+    
+    .grade-table td {
+        border-bottom-color: #4b5563;
+    }
+    
+    .grade-table tr:hover {
+        background-color: #374151;
+    }
+}

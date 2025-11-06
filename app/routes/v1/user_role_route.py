@@ -1,21 +1,32 @@
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, List
 import json
 from flask import request, jsonify, current_app
+import re
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from app.extensions import db
 from app.models.User import User, UserRole
 from app.models.Token import Token
 from app.models.enumerations import Role
 from flask import Blueprint
+from sqlalchemy import text
 
 user_role_bp = Blueprint('user_role_bp', __name__)
 from app.schemas.user_role_schema import UserRoleSchema
 from app.utils.decorator import require_roles
 from app.utils.model_utils import user_utils, audit_log_utils, token_utils
+from app.services.role_metadata_service import load_role_metadata, save_role_metadata
 
 
 user_role_schema = UserRoleSchema()
 user_roles_schema = UserRoleSchema(many=True)
+
+ROLE_DESCRIPTIONS = {
+    Role.SUPERADMIN.value: "Full platform governance, infrastructure, and security oversight",
+    Role.ADMIN.value: "Operational administration across submissions, verification, and cycle management",
+    Role.USER.value: "Standard participant access for creating and managing submissions",
+    Role.VERIFIER.value: "Responsible for reviewing and validating assigned submissions",
+    Role.COORDINATOR.value: "Coordinates reviewers and tracks progress across cycles",
+}
 
 
 def log_audit_event(event_type, user_id, details, ip_address=None, target_user_id=None):
@@ -69,6 +80,107 @@ def _resolve_actor_context(action: str) -> Tuple[Optional[str], Dict[str, object
     return actor_id, context
 
 
+_ROLE_CACHE: Optional[List[str]] = None
+_ROLE_METADATA_CACHE: Optional[Dict[str, Dict[str, str]]] = None
+PROTECTED_ROLES = {Role.SUPERADMIN.value}
+
+
+def _available_role_values() -> List[str]:
+    global _ROLE_CACHE
+    if _ROLE_CACHE is not None:
+        return _ROLE_CACHE
+
+    try:
+        query = text(
+            """
+            SELECT enumlabel
+            FROM pg_enum
+            JOIN pg_type ON pg_enum.enumtypid = pg_type.oid
+            WHERE pg_type.typname = :enum_name
+            ORDER BY enumsortorder
+            """
+        )
+        rows = db.session.execute(query, {"enum_name": "role"}).fetchall()
+        values = [row[0] for row in rows if row and row[0]]
+        if values:
+            _ROLE_CACHE = values
+            return values
+    except Exception as exc:
+        current_app.logger.warning("Failed to introspect role enum; falling back to application enum: %s", exc)
+
+    fallback = [role.value for role in Role]
+    _ROLE_CACHE = fallback
+    return fallback
+
+
+def _get_role_metadata() -> Dict[str, Dict[str, str]]:
+    global _ROLE_METADATA_CACHE
+    if _ROLE_METADATA_CACHE is None:
+        _ROLE_METADATA_CACHE = load_role_metadata()
+    return _ROLE_METADATA_CACHE
+
+
+def _persist_role_metadata(metadata: Dict[str, Dict[str, str]]) -> None:
+    global _ROLE_METADATA_CACHE
+    save_role_metadata(metadata)
+    _ROLE_METADATA_CACHE = metadata
+
+
+def _invalidate_role_caches():
+    global _ROLE_CACHE, _ROLE_METADATA_CACHE
+    _ROLE_CACHE = None
+    _ROLE_METADATA_CACHE = None
+
+
+def _resolve_role_value(raw_role: str) -> Role:
+    if not raw_role:
+        raise ValueError("Role value must be provided")
+    raw_normalized = str(raw_role).strip()
+    allowed_values = {value.lower() for value in _available_role_values()}
+    if raw_normalized.lower() not in allowed_values:
+        raise ValueError(f"Invalid role '{raw_role}'")
+    lookup = {}
+    for role in Role:
+        lookup[role.value.lower()] = role
+        lookup[role.name.lower()] = role
+    resolved = lookup.get(raw_normalized.lower())
+    if not resolved:
+        # Fall back to constructing from canonical value to support legacy enums
+        try:
+            resolved = Role(raw_normalized.lower())
+        except ValueError:
+            try:
+                resolved = Role(raw_normalized.upper())
+            except ValueError as exc:
+                raise ValueError(f"Invalid role '{raw_role}'") from exc
+    return resolved
+
+
+def _add_role_to_enum(role_value: str) -> None:
+    db.session.execute(text("ALTER TYPE role ADD VALUE IF NOT EXISTS :value"), {"value": role_value})
+    db.session.commit()
+    _invalidate_role_caches()
+
+
+def _remove_role_from_enum(role_value: str) -> None:
+    current_values = _available_role_values()
+    if role_value not in current_values:
+        raise ValueError(f"Role '{role_value}' is not part of the enum")
+    if len(current_values) == 1:
+        raise ValueError("Cannot remove the last remaining role")
+
+    new_values = [value for value in current_values if value != role_value]
+    quoted_values = ",".join(f"'{value}'" for value in new_values)
+
+    with db.session.begin():
+        db.session.execute(text(f"CREATE TYPE role_new AS ENUM ({quoted_values})"))
+        db.session.execute(text("ALTER TABLE user_roles ALTER COLUMN role TYPE role_new USING role::text::role_new"))
+        db.session.execute(text("DROP TYPE role"))
+        db.session.execute(text("ALTER TYPE role_new RENAME TO role"))
+
+    _invalidate_role_caches()
+
+
 @user_role_bp.route('/user_roles', methods=['POST'])
 @jwt_required()
 @require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
@@ -113,10 +225,22 @@ def create_user_role():
             )
             return jsonify({"error": error_msg}), 404
 
+        try:
+            resolved_role = _resolve_role_value(payload['role'])
+        except ValueError as exc:
+            error_msg = str(exc)
+            log_audit_event(
+                event_type="user_role.create.failed",
+                user_id=actor_id,
+                details={"error": error_msg, "invalid_role": payload['role']},
+                ip_address=request.remote_addr,
+            )
+            return jsonify({"error": error_msg}), 400
+
         # Check if role already exists for this user
         existing_user_roles = user_utils.get_user_roles_by_user_id(payload['user_id'], actor_id=actor_id, context=context)
         for role in existing_user_roles:
-            if role.role.value == payload['role']:
+            if role.role == resolved_role:
                 error_msg = f"Validation failed: User already has role '{payload['role']}'"
                 log_audit_event(
                     event_type="user_role.create.failed",
@@ -135,7 +259,8 @@ def create_user_role():
             commit=True,
             actor_id=actor_id,
             context=context,
-            **payload
+            user_id=payload['user_id'],
+            role=resolved_role,
         )
 
         # Log successful creation
@@ -162,6 +287,199 @@ def create_user_role():
             ip_address=request.remote_addr
         )
         return jsonify({"error": error_msg}), 400
+
+
+@user_role_bp.route('/user_roles/metadata', methods=['GET'])
+@jwt_required()
+@require_roles(Role.SUPERADMIN.value)
+def get_role_metadata():
+    actor_id, _ = _resolve_actor_context("get_role_metadata")
+    metadata = _get_role_metadata()
+    return jsonify({"items": metadata, "count": len(metadata)}), 200
+
+
+@user_role_bp.route('/user_roles/metadata', methods=['PUT'])
+@jwt_required()
+@require_roles(Role.SUPERADMIN.value)
+def update_role_metadata():
+    actor_id, context = _resolve_actor_context("update_role_metadata")
+    payload = request.get_json() or {}
+    incoming = payload.get("items")
+    if incoming is None or not isinstance(incoming, dict):
+        return jsonify({"error": "Invalid payload: items map required"}), 400
+
+    available = {value.lower(): value for value in _available_role_values()}
+    sanitized: Dict[str, Dict[str, str]] = {}
+
+    for key, meta in incoming.items():
+        canonical = available.get(str(key).lower())
+        if not canonical:
+            return jsonify({"error": f"Role '{key}' is not a valid system role"}), 400
+        if not isinstance(meta, dict):
+            return jsonify({"error": f"Metadata for role '{key}' must be an object"}), 400
+        label = meta.get("label", "")
+        description = meta.get("description", "")
+        sanitized[canonical] = {
+            "label": str(label).strip(),
+            "description": str(description).strip(),
+        }
+
+    _persist_role_metadata(sanitized)
+
+    log_audit_event(
+        event_type="user_role.metadata.update",
+        user_id=actor_id,
+        details={"updated_roles": list(sanitized.keys()), "count": len(sanitized)},
+        ip_address=request.remote_addr,
+    )
+
+    return jsonify({"items": sanitized, "count": len(sanitized)}), 200
+
+
+@user_role_bp.route('/user_roles/available', methods=['GET'])
+@jwt_required()
+@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
+def list_available_roles():
+    """Return the list of assignable roles with friendly labels and descriptions."""
+    actor_id, context = _resolve_actor_context("list_available_roles")
+    try:
+        valid_values = _available_role_values()
+        metadata = _get_role_metadata()
+        roles_payload = []
+        for value in valid_values:
+            try:
+                role_enum = _resolve_role_value(value)
+            except ValueError:
+                role_enum = None
+            meta = metadata.get(value, {}) if isinstance(metadata, dict) else {}
+            label = meta.get("label") or ROLE_DESCRIPTIONS.get(value, value.replace("_", " ").title())
+            description = meta.get("description") or ROLE_DESCRIPTIONS.get(value, "System role")
+            roles_payload.append({
+                "value": value,
+                "label": label,
+                "description": description,
+                "enum": role_enum.name if role_enum else value,
+            })
+
+        log_audit_event(
+            event_type="user_role.available.success",
+            user_id=actor_id,
+            details={"count": len(roles_payload)},
+            ip_address=request.remote_addr
+        )
+
+        return jsonify({"items": roles_payload, "count": len(roles_payload)}), 200
+    except Exception as exc:
+        current_app.logger.exception("Error fetching available roles")
+        error_msg = f"System error occurred while retrieving available roles: {str(exc)}"
+        log_audit_event(
+            event_type="user_role.available.failed",
+            user_id=actor_id,
+            details={"error": error_msg, "exception_type": type(exc).__name__, "exception_message": str(exc)},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 400
+
+
+@user_role_bp.route('/user_roles/manage', methods=['POST'])
+@jwt_required()
+@require_roles(Role.SUPERADMIN.value)
+def manage_roles():
+    actor_id, context = _resolve_actor_context("manage_roles")
+    payload = request.get_json() or {}
+    action = (payload.get("action") or "").strip().lower()
+    identifier = payload.get("identifier") or payload.get("role") or ""
+    metadata = payload.get("metadata") or {}
+
+    if action not in {"add", "delete"}:
+        return jsonify({"error": "Invalid action. Use 'add' or 'delete'."}), 400
+
+    if not identifier:
+        return jsonify({"error": "Role identifier is required."}), 400
+
+    normalized_identifier = str(identifier).strip().lower()
+    if not re.fullmatch(r"[a-z0-9_\-]{2,50}", normalized_identifier):
+        return jsonify({"error": "Role identifier must be 2-50 characters (letters, digits, underscore, hyphen)."}), 400
+
+    # Ensure metadata values are strings
+    if not isinstance(metadata, dict):
+        metadata = {}
+
+    try:
+        if action == "add":
+            existing = {value.lower() for value in _available_role_values()}
+            if normalized_identifier in existing:
+                return jsonify({"error": f"Role '{identifier}' already exists."}), 400
+
+            _add_role_to_enum(normalized_identifier)
+
+            meta_store = _get_role_metadata()
+            meta_store = {**meta_store, normalized_identifier: {
+                "label": str(metadata.get("label", "")).strip(),
+                "description": str(metadata.get("description", "")).strip(),
+            }}
+            _persist_role_metadata(meta_store)
+
+            log_audit_event(
+                event_type="user_role.manage.add",
+                user_id=actor_id,
+                details={"role": normalized_identifier},
+                ip_address=request.remote_addr,
+            )
+
+            return jsonify({
+                "message": "Role added successfully",
+                "roles": _available_role_values(),
+                "metadata": meta_store,
+            }), 201
+
+        # delete branch
+        available = _available_role_values()
+        canonical = None
+        for value in available:
+            if value.lower() == normalized_identifier:
+                canonical = value
+                break
+
+        if not canonical:
+            return jsonify({"error": f"Role '{identifier}' does not exist."}), 404
+
+        if canonical in PROTECTED_ROLES:
+            return jsonify({"error": f"Role '{canonical}' is protected and cannot be removed."}), 400
+
+        in_use = db.session.query(user_utils.UserRole).filter_by(role=Role(canonical)).count()
+        if in_use:
+            return jsonify({"error": f"Role '{canonical}' is assigned to {in_use} user(s) and cannot be removed."}), 400
+
+        _remove_role_from_enum(canonical)
+
+        meta_store = _get_role_metadata()
+        if canonical in meta_store:
+            meta_store.pop(canonical, None)
+            _persist_role_metadata(meta_store)
+        else:
+            _invalidate_role_caches()
+
+        log_audit_event(
+            event_type="user_role.manage.delete",
+            user_id=actor_id,
+            details={"role": canonical},
+            ip_address=request.remote_addr,
+        )
+
+        return jsonify({
+            "message": "Role removed successfully",
+            "roles": _available_role_values(),
+            "metadata": meta_store,
+        }), 200
+
+    except ValueError as exc:
+        db.session.rollback()
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.exception("Role management error")
+        return jsonify({"error": f"Failed to {action} role: {exc}"}), 500
 
 
 @user_role_bp.route('/user_roles/<int:role_id>', methods=['GET'])

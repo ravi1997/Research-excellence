@@ -105,6 +105,13 @@ def superadmin_users_management_page():
     """Superadmin user management SPA-like page (fetches data via /api/v1/super/users)."""
     return render_template('superadmin/super_users.html')
 
+@view_bp.route('/admin/super/roles')
+@jwt_required()
+@require_roles(Role.SUPERADMIN.value)
+def superadmin_roles_page():
+    """Superadmin role assignment management page."""
+    return render_template('superadmin/super_roles.html')
+
 @view_bp.route('/admin/super/users/<user_id>/activity')
 @jwt_required()
 @require_roles(Role.SUPERADMIN.value)
@@ -187,3 +194,10 @@ def list_award():
 def list_best_paper():
     """List research best papers."""
     return render_template('bestPaper/submitted_list_paper.html')
+
+@view_bp.route('/research/grades')
+@jwt_required()
+@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value, Role.VERIFIER.value)
+def grade_management():
+    """Grade management page for administrators and verifiers."""
+    return render_template('grade_management.html')
