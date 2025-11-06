@@ -3451,6 +3451,11 @@
       grid-template-columns: 2fr,1fr;
     }
   }
+  .lg\:grid-cols-\[minmax\(0\,1fr\)_minmax\(320px\,380px\)\] {
+    @media (width >= 64rem) {
+      grid-template-columns: minmax(0,1fr) minmax(320px,380px);
+    }
+  }
   .lg\:grid-cols-\[minmax\(0\,360px\)_minmax\(0\,1fr\)\] {
     @media (width >= 64rem) {
       grid-template-columns: minmax(0,360px) minmax(0,1fr);
@@ -3489,6 +3494,11 @@
   .xl\:grid-cols-4 {
     @media (width >= 80rem) {
       grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+  .xl\:grid-cols-\[minmax\(0\,1fr\)_minmax\(360px\,420px\)\] {
+    @media (width >= 80rem) {
+      grid-template-columns: minmax(0,1fr) minmax(360px,420px);
     }
   }
   .xl\:grid-cols-\[minmax\(0\,380px\)_minmax\(0\,1fr\)\] {
@@ -3579,6 +3589,14 @@
       }
     }
   }
+  .dark\:border-red-400\/60 {
+    @media (prefers-color-scheme: dark) {
+      border-color: color-mix(in srgb, oklch(70.4% 0.191 22.216) 60%, transparent);
+      @supports (color: color-mix(in lab, red, red)) {
+        border-color: color-mix(in oklab, var(--color-red-400) 60%, transparent);
+      }
+    }
+  }
   .dark\:border-red-500\/20 {
     @media (prefers-color-scheme: dark) {
       border-color: color-mix(in srgb, oklch(63.7% 0.237 25.331) 20%, transparent);
@@ -3662,6 +3680,14 @@
       background-color: color-mix(in srgb, oklch(62.3% 0.214 259.815) 10%, transparent);
       @supports (color: color-mix(in lab, red, red)) {
         background-color: color-mix(in oklab, var(--color-blue-500) 10%, transparent);
+      }
+    }
+  }
+  .dark\:bg-blue-500\/15 {
+    @media (prefers-color-scheme: dark) {
+      background-color: color-mix(in srgb, oklch(62.3% 0.214 259.815) 15%, transparent);
+      @supports (color: color-mix(in lab, red, red)) {
+        background-color: color-mix(in oklab, var(--color-blue-500) 15%, transparent);
       }
     }
   }
@@ -3971,6 +3997,11 @@
       @supports (color: color-mix(in lab, red, red)) {
         background-color: color-mix(in oklab, var(--color-red-900) 30%, transparent);
       }
+    }
+  }
+  .dark\:bg-transparent {
+    @media (prefers-color-scheme: dark) {
+      background-color: transparent;
     }
   }
   .dark\:bg-yellow-900 {

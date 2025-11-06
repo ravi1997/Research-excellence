@@ -139,7 +139,7 @@ def create_abstract():
                     details={"error": error_msg},
                     ip_address=request.remote_addr
                 )
-                return jsonify({"error": error_msg}), 40
+                return jsonify({"error": error_msg}), 400
         else:
             data_json = request.form.get("data")
             if not data_json:
@@ -150,7 +150,7 @@ def create_abstract():
                     details={"error": error_msg},
                     ip_address=request.remote_addr
                 )
-                return jsonify({"error": error_msg}), 40
+                return jsonify({"error": error_msg}), 400
             try:
                 payload = json.loads(data_json)
             except json.JSONDecodeError:
@@ -161,7 +161,7 @@ def create_abstract():
                     details={"error": error_msg},
                     ip_address=request.remote_addr
                 )
-                return jsonify({"error": error_msg}), 40
+                return jsonify({"error": error_msg}), 400
 
             pdf_file = request.files.get("abstract_pdf")
             if pdf_file:
@@ -198,7 +198,8 @@ def create_abstract():
             if cycle:
                 from datetime import date
                 active_windows = list_windows(cycle_id=cycle_id, reference_date=date.today())
-                abstract_windows = [w for w in active_windows if w.phase == CyclePhase.SUBMISSION]
+                abstract_windows = [
+                    w for w in active_windows if w.phase == CyclePhase.ABSTRACT_SUBMISSION]
                 if not abstract_windows:
                     error_msg = f"Submission validation failed: Abstract submissions are not allowed for cycle {cycle.name} at this time"
                     log_audit_event(
@@ -211,7 +212,7 @@ def create_abstract():
                         },
                         ip_address=request.remote_addr
                     )
-                    return jsonify({"error": error_msg}), 40
+                    return jsonify({"error": error_msg}), 400
 
         abstract = abstract_utils.create_abstract(
             commit=False,
@@ -385,7 +386,7 @@ def update_abstract(abstract_id):
                     details={"error": error_msg, "abstract_id": abstract_id},
                     ip_address=request.remote_addr
                 )
-                return jsonify({"error": error_msg}), 40
+                return jsonify({"error": error_msg}), 400
         else:
             data_json = request.form.get("data")
             if not data_json:
@@ -396,7 +397,7 @@ def update_abstract(abstract_id):
                     details={"error": error_msg, "abstract_id": abstract_id},
                     ip_address=request.remote_addr
                 )
-                return jsonify({"error": error_msg}), 40
+                return jsonify({"error": error_msg}), 400
             try:
                 payload = json.loads(data_json)
             except json.JSONDecodeError:
@@ -407,7 +408,7 @@ def update_abstract(abstract_id):
                     details={"error": error_msg, "abstract_id": abstract_id},
                     ip_address=request.remote_addr
                 )
-                return jsonify({"error": error_msg}), 40
+                return jsonify({"error": error_msg}), 400
 
             pdf_file = request.files.get("abstract_pdf")
             if pdf_file:
@@ -507,7 +508,7 @@ def update_abstract(abstract_id):
             details={"error": error_msg, "abstract_id": abstract_id if abstract else abstract_id, "exception_type": type(exc).__name__, "exception_message": str(exc)},
             ip_address=request.remote_addr
         )
-        return jsonify({"error": error_msg}), 40
+        return jsonify({"error": error_msg}), 400
 
 
 @research_bp.route('/abstracts/<abstract_id>/pdf', methods=['GET'])
@@ -672,7 +673,7 @@ def get_abstracts():
                     details={"error": error_msg, "invalid_verifiers_param": verifiers},
                     ip_address=request.remote_addr
                 )
-                return jsonify({"error": error_msg}), 40
+                return jsonify({"error": error_msg}), 400
 
         if verifier_filter and actor_id:
             filters.append(Abstracts.verifiers.any(User.id == actor_id))
@@ -695,7 +696,7 @@ def get_abstracts():
                 details={"error": error_msg, "invalid_sort_by": sort_by},
                 ip_address=request.remote_addr
             )
-            return jsonify({"error": error_msg}), 40
+            return jsonify({"error": error_msg}), 400
 
         abstracts_all = list(
             abstract_utils.list_abstracts(
@@ -754,7 +755,7 @@ def get_abstracts():
             details={"error": error_msg, "exception_type": type(exc).__name__, "exception_message": str(exc)},
             ip_address=request.remote_addr
         )
-        return jsonify({"error": error_msg}), 40
+        return jsonify({"error": error_msg}), 400
 
 
 @research_bp.route('/abstracts/<abstract_id>', methods=['GET'])
@@ -863,7 +864,7 @@ def delete_abstract(abstract_id):
             details={"error": error_msg, "abstract_id": abstract_id if abstract else abstract_id, "exception_type": type(exc).__name__, "exception_message": str(exc)},
             ip_address=request.remote_addr
         )
-        return jsonify({"error": error_msg}), 40
+        return jsonify({"error": error_msg}), 400
 
 
 @research_bp.route('/abstracts/<abstract_id>/submit', methods=['POST'])
@@ -966,7 +967,7 @@ def submit_abstract(abstract_id):
             details={"error": error_msg, "abstract_id": abstract_id if abstract else abstract_id, "exception_type": type(exc).__name__, "exception_message": str(exc)},
             ip_address=request.remote_addr
         )
-        return jsonify({"error": error_msg}), 40
+        return jsonify({"error": error_msg}), 400
     
 
 @research_bp.route('/abstracts/status', methods=['GET'])
@@ -1039,7 +1040,7 @@ def get_abstract_submission_status():
             ip_address=request.remote_addr
         )
         
-        return jsonify(payload), 20
+        return jsonify(payload), 200
     except Exception as exc:
         current_app.logger.exception("Error retrieving abstract submission status")
         error_msg = f"System error occurred while retrieving abstract status: {str(exc)}"
@@ -1049,7 +1050,7 @@ def get_abstract_submission_status():
             details={"error": error_msg, "exception_type": type(exc).__name__, "exception_message": str(exc)},
             ip_address=request.remote_addr
         )
-        return jsonify({"error": error_msg}), 40
+        return jsonify({"error": error_msg}), 400
 
 
 # Verifier Management Routes
@@ -1102,7 +1103,7 @@ def assign_verifier_to_abstract(abstract_id, user_id):
                 },
                 ip_address=request.remote_addr
             )
-            return jsonify({"error": error_msg}), 40
+            return jsonify({"error": error_msg}), 400
 
         if any(verifier.id == user.id for verifier in abstract.verifiers):
             error_msg = "Verifier already assigned to this abstract"
@@ -1112,7 +1113,7 @@ def assign_verifier_to_abstract(abstract_id, user_id):
                 details={"error": error_msg, "abstract_id": abstract_id, "verifier_id": user_id},
                 ip_address=request.remote_addr
             )
-            return jsonify({"message": error_msg}), 20
+            return jsonify({"message": error_msg}), 200
 
         abstract_utils.assign_verifier(
             abstract,
@@ -1145,7 +1146,7 @@ def assign_verifier_to_abstract(abstract_id, user_id):
             details={"error": error_msg, "abstract_id": abstract_id if abstract else abstract_id, "verifier_id": user_id if user else user_id, "exception_type": type(exc).__name__, "exception_message": str(exc)},
             ip_address=request.remote_addr
         )
-        return jsonify({"error": error_msg}), 40
+        return jsonify({"error": error_msg}), 400
 
 
 @research_bp.route('/abstracts/<abstract_id>/verifiers/<user_id>', methods=['DELETE'])
@@ -1224,7 +1225,7 @@ def unassign_verifier_from_abstract(abstract_id, user_id):
             details={"error": error_msg, "abstract_id": abstract_id if abstract else abstract_id, "verifier_id": user_id if user else user_id, "exception_type": type(exc).__name__, "exception_message": str(exc)},
             ip_address=request.remote_addr
         )
-        return jsonify({"error": error_msg}), 40
+        return jsonify({"error": error_msg}), 400
 
 
 @research_bp.route('/abstracts/<abstract_id>/verifiers', methods=['GET'])
@@ -1330,7 +1331,7 @@ def get_abstracts_for_verifier(user_id):
             details={"error": error_msg, "verifier_id": user_id if user else user_id, "exception_type": type(exc).__name__, "exception_message": str(exc)},
             ip_address=request.remote_addr
         )
-        return jsonify({"error": error_msg}), 40
+        return jsonify({"error": error_msg}), 400
 
 
 @research_bp.route('/abstracts/bulk-assign-verifiers', methods=['POST'])
@@ -1353,7 +1354,7 @@ def bulk_assign_verifiers():
                 details={"error": error_msg, "provided_fields": list(data.keys()) if data else []},
                 ip_address=request.remote_addr
             )
-            return jsonify({"error": error_msg}), 40
+            return jsonify({"error": error_msg}), 400
 
         abstract_ids = [str(abstract_id) for abstract_id in abstract_ids]
         user_ids = [str(user_id) for user_id in user_ids]
@@ -1398,7 +1399,7 @@ def bulk_assign_verifiers():
                 details={"error": error_msg, "non_verifier_ids": non_verifier_ids},
                 ip_address=request.remote_addr
             )
-            return jsonify({"error": error_msg}), 40
+            return jsonify({"error": error_msg}), 400
 
         assignments_created = 0
         for abstract_id in abstract_ids:
@@ -1441,7 +1442,7 @@ def bulk_assign_verifiers():
             details={"error": error_msg, "exception_type": type(exc).__name__, "exception_message": str(exc)},
             ip_address=request.remote_addr
         )
-        return jsonify({"error": error_msg}), 40
+        return jsonify({"error": error_msg}), 400
 
 
 @research_bp.route('/abstracts/bulk-unassign-verifiers', methods=['POST'])
@@ -1465,7 +1466,7 @@ def bulk_unassign_verifiers():
                 details={"error": error_msg, "provided_fields": list(data.keys()) if data else []},
                 ip_address=request.remote_addr
             )
-            return jsonify({"error": error_msg}), 40
+            return jsonify({"error": error_msg}), 400
 
         abstract_ids = [str(abstract_id) for abstract_id in abstract_ids]
         user_ids = [str(user_id) for user_id in user_ids]
@@ -1550,7 +1551,7 @@ def bulk_unassign_verifiers():
             details={"error": error_msg, "exception_type": type(exc).__name__, "exception_message": str(exc)},
             ip_address=request.remote_addr
         )
-        return jsonify({"error": error_msg}), 40
+        return jsonify({"error": error_msg}), 400
 
 
 # New endpoint to accept an abstract with grades
@@ -1645,7 +1646,7 @@ def accept_abstract(abstract_id):
             ip_address=request.remote_addr
         )
         
-        return jsonify({"message": "Abstract accepted successfully"}), 20
+        return jsonify({"message": "Abstract accepted successfully"}), 200
     except Exception as exc:
         db.session.rollback()
         current_app.logger.exception("Error accepting abstract")
@@ -1747,4 +1748,4 @@ def reject_abstract(abstract_id):
             details={"error": error_msg, "abstract_id": abstract_id if abstract else abstract_id, "exception_type": type(exc).__name__, "exception_message": str(exc)},
             ip_address=request.remote_addr
         )
-        return jsonify({"error": error_msg}), 40
+        return jsonify({"error": error_msg}), 400
