@@ -2006,6 +2006,9 @@
   .text-emerald-700 {
     color: var(--color-emerald-700);
   }
+  .text-gray-50 {
+    color: var(--color-gray-50);
+  }
   .text-gray-300 {
     color: var(--color-gray-300);
   }
@@ -3340,6 +3343,14 @@
       background-color: var(--color-amber-900);
     }
   }
+  .dark\:bg-blue-50\/20 {
+    @media (prefers-color-scheme: dark) {
+      background-color: color-mix(in srgb, oklch(97% 0.014 254.604) 20%, transparent);
+      @supports (color: color-mix(in lab, red, red)) {
+        background-color: color-mix(in oklab, var(--color-blue-50) 20%, transparent);
+      }
+    }
+  }
   .dark\:bg-blue-500\/10 {
     @media (prefers-color-scheme: dark) {
       background-color: color-mix(in srgb, oklch(62.3% 0.214 259.815) 10%, transparent);
@@ -3433,6 +3444,11 @@
   .dark\:bg-gray-100 {
     @media (prefers-color-scheme: dark) {
       background-color: var(--color-gray-100);
+    }
+  }
+  .dark\:bg-gray-500 {
+    @media (prefers-color-scheme: dark) {
+      background-color: var(--color-gray-500);
     }
   }
   .dark\:bg-gray-600 {

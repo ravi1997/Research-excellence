@@ -21,11 +21,11 @@ user_role_schema = UserRoleSchema()
 user_roles_schema = UserRoleSchema(many=True)
 
 ROLE_DESCRIPTIONS = {
-    Role.SUPERADMIN.value: "Full platform governance, infrastructure, and security oversight",
-    Role.ADMIN.value: "Operational administration across submissions, verification, and cycle management",
-    Role.USER.value: "Standard participant access for creating and managing submissions",
-    Role.VERIFIER.value: "Responsible for reviewing and validating assigned submissions",
-    Role.COORDINATOR.value: "Coordinates reviewers and tracks progress across cycles",
+    Role.SUPERADMIN.value: "SUPERADMIN",
+    Role.ADMIN.value: "ADMIN",
+    Role.USER.value: "USER",
+    Role.VERIFIER.value: "VERIFIER",
+    Role.COORDINATOR.value: "COORDINATOR",
 }
 
 
@@ -91,17 +91,7 @@ def _available_role_values() -> List[str]:
         return _ROLE_CACHE
 
     try:
-        query = text(
-            """
-            SELECT enumlabel
-            FROM pg_enum
-            JOIN pg_type ON pg_enum.enumtypid = pg_type.oid
-            WHERE pg_type.typname = :enum_name
-            ORDER BY enumsortorder
-            """
-        )
-        rows = db.session.execute(query, {"enum_name": "role"}).fetchall()
-        values = [row[0] for row in rows if row and row[0]]
+        values = [role.value for role in Role]
         if values:
             _ROLE_CACHE = values
             return values

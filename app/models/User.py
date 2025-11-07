@@ -191,7 +191,7 @@ class User(db.Model):
     # --- Security Methods ---
 
     def is_locked(self) -> bool:
-        return self.lock_until and datetime.now(timezone.utc) < self.lock_until
+        return self.lock_until and datetime.now(timezone.utc) < self.lock_until.replace(tzinfo=timezone.utc)
 
     def lock_account(self):
         self.lock_until = datetime.now(

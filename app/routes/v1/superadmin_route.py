@@ -1,3 +1,4 @@
+import traceback
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required
 from sqlalchemy import or_, and_
@@ -14,7 +15,7 @@ super_api_bp = Blueprint('super_api_bp',  __name__)
 
 @super_api_bp.route('/users', methods=['GET'])
 @jwt_required()
-@require_roles(Role.SUPERADMIN.value)
+@require_roles(Role.ADMIN.value,Role.SUPERADMIN.value)
 def list_users():
     """API endpoint to list users with filtering and pagination."""
     try:
@@ -112,12 +113,15 @@ def list_users():
         return jsonify(response), 200
     
     except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(
+            f"Error in list_users: {traceback.format_exc()}")
         return jsonify({'error': str(e)}), 500
 
 
 @super_api_bp.route('/users/<user_id>', methods=['GET'])
 @jwt_required()
-@require_roles(Role.SUPERADMIN.value)
+@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
 def get_user(user_id):
     """API endpoint to get a specific user."""
     try:
@@ -195,7 +199,7 @@ def bulk_update_user_roles():
 
 @super_api_bp.route('/users/<user_id>/activate', methods=['POST'])
 @jwt_required()
-@require_roles(Role.SUPERADMIN.value)
+@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
 def activate_user(user_id):
     """API endpoint to activate a user."""
     try:
@@ -215,7 +219,7 @@ def activate_user(user_id):
 
 @super_api_bp.route('/users/<user_id>/deactivate', methods=['POST'])
 @jwt_required()
-@require_roles(Role.SUPERADMIN.value)
+@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
 def deactivate_user(user_id):
     """API endpoint to deactivate a user."""
     try:
@@ -235,7 +239,7 @@ def deactivate_user(user_id):
 
 @super_api_bp.route('/users/<user_id>/lock', methods=['POST'])
 @jwt_required()
-@require_roles(Role.SUPERADMIN.value)
+@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
 def lock_user(user_id):
     """API endpoint to lock a user account."""
     try:
@@ -254,7 +258,7 @@ def lock_user(user_id):
 
 @super_api_bp.route('/users/<user_id>/unlock', methods=['POST'])
 @jwt_required()
-@require_roles(Role.SUPERADMIN.value)
+@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
 def unlock_user(user_id):
     """API endpoint to unlock a user account."""
     try:
@@ -270,6 +274,43 @@ def unlock_user(user_id):
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
+
+@super_api_bp.route('/users/<user_id>/verify', methods=['POST'])
+@jwt_required()
+@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
+def verify_user(user_id):
+    """API endpoint to verify a user account."""
+    try:
+        user = User.query.filter_by(id=user_id).first()
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        user.is_verified = True
+        db.session.commit()
+
+        return jsonify({'message': 'User verified successfully'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@super_api_bp.route('/users/<user_id>/unverify', methods=['POST'])
+@jwt_required()
+@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
+def unverify_user(user_id):
+    """API endpoint to unverify a user account."""
+    try:
+        user = User.query.filter_by(id=user_id).first()
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        user.is_verified = False
+        db.session.commit()
+
+        return jsonify({'message': 'User unverifed successfully'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
 
 @super_api_bp.route('/users/bulk/activate', methods=['POST'])
 @jwt_required()
@@ -295,7 +336,7 @@ def bulk_activate_users():
 
 @super_api_bp.route('/users/bulk/deactivate', methods=['POST'])
 @jwt_required()
-@require_roles(Role.SUPERADMIN.value)
+@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
 def bulk_deactivate_users():
     """API endpoint to bulk deactivate users."""
     try:
@@ -338,7 +379,7 @@ def bulk_lock_users():
 
 @super_api_bp.route('/users/bulk/unlock', methods=['POST'])
 @jwt_required()
-@require_roles(Role.SUPERADMIN.value)
+@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
 def bulk_unlock_users():
     """API endpoint to bulk unlock users."""
     try:
@@ -359,7 +400,7 @@ def bulk_unlock_users():
 
 @super_api_bp.route('/users', methods=['POST'])
 @jwt_required()
-@require_roles(Role.SUPERADMIN.value)
+@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
 def create_user():
     """API endpoint to create a new user."""
     try:
@@ -408,12 +449,14 @@ def create_user():
         return jsonify({'message': 'User created successfully', 'user': user_data}), 201
     except Exception as e:
         db.session.rollback()
+        current_app.logger.error(f"Failed to create user: {str(e)}")
+        current_app.logger.error(f'{traceback.format_exc()}')
         return jsonify({'error': str(e)}), 500
 
 
 @super_api_bp.route('/users/<user_id>', methods=['PUT'])
 @jwt_required()
-@require_roles(Role.SUPERADMIN.value)
+@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
 def update_user(user_id):
     """API endpoint to update an existing user."""
     try:

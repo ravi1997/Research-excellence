@@ -362,7 +362,8 @@
 
       const lastLoginDate = safeDate(user.last_login);
       const lastLogin = lastLoginDate ? formatter.format(lastLoginDate) : "Never";
-
+      const isVerified = Boolean(user.is_verified);
+      
       const roles = (user.roles || []).map((role) => {
         const roleName = String(role || "").toLowerCase();
         let badgeClass = "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200";
@@ -416,6 +417,16 @@
             ${escapeHtml(lastLogin)}
           </time>
         </td>
+        <td class="px-6 py-4 align-middle text-sm text-gray-600 dark:text-gray-300 md:table-cell">
+          ${isVerified ? `<span class="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200">
+              <svg class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+              </svg>
+              Verified
+            </span>` : `<span class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-700 dark:bg-gray-500 dark:text-gray-300">
+              Not Verified
+            </span>`}
+        </td>
         <td class="px-6 py-4 align-middle text-right">
           <div class="flex items-center justify-end gap-2 text-sm">
             <button class="edit-user-btn inline-flex items-center gap-1 rounded-lg px-2 py-1 text-blue-600 transition hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-500/10" data-id="${user.id}" title="Edit user">
@@ -429,6 +440,9 @@
             </button>
             <button class="lock-user-btn inline-flex items-center gap-1 rounded-lg px-2 py-1 ${isLocked ? "text-emerald-600 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-500/10" : "text-red-600 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-500/10"}" data-id="${user.id}" title="${isLocked ? "Unlock user" : "Lock user"}">
               ${isLocked ? "Unlock" : "Lock"}
+            </button>
+            <button class="verify-user-btn inline-flex items-center gap-1 rounded-lg px-2 py-1 ${isVerified ? "text-emerald-600 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-500/10" : "text-red-600 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-500/10"}" data-id="${user.id}" title="${isVerified ? "Unverify user" : "Verify user"}">
+              ${isVerified ? "Unverify" : "Verify"}
             </button>
           </div>
         </td>
@@ -692,6 +706,7 @@
     const editBtn = event.target.closest(".edit-user-btn");
     const activateBtn = event.target.closest(".activate-user-btn");
     const lockBtn = event.target.closest(".lock-user-btn");
+    const verifyBtn = event.target.closest(".verify-user-btn");
 
     if (editBtn) {
       openUserModal(editBtn.getAttribute("data-id"));
@@ -717,6 +732,19 @@
         if (ok) fetchUsers(state.currentPage);
       } catch (error) {
         console.error("Failed to toggle lock", error);
+      }
+    }
+    if (verifyBtn) {
+      const userId = verifyBtn.getAttribute("data-id");
+      try {
+        const response = await fetch(`${BASE}/api/v1/super/users/${userId}`, { headers: authHeader() });
+        if (!response.ok) return;
+        const { user } = await response.json();
+        const verifyEndpoint = `${BASE}/api/v1/super/users/${userId}/${user.is_verified ? "unverify" : "verify"}`;
+        const verifyResponse = await fetch(verifyEndpoint, { method: "POST", headers: jsonHeaders() });
+        if (verifyResponse.ok) fetchUsers(state.currentPage);
+      } catch (error) {
+        console.error("Failed to toggle verification", error);
       }
     }
   });

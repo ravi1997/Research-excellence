@@ -100,7 +100,7 @@ def super_audit_page():
 
 @view_bp.route('/admin/super/users')
 @jwt_required()
-@require_roles(Role.SUPERADMIN.value)
+@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
 def superadmin_users_management_page():
     """Superadmin user management SPA-like page (fetches data via /api/v1/super/users)."""
     return render_template('superadmin/super_users.html')

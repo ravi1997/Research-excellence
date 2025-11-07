@@ -1,3 +1,7 @@
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment
+from openpyxl.utils import get_column_letter
+from io import BytesIO
 from flask import send_file, abort
 # Route to serve the PDF file for an abstract
 
@@ -1466,7 +1470,7 @@ def bulk_unassign_verifiers():
                 details={"error": error_msg, "provided_fields": list(data.keys()) if data else []},
                 ip_address=request.remote_addr
             )
-            return jsonify({"error": error_msg}), 400
+            return jsonify({"error": error_msg}), 40
 
         abstract_ids = [str(abstract_id) for abstract_id in abstract_ids]
         user_ids = [str(user_id) for user_id in user_ids]
@@ -1624,7 +1628,7 @@ def accept_abstract(abstract_id):
                 },
                 ip_address=request.remote_addr
             )
-            return jsonify({"error": error_msg}), 400
+            return jsonify({"error": error_msg}), 40
 
         # Update the status to ACCEPTED
         abstract_utils.update_abstract(
@@ -1657,7 +1661,7 @@ def accept_abstract(abstract_id):
             details={"error": error_msg, "abstract_id": abstract_id if abstract else abstract_id, "exception_type": type(exc).__name__, "exception_message": str(exc)},
             ip_address=request.remote_addr
         )
-        return jsonify({"error": error_msg}), 400
+        return jsonify({"error": error_msg}), 40
 
 
 # New endpoint to reject an abstract
@@ -1746,6 +1750,155 @@ def reject_abstract(abstract_id):
             event_type="abstract.reject.failed",
             user_id=actor_id,
             details={"error": error_msg, "abstract_id": abstract_id if abstract else abstract_id, "exception_type": type(exc).__name__, "exception_message": str(exc)},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 40
+
+
+# Function to create Excel export of all abstracts
+def create_abstracts_excel(abstracts):
+    """Create an Excel workbook with all abstracts data"""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Abstracts Master Sheet"
+    
+    # Define headers with more detailed information from the models
+    headers = [
+        "ID", "Abstract Number", "Title", "Category", "Content", "Status", 
+        "Created By", "Created At", "Updated At", "PDF Path", 
+        "Review Phase", "Cycle Name", "Cycle Start Date", "Cycle End Date", 
+        "Authors", "Author Emails", "Affiliations", "Presenter", "Corresponding",
+    ]
+    
+    # Add headers to worksheet
+    for col_num, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col_num, value=header)
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+    
+    # Add abstract data to worksheet
+    for row_num, abstract in enumerate(abstracts, 2):
+        # Get author information
+        authors_list = [author.name for author in abstract.authors] if abstract.authors else []
+        author_emails_list = [author.email for author in abstract.authors] if abstract.authors else []
+        affiliations_list = [author.affiliation for author in abstract.authors] if abstract.authors else []
+        is_presenter_list = [author.name for author in abstract.authors if author.is_presenter] if abstract.authors else []
+        is_corresponding_list = [author.name for author in abstract.authors if author.is_corresponding] if abstract.authors else []
+
+        # Get verifier information
+        verifiers_list = [verifier.username for verifier in abstract.verifiers] if abstract.verifiers else []
+        verifier_emails_list = [verifier.email for verifier in abstract.verifiers] if abstract.verifiers else []
+        
+        # Get coordinator information
+        coordinators_list = [coordinator.username for coordinator in abstract.coordinators] if abstract.coordinators else []
+        coordinator_emails_list = [coordinator.email for coordinator in abstract.coordinators] if abstract.coordinators else []
+        
+        # Get creator name
+        creator_name = abstract.created_by.username if abstract.created_by_id else "N/A"
+        
+        # Get cycle information
+        cycle_name = abstract.cycle.name if abstract.cycle else "N/A"
+        cycle_start_date = abstract.cycle.start_date.isoformat() if abstract.cycle and abstract.cycle.start_date else "N/A"
+        cycle_end_date = abstract.cycle.end_date.isoformat() if abstract.cycle and abstract.cycle.end_date else "N/A"
+        
+        # Get category information
+        category_name = abstract.category.name if abstract.category else "N/A"
+        
+        # Add row data
+        row_data = [
+            str(abstract.id),  # Convert UUID to string
+            abstract.abstract_number,
+            abstract.title,
+            category_name,
+            abstract.content[:200] + "..." if len(abstract.content) > 200 else abstract.content,  # Truncate long content
+            abstract.status.name if abstract.status else "N/A",
+            creator_name,
+            abstract.created_at.isoformat() if abstract.created_at else "N/A",
+            abstract.updated_at.isoformat() if abstract.updated_at else "N/A",
+            abstract.pdf_path or "N/A",
+            abstract.review_phase,
+            cycle_name,
+            cycle_start_date,
+            cycle_end_date,
+            "; ".join(authors_list),
+            "; ".join(str(e) for e in author_emails_list if e),
+            "; ".join(str(e) for e in affiliations_list if e),
+            "; ".join(str(e) for e in is_presenter_list if e),
+            "; ".join(str(e) for e in is_corresponding_list if e),
+        ]
+        
+        for col_num, value in enumerate(row_data, 1):
+            cell = ws.cell(row=row_num, column=col_num, value=str(value) if value is not None else "")
+            cell.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
+    
+    # Auto-adjust column widths
+    for column in ws.columns:
+        max_length = 0
+        column_letter = get_column_letter(column[0].column)
+        for cell in column:
+            try:
+                if len(str(cell.value)) > max_length:
+                    max_length = len(str(cell.value))
+            except:
+                pass
+        adjusted_width = min(max_length + 2, 50)  # Limit max width to 50
+        ws.column_dimensions[column_letter].width = adjusted_width
+    
+    return wb
+
+
+@research_bp.route('/abstracts/export-excel', methods=['GET'])
+@jwt_required()
+@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
+def export_abstracts_excel():
+    """Export all abstracts to an Excel file."""
+    actor_id, context = _resolve_actor_context("export_abstracts_excel")
+    try:
+        # Get all abstracts with related data
+        abstracts = abstract_utils.list_abstracts(
+            actor_id=actor_id,
+            context=context
+        )
+        
+        # Create Excel workbook
+        wb = create_abstracts_excel(abstracts)
+        
+        # Save to a temporary file
+        from io import BytesIO
+        from flask import send_file
+        import tempfile
+        import os
+        
+        # Create a temporary file
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx')
+        wb.save(temp_file.name)
+        temp_file.close()  # Close the file so it can be read by send_file
+        
+        # Log successful export
+        log_audit_event(
+            event_type="abstract.excel.export.success",
+            user_id=actor_id,
+            details={
+                "exported_count": len(abstracts),
+                "file_path": temp_file.name
+            },
+            ip_address=request.remote_addr
+        )
+        
+        # Send the file to the user
+        return send_file(
+            temp_file.name,
+            as_attachment=True,
+            download_name=f"abstracts_master_{uuid.uuid4().hex[:8]}.xlsx",
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        
+    except Exception as exc:
+        current_app.logger.exception("Error exporting abstracts to Excel")
+        error_msg = f"System error occurred while exporting abstracts to Excel: {str(exc)}"
+        log_audit_event(
+            event_type="abstract.excel.export.failed",
+            user_id=actor_id,
+            details={"error": error_msg, "exception_type": type(exc).__name__, "exception_message": str(exc)},
             ip_address=request.remote_addr
         )
         return jsonify({"error": error_msg}), 400
