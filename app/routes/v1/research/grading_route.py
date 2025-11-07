@@ -112,8 +112,7 @@ def create_grading():
         data['graded_by_id'] = current_user_id
 
         # Marshmallow Schema (non SQLAlchemy) returns a dict; instantiate ORM model explicitly
-        payload = grading_schema.load(data)
-        grading = Grading(**payload)
+        grading = grading_schema.load(data)
         db.session.add(grading)
         db.session.commit()
         

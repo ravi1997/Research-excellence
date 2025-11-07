@@ -387,11 +387,13 @@ document.addEventListener('DOMContentLoaded', function() {
     
     async function saveGradingType() {
         const criteria = criteriaInput.value.trim();
-        const gradingFor = gradingForInput.value;
+        const gradingFor = gradingForInput.value.toLowerCase();
         const minScore = parseInt(minScoreInput.value);
         const maxScore = parseInt(maxScoreInput.value);
         const verificationLevel = parseInt(verificationLevelInput.value);
         
+        console.log({criteria, gradingFor, minScore, maxScore, verificationLevel});
+
         if (!criteria || !gradingFor || isNaN(minScore) || isNaN(maxScore) || isNaN(verificationLevel)) {
             showNotification('Please fill in all fields', 'error');
             return;

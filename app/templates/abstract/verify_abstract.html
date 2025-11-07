@@ -250,7 +250,7 @@
         </div>
 
         <!-- Details -->
-        <div class="p-5 overflow-auto max-h-[72vh]">
+        <div class="p-5 overflow-auto max-h-[90vh]">
             <div id="abstractDetails" class="space-y-4">
                 <div class="text-center muted py-12 flex flex-col items-center gap-2" id="noAbstractSelected">
                     <div class="p-4 rounded-full bg-blue-100 dark:bg-blue-900/50 mb-3">
@@ -332,181 +332,276 @@
 </div>
 
 <!-- Grading Modal -->
-<div id="gradingModal" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true" aria-labelledby="gradingModalTitle" aria-describedby="gradingModalDesc">
-    <!-- Backdrop -->
-    <div class="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity" data-close="gradingModal"></div>
+<div id="gradingModal" class="fixed inset-0 z-50 hidden grid place-items-center bg-black/50 backdrop-blur-sm p-4"
+    role="dialog" aria-modal="true" aria-labelledby="gradingModalTitle" aria-describedby="gradingModalDesc">
+
     <!-- Modal Panel -->
-    <div class="relative mx-auto w-full max-w-8xl px-3 md:px-4 py-6 md:py-8 flex items-start md:items-center min-h-screen">
-        <div class="relative w-full bg-white dark:bg-gray-900 rounded-2xl shadow-xl border border-[color:var(--border)]/70 ring-1 ring-black/5 dark:ring-white/10 overflow-hidden animate-fadeInUp text-[13px]">
-            <!-- Decorative gradient bar -->
-            <div class="h-1 w-full bg-gradient-to-r from-[color:var(--brand-600)] via-[color:var(--brand-400)] to-[color:var(--brand-600)]"></div>
-            <!-- Header -->
-            <div class="px-4 md:px-5 py-4 flex items-start justify-between gap-3 border-b border-[color:var(--border)]/60 bg-[color:var(--surface-alt)]/60 dark:bg-gray-80/60 backdrop-blur supports-[backdrop-filter]:bg-[color:var(--surface-alt)]/40">
-                <div class="space-y-1">
-                    <h3 id="gradingModalTitle" class="text-lg md:text-xl font-bold tracking-tight text-gray-900 dark:text-white flex items-center gap-2">
-                        <svg class="w-6 h-6 text-[color:var(--brand-600)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6M12 6h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        Grade Abstract
-                    </h3>
-                    <p id="gradingModalDesc" class="text-[11px] md:text-xs text-[color:var(--text-muted)] max-w-prose leading-snug">
-                        Provide scores for each criterion and optionally include overall comments. Your grading helps determine acceptance and prioritization.
-                    </p>
-                </div>
-                <button id="closeGradingModal" type="button" class="group rounded-lg p-2 hover:bg-black/5 dark:hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-500)]" aria-label="Close grading dialog">
-                    <svg class="w-5 h-5 text-gray-500 group-hover:text-gray-800 dark:text-gray-400 dark:group-hover:text-gray-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+    <div
+        class="w-full max-w-5xl rounded-2xl border border-[color:var(--border)]/70 bg-white text-[13px] shadow-2xl ring-1 ring-black/5 dark:bg-gray-900 dark:ring-white/10 overflow-hidden">
+
+        <!-- Decorative gradient bar -->
+        <div
+            class="h-1 w-full bg-gradient-to-r from-[color:var(--brand-600)] via-[color:var(--brand-400)] to-[color:var(--brand-600)]">
+        </div>
+
+        <!-- Header -->
+        <div
+            class="flex items-start justify-between gap-3 border-b border-[color:var(--border)]/60 bg-[color:var(--surface-alt)]/60 px-4 py-4 md:px-5 supports-[backdrop-filter]:bg-[color:var(--surface-alt)]/40">
+            <div class="space-y-1">
+                <h3 id="gradingModalTitle"
+                    class="flex items-center gap-2 text-lg font-bold tracking-tight text-gray-900 dark:text-white md:text-xl">
+                    <svg class="h-6 w-6 text-[color:var(--brand-600)]" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 12h6m-6 4h6M12 6h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                </button>
+                    Grade Abstract
+                </h3>
+                <p id="gradingModalDesc"
+                    class="max-w-prose leading-snug text-[11px] text-[color:var(--text-muted)] md:text-xs">
+                    Provide scores for each criterion and optionally include overall comments. Your grading helps
+                    determine acceptance and prioritization.
+                </p>
             </div>
-            <!-- Body -->
-            <div class="px-4 md:px-5 py-5 max-h-[72vh] overflow-y-auto custom-scrollbar" id="gradingModalBody">
-                <form id="gradingForm" class="grid gap-4 lg:grid-cols-3 items-start" novalidate>
-                    <!-- Left/Main Column with internal scroll for criteria only -->
-                    <div class="flex flex-col gap-3 min-h-0 lg:col-span-2">
-                        <!-- Abstract Summary (sticky inside scroll) -->
-                        <section aria-labelledby="gradingAbstractHeading" class="bg-[color:var(--surface-alt)]/40 dark:bg-gray-80/40 border-[color:var(--border)]/60 rounded-lg p-3 md:p-3 sticky top-0 z-10 backdrop-blur supports-[backdrop-filter]:bg-[color:var(--surface-alt)]/70 dark:supports-[backdrop-filter]:bg-gray-800/80">
-                            <h4 id="gradingAbstractHeading" class="text-[11px] md:text-xs font-semibold text-gray-70 dark:text-gray-200 mb-0.5 uppercase tracking-wide">Abstract</h4>
-                            <div id="gradingAbstractTitle" class="text-[14px] md:text-base font-semibold text-gray-900 dark:text-white tracking-tight leading-snug"></div>
-                        </section>
-                        <div class="flex-1 min-h-0 overflow-y-auto pr-0.5 custom-scrollbar" id="criteriaScrollArea">
-                            <!-- Dynamic Criteria -->
-                            <section aria-labelledby="gradingCriteriaHeading" class="space-y-2 pb-3">
-                                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-0.5">
-                                    <h4 id="gradingCriteriaHeading" class="text-[11px] md:text-xs font-semibold text-gray-70 dark:text-gray-200 flex items-center gap-1.5 leading-none">
-                                        <svg class="w-4 h-4 text-[color:var(--brand-600)]" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7h16M4 12h16M4 17h16"/></svg>
-                                        Criteria
-                                    </h4>
-                                    <div class="flex items-center gap-1.5 w-full sm:w-auto">
-                                        <div class="relative flex-1 sm:flex-initial">
-                                            <input id="criteriaFilter" type="text" placeholder="Filter..." class="input pl-6 pr-2 py-1.5 h-7 w-full text-[11px]" aria-label="Filter grading criteria" />
-                                            <svg class="w-3 h-3 absolute top-2 left-2 text-[color:var(--text-muted)]" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-                                        </div>
-                                        <span id="gradingCriteriaCount" class="text-[10px] text-[color:var(--text-muted)] hidden whitespace-nowrap leading-none"></span>
-                                    </div>
-                                <div id="gradingFieldsContainer" class="grid gap-2.5 md:grid-cols-2 xl:grid-cols-3 auto-rows-fr" data-empty-msg="No grading criteria loaded.">
-                                    <!-- Criteria inputs injected here -->
-                                </div>
-                                <!-- Skeleton placeholder shown while loading -->
-                                <div id="gradingSkeleton" class="grid gap-4 md:grid-cols-2 xl:grid-cols-3" aria-hidden="true">
-                                    {% for _ in range(0, 3) %}
-                                    <div class="animate-pulse rounded-lg border border-[color:var(--border)]/60 p-4 space-y-3 bg-white/40 dark:bg-gray-800/40">
-                                        <div class="h-3 w-1/2 rounded bg-[color:var(--border)]/70"></div>
-                                        <div class="h-8 w-full rounded bg-[color:var(--border)]/70"></div>
-                                        <div class="h-2 w-2/3 rounded bg-[color:var(--border)]/50"></div>
-                                    </div>
-                                    {% endfor %}
-                                </div>
-                            </section>
+            <button id="closeGradingModal" type="button"
+                class="group rounded-lg p-2 hover:bg-black/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-500)] dark:hover:bg-white/10"
+                aria-label="Close grading dialog">
+                <svg class="h-5 w-5 text-gray-500 group-hover:text-gray-800 dark:text-gray-400 dark:group-hover:text-gray-200"
+                    fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+
+        <!-- Body (scrolls) -->
+        <div class="max-h-[70vh] overflow-y-auto px-4 py-5 md:px-5" id="gradingModalBody">
+            <form id="gradingForm" class="grid items-start gap-4 lg:grid-cols-3" novalidate>
+                <!-- Left/Main Column -->
+                <div class="min-h-0 flex flex-col gap-3 lg:col-span-2">
+
+                    <!-- Abstract Summary (sticky) -->
+                    <section aria-labelledby="gradingAbstractHeading"
+                        class="sticky top-0 z-10 rounded-lg border border-[color:var(--border)]/60 bg-[color:var(--surface-alt)]/60 p-3 backdrop-blur supports-[backdrop-filter]:bg-[color:var(--surface-alt)]/70 dark:bg-gray-800/60">
+                        <h4 id="gradingAbstractHeading"
+                            class="mb-0.5 text-[11px] font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-200 md:text-xs">
+                            Abstract
+                        </h4>
+                        <div id="gradingAbstractTitle"
+                            class="text-[14px] font-semibold leading-snug tracking-tight text-gray-900 dark:text-white md:text-base">
                         </div>
-                        <!-- Overall Comments -->
-                        <section aria-labelledby="overallCommentsLabel" class="space-y-1.5 pt-1.5 border-t border-[color:var(--border)]/50">
-                            <label id="overallCommentsLabel" for="overallComments" class="block text-[11px] md:text-xs font-medium text-gray-700 dark:text-gray-300">Overall Comments <span class="font-normal text-[color:var(--text-muted)]">(Optional)</span></label>
-                            <textarea id="overallComments" rows="3" class="input w-full resize-y leading-snug text-[12px]" placeholder="Overall summary or justification..."></textarea>
-                            <p class="text-[10px] md:text-[11px] text-[color:var(--text-muted)] leading-tight">Comments may be visible to administrators and (anonymized) to authors.</p>
-                        </section>
-                    </div>
-                    <!-- Side Panel -->
-                    <aside class="space-y-4 lg:sticky lg:top-2 h-fit" data-side-panel>
-                        <!-- Score Overview -->
-                        <section class="border border-[color:var(--border)]/60 rounded-lg p-3 md:p-3 bg-[color:var(--surface-alt)]/40 dark:bg-gray-800/40 flex flex-col gap-2.5">
-                            <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-200 flex items-center gap-2">
-                                <svg class="w-4 h-4 text-[color:var(--brand-600)]" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6l4 2"/></svg>
-                                Score Overview
+                    </section>
+
+                    <!-- Criteria (internal grid) -->
+                    <section aria-labelledby="gradingCriteriaHeading" class="space-y-2 pb-3">
+                        <div class="mb-0.5 flex flex-col justify-between gap-1 sm:flex-row sm:items-center">
+                            <h4 id="gradingCriteriaHeading"
+                                class="flex items-center gap-1.5 leading-none text-[11px] font-semibold text-gray-700 dark:text-gray-200 md:text-xs">
+                                <svg class="h-4 w-4 text-[color:var(--brand-600)]" viewBox="0 0 24 24" fill="none"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M4 7h16M4 12h16M4 17h16" />
+                                </svg>
+                                Criteria
                             </h4>
-                            <div class="flex items-center gap-2.5">
-                                <div class="relative w-20 h-20 md:w-24 md:h-24">
-                                    <svg viewBox="0 0 120 120" class="w-20 h-20 md:w-24 md:h-24">
-                                        <circle cx="60" cy="60" r="54" stroke="var(--border-color, #e5e7eb)" stroke-width="8" fill="none" class="opacity-30" />
-                                        <circle cx="60" cy="60" r="54" stroke="url(#gradScore)" stroke-linecap="round" stroke-width="8" fill="none" stroke-dasharray="339.292" stroke-dashoffset="39.292" data-score-ring class="transition-all duration-500" />
-                                        <defs>
-                                            <linearGradient id="gradScore" x1="0" x2="1" y1="0" y2="1">
-                                                <stop offset="0%" stop-color="var(--brand-600,#2563eb)" />
-                                                <stop offset="100%" stop-color="var(--brand-400,#60a5fa)" />
-                                            </linearGradient>
-                                        </defs>
+                            <div class="flex w-full items-center gap-1.5 sm:w-auto">
+                                <div class="relative flex-1 sm:flex-initial">
+                                    <input id="criteriaFilter" type="text" placeholder="Filter…"
+                                        class="input h-8 w-full pl-7 pr-2 text-[12px]"
+                                        aria-label="Filter grading criteria" />
+                                    <svg class="absolute left-2 top-2 h-4 w-4 text-[color:var(--text-muted)]"
+                                        viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                                     </svg>
-                                    <div class="absolute inset-0 flex-col items-center justify-center text-center">
-                                        <span class="text-[10px] uppercase tracking-wide text-[color:var(--text-muted)]">Avg</span>
-                                        <span data-score-avg class="text-base md:text-lg font-bold leading-none">-</span>
-                                        <span class="text-[10px] text-[color:var(--text-muted)]" data-score-filled>0/0</span>
+                                </div>
+                                <span id="gradingCriteriaCount"
+                                    class="hidden whitespace-nowrap leading-none text-[10px] text-[color:var(--text-muted)]"></span>
+                            </div>
+                        </div>
+
+                        <div id="gradingFieldsContainer" class="grid auto-rows-fr gap-2.5 md:grid-cols-2 xl:grid-cols-3"
+                            data-empty-msg="No grading criteria loaded.">
+                            <!-- Criteria inputs injected here -->
+                        </div>
+
+                        <!-- Skeleton -->
+                        <div id="gradingSkeleton" class="grid gap-4 md:grid-cols-2 xl:grid-cols-3" aria-hidden="true">
+                            {% for _ in range(0, 3) %}
+                            <div
+                                class="space-y-3 rounded-lg border border-[color:var(--border)]/60 bg-white/40 p-4 dark:bg-gray-800/40 animate-pulse">
+                                <div class="h-3 w-1/2 rounded bg-[color:var(--border)]/70"></div>
+                                <div class="h-8 w-full rounded bg-[color:var(--border)]/70"></div>
+                                <div class="h-2 w-2/3 rounded bg-[color:var(--border)]/50"></div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </section>
+
+                    <!-- Overall Comments -->
+                    <section aria-labelledby="overallCommentsLabel"
+                        class="space-y-1.5 border-t border-[color:var(--border)]/50 pt-2">
+                        <label id="overallCommentsLabel" for="overallComments"
+                            class="block text-[11px] font-medium text-gray-700 dark:text-gray-300 md:text-xs">
+                            Overall Comments <span class="font-normal text-[color:var(--text-muted)]">(Optional)</span>
+                        </label>
+                        <textarea id="overallComments" rows="3" class="input w-full resize-y leading-snug text-[12px]"
+                            placeholder="Overall summary or justification..."></textarea>
+                        <p class="leading-tight text-[10px] text-[color:var(--text-muted)] md:text-[11px]">
+                            Comments may be visible to administrators and (anonymized) to authors.
+                        </p>
+                    </section>
+                </div>
+
+                <!-- Side Panel -->
+                <aside class="h-fit space-y-4 lg:sticky lg:top-1.5" data-side-panel>
+                    <!-- Score Overview -->
+                    <section
+                        class="flex flex-col gap-2.5 rounded-lg border border-[color:var(--border)]/60 bg-[color:var(--surface-alt)]/40 p-3 dark:bg-gray-800/40">
+                        <h4 class="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-200">
+                            <svg class="h-4 w-4 text-[color:var(--brand-600)]" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6l4 2" />
+                            </svg>
+                            Score Overview
+                        </h4>
+                        <div class="flex items-center gap-3">
+                            <div class="relative h-24 w-24">
+                                <svg viewBox="0 0 120 120" class="h-24 w-24">
+                                    <circle cx="60" cy="60" r="54" stroke="var(--border-color, #e5e7eb)"
+                                        stroke-width="8" fill="none" class="opacity-30"></circle>
+                                    <circle cx="60" cy="60" r="54" stroke="url(#gradScore)" stroke-linecap="round"
+                                        stroke-width="8" fill="none" stroke-dasharray="339.292"
+                                        stroke-dashoffset="39.292" data-score-ring class="transition-all duration-500">
+                                    </circle>
+                                    <defs>
+                                        <linearGradient id="gradScore" x1="0" x2="1" y1="0" y2="1">
+                                            <stop offset="0%" stop-color="var(--brand-600,#2563eb)" />
+                                            <stop offset="100%" stop-color="var(--brand-400,#60a5fa)" />
+                                        </linearGradient>
+                                    </defs>
+                                </svg>
+                                <div class="absolute inset-0 flex flex-col items-center justify-center text-center">
+                                    <span
+                                        class="text-[10px] uppercase tracking-wide text-[color:var(--text-muted)]">Avg</span>
+                                    <span data-score-avg class="text-lg font-bold leading-none">-</span>
+                                    <span class="text-[10px] text-[color:var(--text-muted)]"
+                                        data-score-filled>0/0</span>
+                                </div>
+                            </div>
+                            <div class="grid flex-1 grid-cols-2 gap-2 text-[11px] leading-tight md:gap-2.5">
+                                <div
+                                    class="flex flex-col gap-0.5 rounded border border-[color:var(--border)]/60 bg-white/60 p-1.5 dark:bg-gray-900/50">
+                                    <span
+                                        class="text-[10px] font-medium uppercase tracking-wide text-[color:var(--text-muted)]">Total</span>
+                                    <span data-score-total class="text-sm font-semibold">-</span>
+                                </div>
+                                <div
+                                    class="flex flex-col gap-0.5 rounded border border-[color:var(--border)]/60 bg-white/60 p-1.5 dark:bg-gray-900/50">
+                                    <span
+                                        class="text-[10px] font-medium uppercase tracking-wide text-[color:var(--text-muted)]">Average</span>
+                                    <span data-score-average class="text-sm font-semibold">-</span>
+                                </div>
+                                <div
+                                    class="col-span-2 rounded border border-[color:var(--border)]/60 bg-white/60 p-1.5 dark:bg-gray-900/50">
+                                    <span
+                                        class="text-[10px] font-medium uppercase tracking-wide text-[color:var(--text-muted)]">Progress</span>
+                                    <div class="mt-1 h-2 w-full overflow-hidden rounded bg-gray-200 dark:bg-gray-700">
+                                        <div data-score-progress
+                                            class="h-full bg-gradient-to-r from-[color:var(--brand-600)] to-[color:var(--brand-400)] transition-all"
+                                            style="width:0%"></div>
                                     </div>
                                 </div>
-                                <div class="flex-1 grid grid-cols-2 gap-2 md:gap-2.5 text-[10px] md:text-[11px] leading-tight">
-                                    <div class="p-1.5 md:p-1.5 rounded bg-white/60 dark:bg-gray-900/50 border border-[color:var(--border)]/60 flex flex-col gap-0.5">
-                                        <span class="font-medium text-[10px] uppercase tracking-wide text-[color:var(--text-muted)]">Total</span>
-                                        <span data-score-total class="text-sm font-semibold">-</span>
-                                    </div>
-                                    <div class="p-1.5 md:p-1.5 rounded bg-white/60 dark:bg-gray-900/50 border border-[color:var(--border)]/60 flex flex-col gap-0.5">
-                                        <span class="font-medium text-[10px] uppercase tracking-wide text-[color:var(--text-muted)]">Average</span>
-                                        <span data-score-average class="text-sm font-semibold">-</span>
-                                    </div>
-                                    <div class="p-1.5 md:p-1.5 rounded bg-white/60 dark:bg-gray-900/50 border border-[color:var(--border)]/60 flex flex-col gap-0.5 col-span-2">
-                                        <span class="font-medium text-[10px] uppercase tracking-wide text-[color:var(--text-muted)]">Progress</span>
-                                        <div class="w-full h-2 rounded bg-gray-20 dark:bg-gray-700 overflow-hidden">
-                                            <div data-score-progress class="h-full bg-gradient-to-r from-[color:var(--brand-600)] to-[color:var(--brand-400)] transition-all" style="width:0%"></div>
-                                        </div>
-                                    </div>
-                                </div>
                             </div>
-                        </section>
-                        <!-- Legend / Rubric Help -->
-                        <section class="border border-[color:var(--border)]/60 rounded-lg p-3 md:p-3 bg-white/60 dark:bg-gray-80/40 flex flex-col gap-2">
-                            <div class="flex items-center justify-between">
-                                <h4 class="text-sm font-semibold text-gray-70 dark:text-gray-200 flex items-center gap-2">
-                                    <svg class="w-4 h-4 text-[color:var(--brand-600)]" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 4h.01M6 12h.01M18 12h.01"/></svg>
-                                    Rubric Guidance
-                                </h4>
-                                <button type="button" data-toggle-rubric class="text-xs text-[color:var(--brand-600)] hover:underline">Toggle</button>
-                            </div>
-                            <div data-rubric-body class="space-y-2 md:space-y-3 text-[11px] md:text-xs leading-relaxed">
-                                <p class="text-[color:var(--text-muted)]">Use the rubric to ensure consistent evaluation across abstracts. Scores closer to the maximum should reflect exceptional clarity, originality, and impact.</p>
-                                <ul class="space-y-1">
-                                    <li class="flex items-center gap-2"><span class="w-3 h-3 rounded bg-gradient-to-r from-green-400 to-green-600"></span><span>High: Outstanding quality / exceeds expectations</span></li>
-                                    <li class="flex items-center gap-2"><span class="w-3 h-3 rounded bg-gradient-to-r from-yellow-300 to-yellow-500"></span><span>Mid: Adequate / acceptable with minor issues</span></li>
-                                    <li class="flex items-center gap-2"><span class="w-3 h-3 rounded bg-gradient-to-r from-red-300 to-red-500"></span><span>Low: Deficient / significant revisions needed</span></li>
-                                </ul>
-                                <p class="text-[color:var(--text-muted)]">Add comments to justify scores at extremes or where clarification may help future reviewers.</p>
-                            </div>
-                        </section>
-                        <!-- Tips -->
-                        <section class="border border-[color:var(--border)]/60 rounded-lg p-3 md:p-3 bg-white/60 dark:bg-gray-800/40 flex flex-col gap-2 text-[10px] md:text-[11px] leading-snug">
-                            <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-200 flex items-center gap-2">
-                                <svg class="w-4 h-4 text-[color:var(--brand-600)]" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                Tips
+                        </div>
+                    </section>
+
+                    <!-- Rubric Guidance -->
+                    <section
+                        class="flex flex-col gap-2 rounded-lg border border-[color:var(--border)]/60 bg-white/60 p-3 text-[11px] leading-relaxed dark:bg-gray-800/40">
+                        <div class="flex items-center justify-between">
+                            <h4 class="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-200">
+                                <svg class="h-4 w-4 text-[color:var(--brand-600)]" viewBox="0 0 24 24" fill="none"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M12 6v6m0 4h.01M6 12h.01M18 12h.01" />
+                                </svg>
+                                Rubric Guidance
                             </h4>
-                            <ul class="list-disc pl-4 space-y-1">
-                                <li>Arrow keys adjust focused score inputs.</li>
-                                <li>Use Reset if you need to start over.</li>
-                                <li>Hover criteria labels for description.</li>
+                            <button type="button" data-toggle-rubric
+                                class="text-xs text-[color:var(--brand-600)] hover:underline">Toggle</button>
+                        </div>
+                        <div data-rubric-body class="space-y-2 md:space-y-3">
+                            <p class="text-[color:var(--text-muted)]">Use the rubric to ensure consistent evaluation
+                                across abstracts. Scores closer to the maximum should reflect exceptional clarity,
+                                originality, and impact.</p>
+                            <ul class="space-y-1">
+                                <li class="flex items-center gap-2"><span
+                                        class="h-3 w-3 rounded bg-gradient-to-r from-green-400 to-green-600"></span><span>High:
+                                        Outstanding quality / exceeds expectations</span></li>
+                                <li class="flex items-center gap-2"><span
+                                        class="h-3 w-3 rounded bg-gradient-to-r from-yellow-300 to-yellow-500"></span><span>Mid:
+                                        Adequate / acceptable with minor issues</span></li>
+                                <li class="flex items-center gap-2"><span
+                                        class="h-3 w-3 rounded bg-gradient-to-r from-red-300 to-red-500"></span><span>Low:
+                                        Deficient / significant revisions needed</span></li>
                             </ul>
-                        </section>
-                    </aside>
-                </form>
+                        </div>
+                    </section>
+
+                    <!-- Tips -->
+                    <section
+                        class="flex flex-col gap-2 rounded-lg border border-[color:var(--border)]/60 bg-white/60 p-3 text-[11px] leading-snug dark:bg-gray-800/40">
+                        <h4 class="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-200">
+                            <svg class="h-4 w-4 text-[color:var(--brand-600)]" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            Tips
+                        </h4>
+                        <ul class="list-disc space-y-1 pl-4">
+                            <li>Arrow keys adjust focused score inputs.</li>
+                            <li>Use Reset if you need to start over.</li>
+                            <li>Hover criteria labels for description.</li>
+                        </ul>
+                    </section>
+                </aside>
+            </form>
+        </div>
+
+        <!-- Footer -->
+        <div
+            class="flex flex-col gap-2 border-t border-[color:var(--border)]/60 bg-[color:var(--surface-alt)]/40 px-4 py-3 text-[12px] md:flex-row md:items-center md:justify-between md:gap-3 md:px-5 md:text-[13px] dark:bg-gray-800/40">
+            <div class="flex items-center gap-2 text-xs text-[color:var(--text-muted)]">
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                </svg>
+                <span id="gradingStatusMsg" class="hidden">Ready to submit.</span>
             </div>
-            <!-- Footer -->
-            <div class="px-4 md:px-5 py-3 border-t border-[color:var(--border)]/60 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 md:gap-3 bg-[color:var(--surface-alt)]/40 dark:bg-gray-800/40 text-[12px] md:text-[13px]">
-                <div class="flex items-center gap-2 text-xs text-[color:var(--text-muted)]">
-                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                    <span id="gradingStatusMsg" class="hidden">Ready to submit.</span>
-                </div>
-                <div class="flex justify-end gap-3">
-                    <button id="cancelGrading" type="button" class="btn btn-ghost px-3 py-1.5 text-sm">Cancel</button>
-                    <button id="submitGrading" type="button" class="btn btn-primary relative px-4 py-1.5 text-sm bg-[color:var(--brand-600)] hover:bg-[color:var(--brand-500)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[color:var(--brand-500)] disabled:opacity-60 disabled:cursor-not-allowed">
-                        <span class="inline-flex items-center gap-2" data-default-label>
-                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7h16M4 12h16m-7 5h7"/></svg>
-                            Submit Grading
-                        </span>
-                        <span class="hidden items-center gap-2" data-loading-label>
-                            <svg class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle class="opacity-25" cx="12" cy="12" r="10" stroke-width="4"></circle><path class="opacity-75" stroke-width="4" stroke-linecap="round" d="M4 12a8 8 0 018-8"/></svg>
-                            Saving...
-                        </span>
-                    </button>
-                </div>
+            <div class="flex justify-end gap-3">
+                <button id="cancelGrading" type="button" class="btn btn-ghost px-3 py-1.5 text-sm">Cancel</button>
+                <button id="submitGrading" type="button"
+                    class="btn btn-primary relative px-4 py-1.5 text-sm bg-[color:var(--brand-600)] hover:bg-[color:var(--brand-500)] focus-visible:ring-2 focus-visible:ring-[color:var(--brand-500)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60">
+                    <span class="inline-flex items-center gap-2" data-default-label>
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M4 7h16M4 12h16m-7 5h7" />
+                        </svg>
+                        Submit Grading
+                    </span>
+                    <span class="hidden items-center gap-2" data-loading-label>
+                        <svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke-width="4"></circle>
+                            <path class="opacity-75" stroke-width="4" stroke-linecap="round" d="M4 12a8 8 0 018-8" />
+                        </svg>
+                        Saving...
+                    </span>
+                </button>
             </div>
         </div>
     </div>
 </div>
+
 {% endblock %}
 
 {% block scripts %}

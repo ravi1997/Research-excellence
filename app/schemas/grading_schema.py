@@ -1,7 +1,13 @@
 from marshmallow import Schema, fields
+from app.extensions import ma
+from app.models.Cycle import Grading
 
 
-class GradingSchema(Schema):
+class GradingSchema(ma.SQLAlchemyAutoSchema):
+    class Meta:
+        model = Grading
+        load_instance = True
+        include_fk = True
     """Minimal grading schema (no nested objects) to eliminate recursion and invalid excludes."""
 
     id = fields.UUID(dump_only=True)

@@ -72,7 +72,8 @@
     function updateVerifyActionBtns(status) {
         var btns = sQ('verifyActionBtns');
         if (!btns) return;
-        if ((status || '').toUpperCase() === 'UNDER_REVIEW') btns.classList.remove('hidden');
+        console.log('Updating verify action buttons visibility for status:', status);
+        if ((status || '').toUpperCase() === 'STATUS.PENDING') btns.classList.remove('hidden');
         else btns.classList.add('hidden');
     }
 
@@ -281,12 +282,10 @@
     function generatePreview() {
         const previewContent = sQ('preview-content');
         if (!previewContent || !selAbstract) return;
-        
-        // Get category name
+
         const categoryName = selAbstract.category?.name || 'No Category';
 
         updateVerifyActionBtns(selAbstract.status);
-        // Update summary card info
         sQ('summaryTitle') && (sQ('summaryTitle').textContent = selAbstract.title || 'Untitled Abstract');
         sQ('summaryCategory') && (sQ('summaryCategory').textContent = categoryName);
         sQ('summaryStatus') && (sQ('summaryStatus').textContent = selAbstract.status || 'PENDING');
@@ -294,136 +293,151 @@
         sQ('summaryAuthor') && (sQ('summaryAuthor').textContent = selAbstract.created_by?.username || 'Unknown User');
         sQ('summaryDate') && (sQ('summaryDate').textContent = formatDate(selAbstract.created_at));
 
-        // Generate preview HTML with improved styling
-        let previewHTML = `
-            <div class="divide-y divide-gray-200 dark:divide-gray-700">
-               
-                <!-- Abstract Content Section -->
-                <div class="p-5">
-                    <div class="hidden flex items-center mb-4">
-                        <div class="flex-shrink-0 h-10 w-10 rounded-full bg-purple-100 dark:bg-purple-900 flex items-center justify-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-purple-600 dark:text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h1a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                            </svg>
-                        </div>
-                        <div class="ml-4">
-                            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Abstract Content</h3>
-                            <p class="text-sm text-gray-500 dark:text-gray-400">Main body of the abstract</p>
-                        </div>
-                    
-                    <div class="ml-2">
-                        <div class="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg border border-gray-200 dark:border-gray-600">
-                            <p class="whitespace-pre-wrap text-gray-800 dark:text-gray-200">${escapeHtml(selAbstract.content || '')}</p>
-                        </div>
-                    </div>
-                
-                <!-- Authors Section -->
-                <div class="p-5">
-                    <div class="flex items-center mb-4">
-                        <div class="flex-shrink-0 h-10 w-10 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 0 11-4 0 2 2 0 014 0z" />
-                            </svg>
-                        </div>
-                        <div class="ml-4">
-                            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Authors</h3>
-                            <p class="text-sm text-gray-500 dark:text-gray-400">List of contributing authors</p>
-                        </div>
-                    
-                    <div class="ml-2 space-y-4">
-        `;
-        
+        const contentHTML = selAbstract.content
+            ? `<p class="whitespace-pre-wrap text-gray-800 dark:text-gray-200">${escapeHtml(selAbstract.content)}</p>`
+            : '<p class="text-gray-500 dark:text-gray-400 italic">No content provided.</p>';
+
+        let authorsHTML = '';
         if (selAbstract.authors && selAbstract.authors.length > 0) {
             selAbstract.authors.forEach((author) => {
                 const roles = [];
                 if (author.is_presenter) roles.push('Presenter');
                 if (author.is_corresponding) roles.push('Corresponding');
-                
-                previewHTML += `
+                authorsHTML += `
                     <div class="border-l-4 border-blue-400 dark:border-blue-600 pl-4 py-2">
                         <div class="flex flex-wrap justify-between gap-2">
                             <p class="font-medium text-gray-900 dark:text-white">${escapeHtml(author.name)}</p>
-                            ${roles.length > 0 ? `<div class="flex flex-wrap gap-1">${roles.map(role => 
-                                `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100">
-                                    ${role}
-                                </span>`).join('')}</div>` : ''}
+                            ${
+                                roles.length > 0
+                                    ? `<div class="flex flex-wrap gap-1">${roles
+                                          .map(
+                                              (role) => `
+                                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100">
+                                                    ${escapeHtml(role)}
+                                                </span>`
+                                          )
+                                          .join('')}</div>`
+                                    : ''
+                            }
                         </div>
-                        ${author.email ? `<p class="text-sm text-blue-600 dark:text-blue-400 mt-1">${escapeHtml(author.email)}</p>` : ''}
-                        ${author.affiliation ? `<p class="text-sm text-gray-500 dark:text-gray-400 mt-1">${escapeHtml(author.affiliation)}</p>` : ''}
+                        ${
+                            author.email
+                                ? `<p class="text-sm text-blue-600 dark:text-blue-400 mt-1">${escapeHtml(author.email)}</p>`
+                                : ''
+                        }
+                        ${
+                            author.affiliation
+                                ? `<p class="text-sm text-gray-500 dark:text-gray-400 mt-1">${escapeHtml(author.affiliation)}</p>`
+                                : ''
+                        }
                     </div>
                 `;
             });
         } else {
-            previewHTML += `
-                <p class="text-gray-500 dark:text-gray-400 italic">No authors listed</p>
-            `;
+            authorsHTML = '<p class="text-gray-500 dark:text-gray-400 italic">No authors listed.</p>';
         }
-        
-        previewHTML += `
+
+        const pdfHTML = selAbstract.pdf_path
+            ? `
+                <div id="pdf-preview-container" class="border border-gray-300 dark:border-gray-600 rounded mt-3 bg-white dark:bg-gray-800" style="max-height: 500px; overflow-y: auto;">
+                    <div class="p-4 text-center">
+                        <div class="inline-flex items-center px-4 py-2 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
+                            <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <span class="text-blue-600 dark:text-blue-400">Loading PDF...</span>
+                        </div>
                     </div>
                 </div>
+            `
+            : '<p class="text-gray-500 dark:text-gray-400 italic p-4 text-center">No PDF uploaded for this abstract.</p>';
 
-                <!-- PDF Section -->
-                <div class="p-5">
-                    <div class="flex items-center mb-4">
-                        <div class="flex-shrink-0 h-10 w-10 rounded-full bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
+        const previewHTML = `
+            <div class="divide-y divide-gray-200 dark:divide-gray-700">
+                <section class="p-5 space-y-4">
+                    <header class="flex items-center gap-3">
+                        <div class="flex h-10 w-10 items-center justify-center rounded-full bg-purple-100 dark:bg-purple-900">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-purple-600 dark:text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h1a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Abstract Content</h3>
+                            <p class="text-sm text-gray-500 dark:text-gray-400">Main body of the abstract</p>
+                        </div>
+                    </header>
+                    <div class="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-600 dark:bg-gray-700">
+                        ${contentHTML}
+                    </div>
+                </section>
+
+                <section class="p-5 space-y-4">
+                    <header class="flex items-center gap-3">
+                        <div class="flex h-10 w-10 items-center justify-center rounded-full bg-green-100 dark:bg-green-900">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 0 11-4 0 2 2 0 014 0z" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Authors</h3>
+                            <p class="text-sm text-gray-500 dark:text-gray-400">List of contributing authors</p>
+                        </div>
+                    </header>
+                    <div class="ml-2 space-y-4">
+                        ${authorsHTML}
+                    </div>
+                </section>
+
+                <section class="p-5 space-y-4">
+                    <header class="flex items-center gap-3">
+                        <div class="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-900">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-600 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 17V7a2 2 0 012-2h6a2 2 0 012 2v10m-2 4h-4a2 2 0 01-2-2V7a2 2 0 012-2h4a2 2 0 012 2v10a2 2 0 01-2 2z" />
                             </svg>
                         </div>
-                        <div class="ml-4">
+                        <div>
                             <h3 class="text-lg font-semibold text-gray-900 dark:text-white">PDF Document</h3>
                             <p class="text-sm text-gray-500 dark:text-gray-400">Uploaded abstract PDF</p>
                         </div>
+                    </header>
                     <div class="ml-2">
-                        ${selAbstract.pdf_path ? `
-                            <div id="pdf-preview-container" class="border border-gray-300 dark:border-gray-600 rounded mt-3 bg-white dark:bg-gray-800" style="max-height: 500px; overflow-y: auto;">
-                                <div class="p-4 text-center">
-                                    <div class="inline-flex items-center px-4 py-2 bg-blue-50 dark:bg-blue-90/30 rounded-lg">
-                                        <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                        </svg>
-                                        <span class="text-blue-600 dark:text-blue-400">Loading PDF...</span>
-                                    </div>
-                                <!-- Canvases for PDF pages will be rendered here -->
-                            </div>
-                        ` : `<p class="text-gray-500 dark:text-gray-400 italic p-4 text-center">No PDF uploaded for this abstract.</p>`}
+                        ${pdfHTML}
                     </div>
-                
-                <!-- Review Phase Information -->
-                <div class="p-5">
-                    <div class="flex items-center mb-4">
-                        <div class="flex-shrink-0 h-10 w-10 rounded-full bg-purple-100 dark:bg-purple-900 flex items-center justify-center">
+                </section>
+
+                <section class="p-5 space-y-4">
+                    <header class="flex items-center gap-3">
+                        <div class="flex h-10 w-10 items-center justify-center rounded-full bg-purple-100 dark:bg-purple-900">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-purple-600 dark:text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 02 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                             </svg>
                         </div>
-                        <div class="ml-4">
+                        <div>
                             <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Review Information</h3>
                             <p class="text-sm text-gray-500 dark:text-gray-400">Current review phase and status</p>
                         </div>
-                    </div>
-                    
-                    <div class="ml-2 grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div class="p-4 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
+                    </header>
+                    <div class="ml-2 grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <div class="rounded-lg bg-blue-50 p-4 dark:bg-blue-900/30">
                             <p class="text-sm text-gray-600 dark:text-gray-300">Current Phase</p>
                             <p class="text-xl font-bold text-gray-900 dark:text-white">Phase ${selAbstract.review_phase || 1}</p>
                         </div>
-                        <div class="p-4 bg-green-50 dark:bg-green-900/30 rounded-lg">
+                        <div class="rounded-lg bg-green-50 p-4 dark:bg-green-900/30">
                             <p class="text-sm text-gray-600 dark:text-gray-300">Status</p>
                             <p class="text-xl font-bold text-gray-900 dark:text-white">${escapeHtml(selAbstract.status || 'PENDING')}</p>
                         </div>
                     </div>
-                </div>
+                </section>
             </div>
         `;
+
         previewContent.innerHTML = previewHTML;
-        // After rendering, if PDF exists, render preview using PDF.js
         if (selAbstract.pdf_path) {
             renderVerifierPdfPreview(selAbstract.id);
         }
     }
+
     
     // Render PDF preview for verifier using PDF.js
     function renderVerifierPdfPreview(abstractId) {

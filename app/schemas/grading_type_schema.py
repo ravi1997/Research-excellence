@@ -1,7 +1,12 @@
 from marshmallow import Schema, fields, validate
+from app.extensions import ma
+from app.models.Cycle import GradingType
 
-
-class GradingTypeSchema(Schema):
+class GradingTypeSchema(ma.SQLAlchemyAutoSchema):
+    class Meta:
+        model = GradingType
+        load_instance = True
+        include_fk = True
     id = fields.UUID(dump_only=True)
     criteria = fields.Str(required=True, validate=validate.Length(min=1, max=100))
     min_score = fields.Int(required=True)

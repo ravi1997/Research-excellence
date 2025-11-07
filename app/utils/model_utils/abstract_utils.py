@@ -225,22 +225,26 @@ def assign_verifier(
             ctx["verifier_id"],
             review_phase,
         )
-        # Check if verifier is already assigned to this specific phase
         from app.models.Cycle import AbstractVerifiers
-        existing_assignment = AbstractVerifiers.query.filter_by(
-            abstract_id=abstract.id,
-            user_id=verifier.id,
-            review_phase=review_phase
-        ).first()
-        
-        if not existing_assignment:
-            # Create a new assignment for the specific review phase
+        existing_assignment = (
+            AbstractVerifiers.query.filter_by(
+                abstract_id=abstract.id,
+                user_id=verifier.id,
+            )
+            .with_for_update(of=AbstractVerifiers)
+            .first()
+        )
+
+        if existing_assignment:
+            if existing_assignment.review_phase != review_phase:
+                existing_assignment.review_phase = review_phase
+                changed = True
+        else:
             assignment = AbstractVerifiers(
                 abstract_id=abstract.id,
                 user_id=verifier.id,
-                review_phase=review_phase
+                review_phase=review_phase,
             )
-            abstract.verifiers.append(verifier)
             db.session.add(assignment)
             changed = True
     if changed and commit:

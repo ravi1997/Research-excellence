@@ -194,6 +194,8 @@
     if (isAdmin) {
       const adminLinks = [
         { href: BASE + '/admin/dashboard', label: 'Dashboard' },
+        { href: BASE + '/admin/cycle-management', label: 'Manage Cycles' },
+        { href: BASE + '/admin/super/users', label: 'Manage Users' },
         { href: BASE + '/admin/unverified', label: 'Verify Users' },
         { href: BASE + '/admin/add-verifier', label: 'Add Verifier' }
       ];

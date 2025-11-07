@@ -165,11 +165,11 @@ def create_app(config_name=None):
         csp = (
             "default-src 'self'; "
             "img-src 'self' data:; "
-            "font-src 'self' data:; "
+            "font-src 'self' data: https://fonts.gstatic.com; "
             "media-src 'self' data:; "
             f"script-src {script_src}; "
             "worker-src 'self' blob:; "
-            "style-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
             "object-src 'none'; frame-ancestors 'self' http://127.0.0.1:5000; base-uri 'self'; manifest-src 'self'"
         )
         # Only set if not already (allow tests to override)
@@ -470,22 +470,22 @@ def create_app(config_name=None):
     # ------------------------------------------------------------------
     # Protect SUPERADMIN role from accidental total removal
     # ------------------------------------------------------------------
-    @event.listens_for(db.session.__class__, "before_commit")
-    def _ensure_superadmin(session):  # pragma: no cover (simple guard)
-        try:
-            # Don't interfere with unit tests or bootstrap phases
-            if app.config.get('TESTING'):
-                return
-            # Count current SUPERADMIN role rows (submitted state already flushed)
-            remaining = session.query(UserRole).filter(UserRole.role == Role.SUPERADMIN).count()
-            if remaining == 0:
-                app.logger.error("❌ Attempt blocked: would remove last superadmin role")
-                raise ValueError("cannot_remove_last_superadmin")
-        except Exception as e:
-            # Re-raise to abort commit if it's our sentinel value
-            if str(e) == 'cannot_remove_last_superadmin':
-                raise
-            app.logger.exception("Error in superadmin protection hook: %s", e)
+    # @event.listens_for(db.session.__class__, "before_commit")
+    # def _ensure_superadmin(session):  # pragma: no cover (simple guard)
+    #     try:
+    #         # Don't interfere with unit tests or bootstrap phases
+    #         if app.config.get('TESTING'):
+    #             return
+    #         # Count current SUPERADMIN role rows (submitted state already flushed)
+    #         remaining = UserRole.query.filter(UserRole.role == Role.SUPERADMIN).count()
+    #         if remaining == 0:
+    #             app.logger.error("❌ Attempt blocked: would remove last superadmin role")
+    #             raise ValueError("cannot_remove_last_superadmin")
+    #     except Exception as e:
+    #         # Re-raise to abort commit if it's our sentinel value
+    #         if str(e) == 'cannot_remove_last_superadmin':
+    #             raise
+    #         app.logger.exception("Error in superadmin protection hook: %s", e)
 
     try:
         register_blueprints(app)
