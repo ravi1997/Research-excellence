@@ -1,3 +1,4 @@
+import os
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
@@ -572,7 +573,7 @@ def get_abstract_pdf(abstract_id):
             ip_address=request.remote_addr
         )
         abort(404, description="PDF file not found.")
-    except Exception:
+    except Exception as exc:
         current_app.logger.exception("Error sending PDF file")
         error_msg = f"System error occurred while accessing PDF: {str(exc)}"
         log_audit_event(
@@ -1470,7 +1471,7 @@ def bulk_unassign_verifiers():
                 details={"error": error_msg, "provided_fields": list(data.keys()) if data else []},
                 ip_address=request.remote_addr
             )
-            return jsonify({"error": error_msg}), 40
+            return jsonify({"error": error_msg}), 400
 
         abstract_ids = [str(abstract_id) for abstract_id in abstract_ids]
         user_ids = [str(user_id) for user_id in user_ids]
@@ -1628,7 +1629,7 @@ def accept_abstract(abstract_id):
                 },
                 ip_address=request.remote_addr
             )
-            return jsonify({"error": error_msg}), 40
+            return jsonify({"error": error_msg}), 400
 
         # Update the status to ACCEPTED
         abstract_utils.update_abstract(
@@ -1661,7 +1662,7 @@ def accept_abstract(abstract_id):
             details={"error": error_msg, "abstract_id": abstract_id if abstract else abstract_id, "exception_type": type(exc).__name__, "exception_message": str(exc)},
             ip_address=request.remote_addr
         )
-        return jsonify({"error": error_msg}), 40
+        return jsonify({"error": error_msg}), 400
 
 
 # New endpoint to reject an abstract
@@ -1752,10 +1753,9 @@ def reject_abstract(abstract_id):
             details={"error": error_msg, "abstract_id": abstract_id if abstract else abstract_id, "exception_type": type(exc).__name__, "exception_message": str(exc)},
             ip_address=request.remote_addr
         )
-        return jsonify({"error": error_msg}), 40
+        return jsonify({"error": error_msg}), 400
 
 
-# Function to create Excel export of all abstracts
 def create_abstracts_excel(abstracts):
     """Create an Excel workbook with all abstracts data"""
     wb = openpyxl.Workbook()
@@ -1767,7 +1767,7 @@ def create_abstracts_excel(abstracts):
         "ID", "Abstract Number", "Title", "Category", "Content", "Status", 
         "Created By", "Created At", "Updated At", "PDF Path", 
         "Review Phase", "Cycle Name", "Cycle Start Date", "Cycle End Date", 
-        "Authors", "Author Emails", "Affiliations", "Presenter", "Corresponding",
+        "Authors", "Author Emails", "Affiliations", "Presenter", "Corresponding"
     ]
     
     # Add headers to worksheet
@@ -1783,15 +1783,8 @@ def create_abstracts_excel(abstracts):
         affiliations_list = [author.affiliation for author in abstract.authors] if abstract.authors else []
         is_presenter_list = [author.name for author in abstract.authors if author.is_presenter] if abstract.authors else []
         is_corresponding_list = [author.name for author in abstract.authors if author.is_corresponding] if abstract.authors else []
+        
 
-        # Get verifier information
-        verifiers_list = [verifier.username for verifier in abstract.verifiers] if abstract.verifiers else []
-        verifier_emails_list = [verifier.email for verifier in abstract.verifiers] if abstract.verifiers else []
-        
-        # Get coordinator information
-        coordinators_list = [coordinator.username for coordinator in abstract.coordinators] if abstract.coordinators else []
-        coordinator_emails_list = [coordinator.email for coordinator in abstract.coordinators] if abstract.coordinators else []
-        
         # Get creator name
         creator_name = abstract.created_by.username if abstract.created_by_id else "N/A"
         
@@ -1823,7 +1816,7 @@ def create_abstracts_excel(abstracts):
             "; ".join(str(e) for e in author_emails_list if e),
             "; ".join(str(e) for e in affiliations_list if e),
             "; ".join(str(e) for e in is_presenter_list if e),
-            "; ".join(str(e) for e in is_corresponding_list if e),
+            "; ".join(str(e) for e in is_corresponding_list if e)
         ]
         
         for col_num, value in enumerate(row_data, 1):
@@ -1897,6 +1890,226 @@ def export_abstracts_excel():
         error_msg = f"System error occurred while exporting abstracts to Excel: {str(exc)}"
         log_audit_event(
             event_type="abstract.excel.export.failed",
+            user_id=actor_id,
+            details={"error": error_msg, "exception_type": type(exc).__name__, "exception_message": str(exc)},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 400
+
+
+@research_bp.route('/abstracts/export-pdf-zip', methods=['GET'])
+@jwt_required()
+@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
+def export_abstracts_pdf_zip():
+    """Export all abstract PDFs in a ZIP file organized by category, including an Excel summary."""
+    actor_id, context = _resolve_actor_context("export_abstracts_pdf_zip")
+    try:
+        import zipfile
+        import shutil
+        from io import BytesIO
+        import tempfile
+        
+        # Get all abstracts with related data
+        abstracts = abstract_utils.list_abstracts(
+            actor_id=actor_id,
+            context=context
+        )
+        
+        # Base path where PDF files are stored
+        base_path = current_app.config.get("UPLOAD_FOLDER", "uploads")
+        
+        # Create a temporary directory to organize files
+        temp_dir = tempfile.mkdtemp()
+        
+        # Organize abstracts by category
+        categories = {}
+        for abstract in abstracts:
+            if abstract.pdf_path and abstract.category:
+                category_name = abstract.category.name
+                if category_name not in categories:
+                    categories[category_name] = []
+                categories[category_name].append(abstract)
+        
+        # Create subdirectories for each category and copy PDF files
+        for category_name, abstract_list in categories.items():
+            category_dir = os.path.join(temp_dir, category_name)
+            os.makedirs(category_dir, exist_ok=True)
+            
+            for abstract in abstract_list:
+                if abstract.pdf_path:
+                    # Construct the full path from the base path
+                    full_pdf_path = os.path.join(base_path, os.path.basename(abstract.pdf_path))
+                    
+                    # Verify the file exists before copying
+                    if os.path.exists(full_pdf_path):
+                        # Get the original filename
+                        original_filename = os.path.basename(full_pdf_path)
+                        # Create new filename with abstract ID to avoid conflicts
+                        new_filename = f"{abstract.id.hex}_{original_filename}"
+                        destination_path = os.path.join(category_dir, new_filename)
+                        
+                        # Copy the PDF file to the category folder
+                        shutil.copy2(full_pdf_path, destination_path)
+                    else:
+                        current_app.logger.warning(f"PDF file not found at path: {full_pdf_path}")
+        
+        # Generate Excel file with all abstracts data using the existing function
+        excel_wb = create_abstracts_excel(abstracts)
+        
+        # Save the Excel file to the temporary directory root
+        excel_path = os.path.join(temp_dir, f"abstracts_summary_{uuid.uuid4().hex[:8]}.xlsx")
+        excel_wb.save(excel_path)
+        
+        # Create a ZIP file from the organized directory structure
+        zip_buffer = BytesIO()
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            for root, dirs, files in os.walk(temp_dir):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    # Calculate the archive name (path inside the ZIP)
+                    archive_name = os.path.relpath(file_path, temp_dir)
+                    zip_file.write(file_path, archive_name)
+        
+        # Clean up the temporary directory
+        shutil.rmtree(temp_dir)
+        
+        # Prepare the ZIP file for download
+        zip_buffer.seek(0)
+        
+        # Log successful export
+        log_audit_event(
+            event_type="abstract.pdf.excel.zip.export.success",
+            user_id=actor_id,
+            details={
+                "exported_count": len(abstracts),
+                "categories_count": len(categories),
+                "categories": list(categories.keys())
+            },
+            ip_address=request.remote_addr
+        )
+        
+        # Send the ZIP file to the user
+        return send_file(
+            zip_buffer,
+            as_attachment=True,
+            download_name=f"abstracts_pdfs_with_excel_{uuid.uuid4().hex[:8]}.zip",
+            mimetype='application/zip'
+        )
+        
+    except Exception as exc:
+        current_app.logger.exception("Error exporting abstracts PDFs to ZIP")
+        error_msg = f"System error occurred while exporting abstracts PDFs to ZIP: {str(exc)}"
+        log_audit_event(
+            event_type="abstract.pdf.excel.zip.export.failed",
+            user_id=actor_id,
+            details={"error": error_msg, "exception_type": type(exc).__name__, "exception_message": str(exc)},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 400
+@research_bp.route('/abstracts/export-with-pdfs', methods=['GET'])
+@jwt_required()
+@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
+def export_abstracts_with_pdfs():
+    """Export all abstracts with PDFs organized by category in a ZIP file, including an Excel summary."""
+    actor_id, context = _resolve_actor_context("export_abstracts_with_pdfs")
+    try:
+        import zipfile
+        import shutil
+        from io import BytesIO
+        import tempfile
+        
+        # Get all abstracts with related data
+        abstracts = abstract_utils.list_abstracts(
+            actor_id=actor_id,
+            context=context
+        )
+        
+        # Base path where PDF files are stored
+        base_path = current_app.config.get("UPLOAD_FOLDER", "uploads")
+        
+        # Create a temporary directory to organize files
+        temp_dir = tempfile.mkdtemp()
+        
+        # Organize abstracts by category
+        categories = {}
+        for abstract in abstracts:
+            if abstract.pdf_path and abstract.category:
+                category_name = abstract.category.name
+                if category_name not in categories:
+                    categories[category_name] = []
+                categories[category_name].append(abstract)
+        
+        # Create subdirectories for each category and copy PDF files
+        for category_name, abstract_list in categories.items():
+            category_dir = os.path.join(temp_dir, category_name)
+            os.makedirs(category_dir, exist_ok=True)
+            
+            for abstract in abstract_list:
+                if abstract.pdf_path:
+                    # Construct the full path from the base path
+                    full_pdf_path = os.path.join(base_path, os.path.basename(abstract.pdf_path))
+                    
+                    # Verify the file exists before copying
+                    if os.path.exists(full_pdf_path):
+                        # Get the original filename
+                        original_filename = os.path.basename(full_pdf_path)
+                        # Create new filename with abstract ID to avoid conflicts
+                        new_filename = f"{abstract.id.hex}_{original_filename}"
+                        destination_path = os.path.join(category_dir, new_filename)
+                        
+                        # Copy the PDF file to the category folder
+                        shutil.copy2(full_pdf_path, destination_path)
+                    else:
+                        current_app.logger.warning(f"PDF file not found at path: {full_pdf_path}")
+        
+        # Generate Excel file with all abstracts data using the existing function
+        excel_wb = create_abstracts_excel(abstracts)
+        
+        # Save the Excel file to the temporary directory root
+        excel_path = os.path.join(temp_dir, f"abstracts_summary_{uuid.uuid4().hex[:8]}.xlsx")
+        excel_wb.save(excel_path)
+        
+        # Create a ZIP file from the organized directory structure
+        zip_buffer = BytesIO()
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            for root, dirs, files in os.walk(temp_dir):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    # Calculate the archive name (path inside the ZIP)
+                    archive_name = os.path.relpath(file_path, temp_dir)
+                    zip_file.write(file_path, archive_name)
+        
+        # Clean up the temporary directory
+        shutil.rmtree(temp_dir)
+        
+        # Prepare the ZIP file for download
+        zip_buffer.seek(0)
+        
+        # Log successful export
+        log_audit_event(
+            event_type="abstract.pdf.excel.zip.export.success",
+            user_id=actor_id,
+            details={
+                "exported_count": len(abstracts),
+                "categories_count": len(categories),
+                "categories": list(categories.keys())
+            },
+            ip_address=request.remote_addr
+        )
+        
+        # Send the ZIP file to the user
+        return send_file(
+            zip_buffer,
+            as_attachment=True,
+            download_name=f"abstracts_pdfs_with_excel_{uuid.uuid4().hex[:8]}.zip",
+            mimetype='application/zip'
+        )
+        
+    except Exception as exc:
+        current_app.logger.exception("Error exporting abstracts with PDFs to ZIP")
+        error_msg = f"System error occurred while exporting abstracts with PDFs to ZIP: {str(exc)}"
+        log_audit_event(
+            event_type="abstract.pdf.excel.zip.export.failed",
             user_id=actor_id,
             details={"error": error_msg, "exception_type": type(exc).__name__, "exception_message": str(exc)},
             ip_address=request.remote_addr

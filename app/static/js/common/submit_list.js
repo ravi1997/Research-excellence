@@ -245,6 +245,8 @@
             if (o.statsEl && !o.pageInfoEl) o.statsEl.textContent = `${s.total} item(s)`;
         }
 
+        
+
         _updateMeta(meta, base) {
             const o = this.o;
             const total = base.total ?? meta.total;
