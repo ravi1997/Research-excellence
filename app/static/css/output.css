@@ -84,6 +84,10 @@
     --color-purple-700: oklch(49.6% 0.265 301.924);
     --color-purple-800: oklch(43.8% 0.218 303.724);
     --color-purple-900: oklch(38.1% 0.176 304.987);
+    --color-slate-100: oklch(96.8% 0.007 247.896);
+    --color-slate-200: oklch(92.9% 0.013 255.508);
+    --color-slate-800: oklch(27.9% 0.041 260.031);
+    --color-slate-900: oklch(20.8% 0.042 265.755);
     --color-gray-50: oklch(98.5% 0.002 247.839);
     --color-gray-100: oklch(96.7% 0.003 264.542);
     --color-gray-200: oklch(92.8% 0.006 264.531);
@@ -1237,6 +1241,9 @@
   .border-red-500 {
     border-color: var(--color-red-500);
   }
+  .border-slate-200 {
+    border-color: var(--color-slate-200);
+  }
   .border-transparent {
     border-color: transparent;
   }
@@ -2135,6 +2142,9 @@
   }
   .text-red-800 {
     color: var(--color-red-800);
+  }
+  .text-slate-900 {
+    color: var(--color-slate-900);
   }
   .text-transparent {
     color: transparent;
@@ -3384,6 +3394,11 @@
       border-color: var(--color-red-800);
     }
   }
+  .dark\:border-slate-800 {
+    @media (prefers-color-scheme: dark) {
+      border-color: var(--color-slate-800);
+    }
+  }
   .dark\:bg-\[color\:var\(--brand-500\)\] {
     @media (prefers-color-scheme: dark) {
       background-color: var(--brand-500);
@@ -4021,6 +4036,11 @@
   .dark\:text-red-400 {
     @media (prefers-color-scheme: dark) {
       color: var(--color-red-400);
+    }
+  }
+  .dark\:text-slate-100 {
+    @media (prefers-color-scheme: dark) {
+      color: var(--color-slate-100);
     }
   }
   .dark\:text-teal-200 {

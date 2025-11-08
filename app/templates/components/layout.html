@@ -8,6 +8,18 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate, max-age=0" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
+    {# frame-ancestors must be sent via HTTP headers; keep upgrade-insecure-requests only here #}
+    <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests" />
+
+    {% block meta_description %}
+    <meta name="description"
+        content="Research Excellence portal for managing submissions, reviewers, and verification workflows." />
+    {% endblock %}
+    {% if request %}
+    <link rel="canonical" href="{{ request.base_url }}" />
+    {% endif %}
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
 
     <title>{% block title %}Research Section Submission{% endblock %}</title>
 
@@ -20,20 +32,55 @@
     <!-- Consolidated theme + component styles (new) -->
     <link href="{{ url_for('static', filename='css/theme.css') }}" rel="stylesheet" />
 
+    <!-- Small accessibility/performance fixes surfaced by Lighthouse -->
+    <style>
+        button.seg {
+            min-width: 44px;
+            min-height: 44px;
+            padding: 0.4rem 0.85rem;
+        }
+        button.seg.bg-blue-400,
+        button.seg.bg-blue-500,
+        button.seg.bg-amber-400,
+        button.seg.bg-amber-600 {
+            color: #0f172a;
+            font-weight: 600;
+        }
+        html.dark button.seg.bg-blue-400,
+        html.dark button.seg.bg-blue-500,
+        html.dark button.seg.bg-amber-400,
+        html.dark button.seg.bg-amber-600 {
+            color: #050810;
+        }
+        body.dark {
+            color: #f8fafc;
+            background-color: var(--bg);
+        }
+        #mainHeader.navbar {
+            background-color: color-mix(in oklab, var(--bg-elev) 95%, transparent);
+            color: var(--text);
+        }
+        #mainHeader.navbar .brand,
+        #mainHeader.navbar .brand-title {
+            color: inherit;
+        }
+    </style>
+
     {% block head_extra %}{% endblock %}
 </head>
 
 <!-- The theme will be applied via classes on both <html> and <body> by layout.js -->
 
-<body class="min-h-screen flex flex-col">
+<body class="min-h-screen flex flex-col text-slate-900 dark:text-slate-100">
 
     <!-- Header / Navbar -->
-    <header id="mainHeader" class="navbar shadow-md sticky top-0 z-50">
+    <header id="mainHeader"
+        class="navbar shadow-md sticky top-0 z-50 border-b border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100">
         <div class="container">
             <!-- Left: Brand -->
 
 
-            <a href="/" class="brand">
+            <a href="/" class="brand text-slate-900 dark:text-slate-100">
             <div id="brandLogo" class="mr-4 h-10 w-10 text-blue-900 dark:text-teal-200">
                 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" class="h-12" x="0px" y="0px"
                     viewBox="0 0 930.41 965.29" xml:space="preserve">
@@ -904,7 +951,7 @@
             </div>
 
 
-                <span class="brand-title text-blue-900 dark:text-blue-300 ">Research Submission Portal</span>
+                <span class="brand-title font-semibold tracking-tight">Research Submission Portal</span>
             </a>
             <div class="nav-center"></div>
 
@@ -948,7 +995,7 @@
     </footer>
 
     <!-- Scripts -->
-    <script src="{{ url_for('static', filename='js/common/layout.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/common/layout.js') }}" defer></script>
     <div id="toastHost" class="fixed top-4 right-4 z-[1000] space-y-2 pointer-events-none"></div>
 
 

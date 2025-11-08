@@ -163,6 +163,9 @@
                 checkbox.className = 'bulkChk accent-[color:var(--brand-600)] rounded h-4 w-4 mt-1 shrink-0';
                 checkbox.dataset.id = it.id;
                 checkbox.checked = selected;
+                const abstractLabel = `Select abstract ${it.title || `#${it.abstract_number || it.id}`}`;
+                checkbox.setAttribute('aria-label', abstractLabel);
+                checkbox.setAttribute('title', abstractLabel);
 
                 const textCol = document.createElement('div');
                 textCol.className = 'min-w-0';
@@ -238,6 +241,9 @@
                 radio.className = 'verifierPick accent-[color:var(--brand-600)] h-4 w-4 mt-1 shrink-0';
                 radio.dataset.id = it.id;
                 radio.checked = !!(selVerifier && selVerifier.id === it.id);
+                const verifierLabel = `Select verifier ${it.username || it.email || it.id}`;
+                radio.setAttribute('aria-label', verifierLabel);
+                radio.setAttribute('title', verifierLabel);
 
                 const textCol = document.createElement('div');
                 textCol.className = 'flex flex-col min-w-0';

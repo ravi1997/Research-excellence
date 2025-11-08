@@ -8,9 +8,12 @@
 (() => {
   // ------------------ Theme ------------------
   const BASE = '';
+  const LOCAL_HTTP_HOSTS = new Set(["localhost", "127.0.0.1", "0.0.0.0"]);
   const THEME_KEY = "ui.theme"; // "light" | "dark"
   const htmlEl = document.documentElement;
   const bodyEl = document.body;
+
+  enforceHttps();
 
   const getSystemPrefersDark = () =>
     window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -75,6 +78,21 @@
     localStorage.setItem(THEME_KEY, next);
     applyTheme(next);
   }
+
+  function enforceHttps() {
+    if (typeof window === "undefined" || !window.location) return;
+    if (window.location.protocol !== "http:") return;
+    const host = window.location.hostname || "";
+    const isLocal = LOCAL_HTTP_HOSTS.has(host) || host.endsWith(".local");
+    if (isLocal) return;
+    const next = `https://${window.location.host}${window.location.pathname}${window.location.search}${window.location.hash}`;
+    try {
+      window.location.replace(next);
+    } catch {
+      window.location.href = next;
+    }
+  }
+
   function safeParse(json) {
     try { return JSON.parse(json); } catch { return null; }
   }
@@ -111,25 +129,28 @@
     if (!user) {
       const token = localStorage.getItem("token");
       if (token) {
+        let meResp;
         try {
-          const me = await fetch(BASE + "/api/v1/auth/me", {
+          meResp = await fetch(BASE + "/api/v1/auth/me", {
             headers: {
               "Accept": "application/json",
               "Authorization": `Bearer ${token}`,
             },
           });
-          if (me.ok) {
-            const data = await me.json();
+        } catch (err) {
+          console.warn('Failed to reach /api/v1/auth/me', err);
+        }
+        if (meResp) {
+          if (meResp.ok) {
+            const data = await meResp.json();
             const u = data.logged_in_as || data.user || data;
             if (u) {
               localStorage.setItem("user", JSON.stringify(u));
               user = toDisplayUser(u);
             }
-          } else if (me.status === 401 || me.status === 403) {
-            handleAuthFailure(me);
+          } else if (meResp.status === 401 || meResp.status === 403) {
+            handleAuthFailure(meResp);
           }
-        } catch {
-          handleAuthFailure(me);
         }
       }
     }
@@ -591,11 +612,24 @@
       });
   }
 
+  function enforceFrameGuard() {
+    if (typeof window === "undefined") return;
+    if (window.top === window.self) return;
+    const allow = document.body && document.body.hasAttribute('data-allow-embed');
+    if (allow) return;
+    try {
+      window.top.location = window.self.location;
+    } catch {
+      window.self.location = window.self.location;
+    }
+  }
+
   // ------------------ Init ------------------
   function init() {
     initTheme();
     renderAuthArea();
     enforceAccessControls();
+    enforceFrameGuard();
 
     // Theme toggle click
     const themeBtn = document.getElementById("themeToggle");

@@ -1,4 +1,8 @@
 {% extends 'components/layout.html' %}
+{% block meta_description %}
+<meta name="description"
+    content="Assign research abstracts to verifiers, manage filters, and control reviewer workloads in the admin console." />
+{% endblock %}
 {% block title %}Assign Verifiers · Admin{% endblock %}
 {% block content %}
 <section class="mb-8">
@@ -187,11 +191,13 @@
             class="p-5 pb-4 space-y-4 border-b border-(--border)/60 bg-linear-to-br from-purple-50 to-purple-100 dark:from-purple-900 dark:to-purple-800 sticky top-0 z-20 backdrop-blur supports-backdrop-filter:bg-purple-50/85 dark:supports-backdrop-filter:bg-purple-900/85">
             <div class="flex gap-4 w-full">
                 <div class="relative flex-1">
+                    <label for="verifierSearch" class="sr-only">Search verifiers</label>
                     <input id="verifierSearch" placeholder="Search verifiers by name or email"
-                        class="input pl-10 w-full focus:ring-2 focus:ring-purple-500" />
+                        class="input pl-10 w-full focus:ring-2 focus:ring-purple-500" aria-label="Search verifiers" />
                 </div>
-                <button id="verifierSearchBtn" class="btn btn-primary text-sm shrink-0 px-5 shadow">
-                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <button id="verifierSearchBtn" class="btn btn-primary text-sm shrink-0 px-5 shadow"
+                    aria-label="Search verifiers">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                     </svg>
