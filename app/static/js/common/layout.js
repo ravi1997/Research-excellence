@@ -150,6 +150,7 @@
   const isUploader = roles.includes('uploader') || roles.includes('admin') || isSuper;
   const isAdmin = roles.includes('admin') || isSuper;
   const isVerifier = roles.includes('verifier') || isAdmin || isSuper;
+  const isCordinator = roles.includes('coordinator') || isAdmin || isSuper;
 
     // Grouped links for automatic divider insertion between sections
   const groups = [
@@ -167,7 +168,7 @@
     ].filter(Boolean);
 
     const linksHtml = groups
-      .map(g => g.map(l => `<a class="block px-3 py-2 rounded hover:bg-[color:var(--brand-50)] no-underline" href="${escapeAttr(l.href)}">${escapeHtml(l.label)}</a>`).join(''))
+      .map(g => g.map(l => `<a class="block px-3 py-2 rounded hover:bg-(--brand-50) no-underline" href="${escapeAttr(l.href)}">${escapeHtml(l.label)}</a>`).join(''))
       .join('<hr class="hr" />');
 
 
@@ -176,18 +177,34 @@
       const verifierLinks = [
         { href: BASE + '/admin/dashboard', label: 'Dashboard' },
       ];
-      const verifierLinksHtml = verifierLinks.map(l => `<a class="block px-3 py-2 rounded hover:bg-[color:var(--brand-50)] no-underline" href="${escapeAttr(l.href)}">${escapeHtml(l.label)}</a>`).join('');
+      const verifierLinksHtml = verifierLinks.map(l => `<a class="block px-3 py-2 rounded hover:bg-(--brand-50) no-underline" href="${escapeAttr(l.href)}">${escapeHtml(l.label)}</a>`).join('');
       verifierSection = `
         <hr class="hr" />
         <div class="mt-1">
-          <button id="verifierMenuToggle" class="w-full flex items-center justify-between px-3 py-2 rounded hover:bg-[color:var(--brand-50)] text-sm font-semibold" aria-expanded="false" aria-controls="verifierMenuPanel">
+          <button id="verifierMenuToggle" class="w-full flex items-center justify-between px-3 py-2 rounded hover:bg-(--brand-50) text-sm font-semibold" aria-expanded="false" aria-controls="verifierMenuPanel">
             <span>Verifier</span>
             <span id="verifierChevron" class="transition-transform text-xs">▸</span>
           </button>
-          <div id="verifierMenuPanel" class="hidden pt-1 border-l border-[color:var(--border)] ml-2 pl-2 space-y-1" role="group">${verifierLinksHtml}</div>
+          <div id="verifierMenuPanel" class="hidden pt-1 border-l border-(--border) ml-2 pl-2 space-y-1" role="group">${verifierLinksHtml}</div>
         </div>`;
     }
 
+    let cordinatorSection = '';
+    if (isCordinator) {
+      const cordinatorLinks = [
+        { href: BASE + '/admin/add-verifier', label: 'Add Abstract Verifier' },
+      ];
+      const cordinatorLinksHtml = cordinatorLinks.map(l => `<a class="block px-3 py-2 rounded hover:bg-(--brand-50) no-underline" href="${escapeAttr(l.href)}">${escapeHtml(l.label)}</a>`).join('');
+      cordinatorSection = `
+        <hr class="hr" />
+        <div class="mt-1">
+          <button id="cordinatorMenuToggle" class="w-full flex items-center justify-between px-3 py-2 rounded hover:bg-(--brand-50) text-sm font-semibold" aria-expanded="false" aria-controls="cordinatorMenuPanel">
+            <span>Coordinator</span>
+            <span id="cordinatorChevron" class="transition-transform text-xs">▸</span>
+          </button>
+          <div id="cordinatorMenuPanel" class="hidden pt-1 border-l border-(--border) ml-2 pl-2 space-y-1" role="group">${cordinatorLinksHtml}</div>
+        </div>`;
+    }
 
     // Build admin section (no nested superadmin now)
     let adminSection = '';
@@ -197,17 +214,16 @@
         { href: BASE + '/admin/cycle-management', label: 'Manage Cycles' },
         { href: BASE + '/admin/super/users', label: 'Manage Users' },
         { href: BASE + '/admin/unverified', label: 'Verify Users' },
-        { href: BASE + '/admin/add-verifier', label: 'Add Verifier' }
       ];
-      const adminLinksHtml = adminLinks.map(l => `<a class="block px-3 py-2 rounded hover:bg-[color:var(--brand-50)] no-underline" href="${escapeAttr(l.href)}">${escapeHtml(l.label)}</a>`).join('');
+      const adminLinksHtml = adminLinks.map(l => `<a class="block px-3 py-2 rounded hover:bg-(--brand-50) no-underline" href="${escapeAttr(l.href)}">${escapeHtml(l.label)}</a>`).join('');
       adminSection = `
         <hr class="hr" />
         <div class="mt-1">
-          <button id="adminMenuToggle" class="w-full flex items-center justify-between px-3 py-2 rounded hover:bg-[color:var(--brand-50)] text-sm font-semibold" aria-expanded="false" aria-controls="adminMenuPanel">
+          <button id="adminMenuToggle" class="w-full flex items-center justify-between px-3 py-2 rounded hover:bg-(--brand-50) text-sm font-semibold" aria-expanded="false" aria-controls="adminMenuPanel">
             <span>Admin</span>
             <span id="adminChevron" class="transition-transform text-xs">▸</span>
           </button>
-          <div id="adminMenuPanel" class="hidden pt-1 border-l border-[color:var(--border)] ml-2 pl-2 space-y-1" role="group">${adminLinksHtml}</div>
+          <div id="adminMenuPanel" class="hidden pt-1 border-l border-(--border) ml-2 pl-2 space-y-1" role="group">${adminLinksHtml}</div>
         </div>`;
     }
 
@@ -220,15 +236,15 @@
         { href: BASE + '/admin/super/roles', label: 'Roles' },
         { href: BASE + '/admin/super/audit', label: 'Audit Logs' },
       ];
-      const superLinksHtml = superLinks.map(l => `<a class="block px-3 py-2 rounded hover:bg-[color:var(--brand-50)] no-underline text-sm" href="${escapeAttr(l.href)}">${escapeHtml(l.label)}</a>`).join('');
+      const superLinksHtml = superLinks.map(l => `<a class="block px-3 py-2 rounded hover:bg-(--brand-50) no-underline text-sm" href="${escapeAttr(l.href)}">${escapeHtml(l.label)}</a>`).join('');
       superSection = `
         <hr class="hr" />
         <div class="mt-1">
-          <button id="superMenuToggle" class="w-full flex items-center justify-between px-3 py-2 rounded hover:bg-[color:var(--brand-50)] text-sm font-semibold bg-[color:var(--surface-alt)]" aria-expanded="false" aria-controls="superMenuPanel">
+          <button id="superMenuToggle" class="w-full flex items-center justify-between px-3 py-2 rounded hover:bg-(--brand-50) text-sm font-semibold bg-(--surface-alt)" aria-expanded="false" aria-controls="superMenuPanel">
             <span>Superadmin</span>
             <span id="superChevron" class="transition-transform text-xs">▸</span>
           </button>
-          <div id="superMenuPanel" class="hidden pt-1 border-l border-[color:var(--border)] ml-2 pl-2 space-y-1" role="group">${superLinksHtml}</div>
+          <div id="superMenuPanel" class="hidden pt-1 border-l border-(--border) ml-2 pl-2 space-y-1" role="group">${superLinksHtml}</div>
         </div>`;
     }
 
@@ -238,17 +254,18 @@
           <span class="sm:inline">${safeName}</span>
         </button>
         <div id="userMenu" class="hidden absolute right-0 mt-2 w-60 card group-hover:block" role="menu" aria-labelledby="userBtn">
-          <a href="${BASE}/profile" class="block px-3 py-2 rounded hover:bg-[color:var(--brand-50)] no-underline" role="menuitem">
+          <a href="${BASE}/profile" class="block px-3 py-2 rounded hover:bg-(--brand-50) no-underline" role="menuitem">
             <div class="text-sm font-semibold">${safeName}</div>
             <div class="text-xs muted truncate">${escapeHtml(user.email || "")}</div>
           </a>
           <hr class="hr" />
           ${linksHtml}
           ${verifierSection}
+          ${cordinatorSection}
           ${adminSection}
           ${superSection}
           <hr class="hr" />
-          <button class="block w-full text-left px-3 py-2 rounded text-[color:var(--danger)] hover:bg-[color:var(--brand-50)]" id="logoutBtn">Logout</button>
+          <button class="block w-full text-left px-3 py-2 rounded text-(--danger) hover:bg-(--brand-50)" id="logoutBtn">Logout</button>
         </div>
       </div>
     `;
@@ -311,6 +328,24 @@
       });
     }
 
+    const cordinatorToggle = document.getElementById('cordinatorMenuToggle');
+    const cordinatorPanel = document.getElementById('cordinatorMenuPanel');
+    const cordinatorChevron = document.getElementById('cordinatorChevron');
+    if (cordinatorToggle && cordinatorPanel) {
+      cordinatorToggle.addEventListener('click', (e) => {
+        e.preventDefault();
+        const open = !cordinatorPanel.classList.contains('hidden');
+        if (open) {
+          cordinatorPanel.classList.add('hidden');
+          cordinatorToggle.setAttribute('aria-expanded', 'false');
+          if (cordinatorChevron) cordinatorChevron.style.transform = 'rotate(0deg)';
+        } else {
+          cordinatorPanel.classList.remove('hidden');
+          cordinatorToggle.setAttribute('aria-expanded', 'true');
+          if (cordinatorChevron) cordinatorChevron.style.transform = 'rotate(90deg)';
+        }
+      });
+    }
 
     // Admin submenu toggle
     const adminToggle = document.getElementById('adminMenuToggle');

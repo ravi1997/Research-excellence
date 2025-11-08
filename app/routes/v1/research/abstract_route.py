@@ -1707,7 +1707,7 @@ def reject_abstract(abstract_id):
         # Allow if user is admin, superadmin, or a coordinator for this abstract
         privileged = any(
             user.has_role(role)
-            for role in (Role.ADMIN.value, Role.SUPERADMIN.value)
+            for role in (Role.COORDINATOR.value,Role.ADMIN.value, Role.SUPERADMIN.value)
         )
         
         if not privileged and not any(coordinator.id == actor_id for coordinator in abstract.coordinators):

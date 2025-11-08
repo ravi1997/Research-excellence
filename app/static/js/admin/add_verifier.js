@@ -424,7 +424,7 @@
                 const left = document.createElement('div');
                 left.className = 'min-w-0';
                 left.innerHTML = `
-        <div class="font-medium break-words">${au.name || 'Unnamed'}</div>
+        <div class="font-medium wrap-break-word">${au.name || 'Unnamed'}</div>
         <div class="text-[12px] muted break-all">${au.email || 'No email'}${au.affiliation ? ' • ' + au.affiliation : ''}</div>
       `;
                 const right = document.createElement('div');
@@ -463,7 +463,7 @@
                 const left = document.createElement('div');
                 left.className = 'min-w-0';
                 left.innerHTML = `
-        <div class="font-medium break-words">${v.username || '—'}</div>
+        <div class="font-medium wrap-break-word">${v.username || '—'}</div>
         <div class="text-[12px] muted break-all">${v.email || 'No email'}${v.mobile ? ' • ' + v.mobile : ''}</div>
       `;
                 li.appendChild(left);
@@ -471,6 +471,43 @@
             });
             vList.appendChild(frag);
         }
+        const rejectBtn = $('rejectAbstractBtn');
+        if ((verifiers.length === 0) && (a?.status === 'Status.PENDING'))
+            rejectBtn.classList.remove('hidden');
+        else
+            rejectBtn.classList.add('hidden');
+        rejectBtn.onclick = () => {
+            if (confirm('Are you sure you want to reject this abstract?')) {
+                // Call the API to reject the abstract
+                rejectAbstract(a);
+            }
+        };
+    }
+
+    function rejectAbstract(abstract) {
+        // Call the API to reject the abstract
+        fetch(`/api/v1/research/abstracts/${abstract?.id}/reject`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': "Bearer " + token()
+            },
+            body: JSON.stringify({ reason: 'Inappropriate content' })
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('Network response was not ok');
+            return response.json();
+        })
+        .then(data => {
+            console.log('Abstract rejected:', data);
+            // Update the UI accordingly
+            init();
+            selAbstract = null;
+            updatePanel();
+        })
+        .catch(error => {
+            console.error('Error rejecting abstract:', error);
+        });
     }
 
     function updatePanel() {
