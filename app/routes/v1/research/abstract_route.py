@@ -19,6 +19,7 @@ from app.models.Cycle import (
     AbstractAuthors,
     Abstracts,
     Author,
+    Category,
 )
 from app.models.Token import Token
 from app.models.User import User
@@ -622,6 +623,8 @@ def get_abstracts():
                     Abstracts.title.ilike(f'%{q}%'),
                     Abstracts.content.ilike(f'%{q}%'),
                     Abstracts.abstract_number == q_int,
+                    Abstracts.category.has(Category.name.ilike(f'%{q}%')),
+
                 )
             )
 

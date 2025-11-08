@@ -131,10 +131,8 @@
     // Optimized renderList using DocumentFragment for better performance
     function renderList(el, items, type) {
         // Clear the list efficiently
-        while (el.firstChild) {
-            el.removeChild(el.firstChild);
-        }
-        
+        while (el.firstChild) el.removeChild(el.firstChild);
+
         if (!items.length) {
             const empty = document.createElement('li');
             empty.className = 'py-8 text-center text-xs uppercase tracking-wide text-[color:var(--muted)]';
@@ -142,112 +140,154 @@
             el.appendChild(empty);
             return;
         }
-        
-        // Use DocumentFragment for better performance
+
         const fragment = document.createDocumentFragment();
-        
+
         items.forEach(it => {
             const li = document.createElement('li');
-            const selected = bulk.abstractIds.has(it.id) && type === 'abstract';
-            li.className = 'group py-3 px-3 hover:bg-[color:var(--brand-50)] dark:hover:bg-[color:var(--brand-900)]/40 cursor-pointer flex justify-between items-center transition-colors rounded-lg ' + (selected ? 'bg-[color:var(--brand-100)] dark:bg-[color:var(--brand-900)]' : '');
+            const selected = bulk.abstractIds?.has?.(it.id) && type === 'abstract';
+
+            // Layout fixes: items start, gap, allow text to wrap, badge stays visible
+            li.className =
+                'group py-3 px-3 hover:bg-[color:var(--brand-50)] dark:hover:bg-[color:var(--brand-900)]/40 ' +
+                'cursor-pointer flex items-start justify-between gap-3 transition-colors rounded-lg ' +
+                (selected ? 'bg-[color:var(--brand-100)] dark:bg-[color:var(--brand-900)]' : '');
             li.dataset.id = it.id;
-            
+
             if (type === 'abstract') {
+                const left = document.createElement('div');
+                left.className = 'flex items-start gap-3 min-w-0 grow';
+
                 const checkbox = document.createElement('input');
                 checkbox.type = 'checkbox';
-                checkbox.className = 'bulkChk accent-[color:var(--brand-600)] rounded h-4 w-4';
+                checkbox.className = 'bulkChk accent-[color:var(--brand-600)] rounded h-4 w-4 mt-1 shrink-0';
                 checkbox.dataset.id = it.id;
                 checkbox.checked = selected;
-                
-                const span = document.createElement('span');
-                span.className = 'flex items-center gap-3';
-                
-                const titleSpan = document.createElement('span');
-                titleSpan.className = 'truncate font-medium';
+
+                const textCol = document.createElement('div');
+                textCol.className = 'min-w-0';
+
+                const titleSpan = document.createElement('div');
+                // Multi-line title: allow wrapping; avoid truncation; break long words
+                titleSpan.className = 'font-medium whitespace-normal break-words';
                 titleSpan.textContent = it.title || 'Untitled Abstract';
-                
-                const categorySpan = document.createElement('span');
-                categorySpan.className = 'muted text-xs block mt-1';
-                categorySpan.textContent = it.category?.name || 'No Category';
-                
-                titleSpan.appendChild(categorySpan);
-                span.appendChild(checkbox);
-                span.appendChild(titleSpan);
-                
+                titleSpan.title = it.title || 'Untitled Abstract'; // tooltip for very long titles
+
+                const meta = document.createElement('div');
+                meta.className = 'muted text-xs mt-1 space-x-2';
+                const cat = document.createElement('span');
+                cat.textContent = it.category?.name || 'No Category';
+                const dot = document.createElement('span');
+                dot.textContent = '•';
+                const submittedBy = document.createElement('span');
+                submittedBy.textContent = `Submitted by: ${it.submitted_by?.username || it.created_by?.username || 'Unknown'}`;
+                const dot2 = document.createElement('span');
+                dot2.textContent = '•';
+                const abstractNum = document.createElement('span');
+                abstractNum.textContent = `Abstract #${it.abstract_number || 'N/A'}`;
+
+                meta.appendChild(cat);
+                meta.appendChild(dot);
+                meta.appendChild(submittedBy);
+                meta.appendChild(dot2);
+                meta.appendChild(abstractNum);
+
+                textCol.appendChild(titleSpan);
+                textCol.appendChild(meta);
+
+                left.appendChild(checkbox);
+                left.appendChild(textCol);
+
                 const badge = document.createElement('span');
-                badge.className = 'text-[10px] uppercase tracking-wide px-2 py-1 rounded-full';
-                badge.className += it.verifiers_count && it.verifiers_count > 0 ? 
-                    ' bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' : 
-                    ' bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300';
-                badge.textContent = it.verifiers_count && it.verifiers_count > 0 ? 
-                    `${it.verifiers_count} verifier${it.verifiers_count > 1 ? 's' : ''}` : 'no verifiers';
-                
-                li.appendChild(span);
+                badge.className = 'text-[10px] uppercase tracking-wide px-2 py-1 rounded-full shrink-0 self-center';
+                if (it.verifiers_count && it.verifiers_count > 0) {
+                    badge.className += ' bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300';
+                    badge.textContent = `${it.verifiers_count} verifier${it.verifiers_count > 1 ? 's' : ''}`;
+                } else {
+                    badge.className += ' bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300';
+                    badge.textContent = 'no verifiers';
+                }
+
+                li.appendChild(left);
                 li.appendChild(badge);
-                
-                // Add event listener for the list item
-                li.addEventListener('click', (e) => { 
-                    if (e.target.classList.contains('bulkChk')) return; 
-                    selAbstract = it; 
-                    updatePanel(); 
-                    highlightSelection(); 
+
+                // List item click (ignore checkbox)
+                li.addEventListener('click', (e) => {
+                    if (e.target.classList.contains('bulkChk')) return;
+                    selAbstract = it;
+                    updatePanel();
+                    highlightSelection();
                 });
-                
-                // Add event listener for the checkbox
+
+                // Checkbox behavior
                 checkbox.addEventListener('change', (e) => {
                     const id = e.target.dataset.id;
                     if (e.target.checked) bulk.abstractIds.add(id); else bulk.abstractIds.delete(id);
                     syncMasterChk();
                     updateBulkStatus();
                 });
+
             } else {
+                // -------- Verifier list item (layout fixed to prevent cropping) --------
+                const left = document.createElement('div');
+                left.className = 'flex items-start gap-3 min-w-0 grow';
+
                 const radio = document.createElement('input');
                 radio.type = 'radio';
                 radio.name = 'verifierSelect';
-                radio.className = 'verifierPick accent-[color:var(--brand-600)] h-4 w-4';
+                radio.className = 'verifierPick accent-[color:var(--brand-600)] h-4 w-4 mt-1 shrink-0';
                 radio.dataset.id = it.id;
-                radio.checked = selVerifier && selVerifier.id === it.id;
-                
-                const span = document.createElement('span');
-                span.className = 'flex items-center gap-3';
-                
-                const nameSpan = document.createElement('span');
-                nameSpan.className = 'truncate';
-                
-                const usernameSpan = document.createElement('span');
-                usernameSpan.className = 'font-medium';
+                radio.checked = !!(selVerifier && selVerifier.id === it.id);
+
+                const textCol = document.createElement('div');
+                textCol.className = 'flex flex-col min-w-0';
+
+                const usernameSpan = document.createElement('div');
+                // Don’t crop: allow wrapping; break long names
+                usernameSpan.className = 'text-sm font-medium whitespace-normal break-words';
                 usernameSpan.textContent = it.username || '';
-                
-                const emailSpan = document.createElement('span');
-                emailSpan.className = 'muted text-xs block mt-1';
-                emailSpan.textContent = it.email || '';
-                
-                nameSpan.appendChild(usernameSpan);
-                nameSpan.appendChild(emailSpan);
-                span.appendChild(radio);
-                span.appendChild(nameSpan);
-                
+
+                const emailSpan = document.createElement('div');
+                // Emails can be long → break-all
+                emailSpan.className = 'muted text-xs mt-1 break-all';
+                emailSpan.textContent = it.email || 'No email';
+
+                // --- New: mobile number line ---
+                const mobileSpan = document.createElement('div');
+                mobileSpan.className = 'muted text-xs mt-1 break-all';
+                mobileSpan.textContent = it.mobile ? `📱 ${it.mobile}` : '📱 Not available';
+
+                textCol.appendChild(usernameSpan);
+                textCol.appendChild(emailSpan);
+                textCol.appendChild(mobileSpan);
+
+                left.appendChild(radio);
+                left.appendChild(textCol);
+
                 const badge = document.createElement('span');
-                badge.className = 'text-[10px] uppercase tracking-wide px-2 py-1 rounded-full';
-                badge.className += it.abstracts_count && it.abstracts_count > 0 ? 
-                    ' bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300' : 
-                    ' bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
-                badge.textContent = it.abstracts_count && it.abstracts_count > 0 ? 
-                    `${it.abstracts_count} abstract${it.abstracts_count > 1 ? 's' : ''}` : 'no abstracts';
-                
-                li.appendChild(span);
+                badge.className = 'text-[10px] uppercase tracking-wide px-2 py-1 rounded-full shrink-0 self-center';
+                if (it.abstracts_count && it.abstracts_count > 0) {
+                    badge.className += ' bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300';
+                    badge.textContent = `${it.abstracts_count} abstract${it.abstracts_count > 1 ? 's' : ''}`;
+                } else {
+                    badge.className += ' bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
+                    badge.textContent = 'no abstracts';
+                }
+
+                li.appendChild(left);
                 li.appendChild(badge);
-                
-                // Add event listener for the list item
-                li.addEventListener('click', (e) => { 
-                    if (e.target.classList.contains('verifierPick')) return; 
-                    selVerifier = it; 
-                    updatePanel(); 
-                    highlightSelection(); 
-                    syncVerifierRadios(); 
+
+
+                // List item click (ignore radio)
+                li.addEventListener('click', (e) => {
+                    if (e.target.classList.contains('verifierPick')) return;
+                    selVerifier = it;
+                    updatePanel();
+                    highlightSelection();
+                    syncVerifierRadios();
                 });
-                
-                // Add event listener for the radio button
+
+                // Radio change
                 radio.addEventListener('change', () => {
                     selVerifier = it;
                     updatePanel();
@@ -255,12 +295,12 @@
                     syncVerifierRadios();
                 });
             }
-            
+
             fragment.appendChild(li);
         });
-        
+
         el.appendChild(fragment);
-        
+
         // Sync controls after rendering
         if (type === 'abstract') {
             syncMasterChk();
@@ -268,6 +308,7 @@
             syncVerifierRadios();
         }
     }
+
     
     function syncVerifierRadios() {
         const radios = verifierList.querySelectorAll('.verifierPick');
@@ -321,45 +362,183 @@
             if (el) el.classList.add('ring', 'ring-[color:var(--brand-600)]', 'selected-row', 'bg-[color:var(--brand-200)]', 'dark:bg-[color:var(--brand-800)]');
         }
     }
-    
-    function updatePanel() {
-        const panel = sQ('assignPanel');
-        const aSpan = sQ('selAbstract');
-        const vSpan = sQ('selVerifier');
-        const aDetails = sQ('selAbstractDetails');
-        const vStatus = sQ('selVerifierStatus');
-        
-        if (selAbstract) {
-            aSpan.textContent = selAbstract.title || 'Untitled Abstract';
-            aDetails.textContent = selAbstract.content ? selAbstract.content.substring(0, 120) + '...' : 'No content available';
+    function formatDateISO(s) {
+        if (!s) return '—';
+        try {
+            const d = new Date(s);
+            // DD Mon YYYY, HH:MM
+            return d.toLocaleString(undefined, {
+                day: '2-digit', month: 'short', year: 'numeric',
+                hour: '2-digit', minute: '2-digit'
+            });
+        } catch { return s; }
+    }
+
+    function badge(text, extra = '') {
+        const base = 'px-2 py-1 rounded-full text-[10px] uppercase tracking-wide border border-[color:var(--border)]/70';
+        return `<span class="${base} ${extra}">${text}</span>`;
+    }
+
+    function renderSelectedAbstract(a) {
+        const $ = (id) => document.getElementById(id);
+
+        // Title
+        $('selAbstractTitle').textContent = a?.title || 'Untitled Abstract';
+
+        // Meta badges (number, category, status, phase, created)
+        const num = a?.abstract_number ? `#${a.abstract_number}` : 'No Number';
+        const cat = a?.category?.name || 'No Category';
+        const status = (a?.status || '').toString().replace(/^Status\./, '') || 'UNKNOWN';
+        const phase = (a?.review_phase ?? '—');
+
+        $('selAbstractMeta').innerHTML = [
+            badge(num, 'bg-white/60 dark:bg-white/5'),
+            badge(cat, 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200'),
+            badge(status, status === 'PENDING'
+                ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200'
+                : 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200'),
+            badge(`Phase ${phase}`, 'bg-white/60 dark:bg-white/5'),
+            badge(`Submitted ${formatDateISO(a?.submitted_on)}`, 'bg-white/60 dark:bg-white/5')
+        ].join(' ');
+
+        // Submitted By
+        const sb = a?.submitted_by || a?.created_by || {};
+        const sbLines = [
+            `<div><span class="font-medium">${sb.username || 'Unknown'}</span></div>`,
+            `<div class="muted break-all">${sb.email || 'No email'}</div>`,
+            `<div class="muted break-all">${sb.mobile || 'No mobile'}</div>`
+        ].join('');
+        $('selSubmittedBy').innerHTML = sbLines;
+
+        // Authors
+        const authors = Array.isArray(a?.authors) ? a.authors : [];
+        const $authors = $('selAuthorsList');
+        $authors.innerHTML = '';
+        if (!authors.length) {
+            $authors.innerHTML = `<li class="muted">No authors</li>`;
         } else {
-            aSpan.textContent = 'No abstract selected';
-            aDetails.textContent = 'Select an abstract to view details';
+            const frag = document.createDocumentFragment();
+            authors.forEach((au) => {
+                const li = document.createElement('li');
+                li.className = 'flex items-start justify-between gap-3';
+                const left = document.createElement('div');
+                left.className = 'min-w-0';
+                left.innerHTML = `
+        <div class="font-medium break-words">${au.name || 'Unnamed'}</div>
+        <div class="text-[12px] muted break-all">${au.email || 'No email'}${au.affiliation ? ' • ' + au.affiliation : ''}</div>
+      `;
+                const right = document.createElement('div');
+                right.className = 'shrink-0 flex items-center gap-1';
+                if (au.is_presenter) right.insertAdjacentHTML('beforeend', badge('Presenter', 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-200'));
+                if (au.is_corresponding) right.insertAdjacentHTML('beforeend', badge('Corresponding', 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200'));
+                li.appendChild(left);
+                li.appendChild(right);
+                frag.appendChild(li);
+            });
+            $authors.appendChild(frag);
         }
-        
-        if (selVerifier) {
-            vSpan.textContent = selVerifier.username || 'Unknown Verifier';
-            vStatus.textContent = selVerifier.email || 'No email provided';
+
+        // Content preview (full scrollable, no clamp)
+        $('selAbstractDetails').textContent = a?.content || '—';
+
+        // PDF link
+        const pdfHref = '/api/v1/research/abstracts/' + (a?.id || '') + '/pdf';
+        const pdfEl = $('selPdfLink');
+        pdfEl.href = pdfHref || '#';
+        pdfEl.textContent = pdfHref && pdfHref !== '#' ? pdfHref : 'Not uploaded';
+
+        // Verifiers section
+        const vWrap = document.getElementById('selAbstractVerifiers');
+        const vList = document.getElementById('abstractVerifiersList');
+        vList.innerHTML = '';
+        const verifiers = Array.isArray(a?.verifiers) ? a.verifiers : [];
+        vWrap.classList.remove('hidden');
+        if (!verifiers.length) {
+            vList.innerHTML = `<li class="muted">No verifiers assigned</li>`;
         } else {
-            vSpan.textContent = 'No verifier selected';
-            vStatus.textContent = 'Select a verifier to assign';
-        }
-        
-        // Panel should show if either side selected
-        panel.hidden = !(selAbstract || selVerifier);
-        
-        if (selAbstract) {
-            loadAbstractVerifiers(selAbstract.id);
-        } else {
-            hideAbstractVerifiers();
-        }
-        
-        if (selVerifier) {
-            loadVerifierAbstracts(selVerifier.id);
-        } else {
-            hideVerifierAbstracts();
+            const frag = document.createDocumentFragment();
+            verifiers.forEach(v => {
+                const li = document.createElement('li');
+                li.className = 'flex items-start justify-between gap-3';
+                const left = document.createElement('div');
+                left.className = 'min-w-0';
+                left.innerHTML = `
+        <div class="font-medium break-words">${v.username || '—'}</div>
+        <div class="text-[12px] muted break-all">${v.email || 'No email'}${v.mobile ? ' • ' + v.mobile : ''}</div>
+      `;
+                li.appendChild(left);
+                frag.appendChild(li);
+            });
+            vList.appendChild(frag);
         }
     }
+
+    function updatePanel() {
+        const panel = sQ('assignPanel');
+        const aSpan = sQ('selAbstract') || sQ('selAbstractTitle');   // legacy or new title
+        const aDetails = sQ('selAbstractDetails');
+        const vSpan = sQ('selVerifier');
+        const vStatus = sQ('selVerifierStatus');
+
+        // ----- ABSTRACT SIDE -----
+        if (selAbstract) {
+            // Use the rich renderer if present (from the upgraded UI)
+            if (typeof renderSelectedAbstract === 'function') {
+                renderSelectedAbstract(selAbstract);
+            }
+            // Keep legacy fields in sync (safe no-ops if missing)
+            if (aSpan) aSpan.textContent = selAbstract.title || 'Untitled Abstract';
+            if (aDetails) aDetails.textContent = selAbstract.content
+                ? selAbstract.content
+                : 'No content available';
+
+            // Load verifiers list for this abstract
+            loadAbstractVerifiers(selAbstract.id);
+        } else {
+            // Reset abstract UI (both new and legacy)
+            if (aSpan) aSpan.textContent = 'No abstract selected';
+            if (aDetails) aDetails.textContent = 'Select an abstract to view details';
+
+            const sb = document.getElementById('selSubmittedBy');
+            if (sb) sb.innerHTML = '';
+
+            const authors = document.getElementById('selAuthorsList');
+            if (authors) authors.innerHTML = '';
+
+            const meta = document.getElementById('selAbstractMeta');
+            if (meta) meta.innerHTML = '';
+
+            const pdf = document.getElementById('selPdfLink');
+            if (pdf) { pdf.href = '#'; pdf.textContent = 'Not uploaded'; }
+
+            const vWrap = document.getElementById('selAbstractVerifiers');
+            const vList = document.getElementById('abstractVerifiersList');
+            if (vList) vList.innerHTML = '';
+            if (vWrap) vWrap.classList.add('hidden');
+
+            hideAbstractVerifiers();
+        }
+
+        // ----- VERIFIER SIDE -----
+        if (selVerifier) {
+            if (vSpan) vSpan.textContent = selVerifier.username || 'Unknown Verifier';
+            if (vStatus) {
+                const bits = [];
+                bits.push(selVerifier.email || 'No email provided');
+                if (selVerifier.mobile) bits.push(selVerifier.mobile);
+                vStatus.textContent = bits.join(' • ');
+            }
+            loadVerifierAbstracts(selVerifier.id);
+        } else {
+            if (vSpan) vSpan.textContent = 'No verifier selected';
+            if (vStatus) vStatus.textContent = 'Select a verifier to assign';
+            hideVerifierAbstracts();
+        }
+
+        // Show panel if either side has a selection
+        panel.hidden = !(selAbstract || selVerifier);
+    }
+
     
     function hideAbstractVerifiers() {
         const box = sQ('selAbstractVerifiers');
@@ -540,7 +719,7 @@
     async function searchAbstracts() {
         state.abstracts.q = (sQ('abstractSearch').value || '').trim();
         const { q, filter, page, pageSize, sort, dir } = state.abstracts;
-        const url = `${BASE}/api/v1/research/abstracts?q=${encodeURIComponent(q)}&verifiers=${filter}&page=${page}&page_size=${pageSize}&sort_by=${sort}&sort_dir=${dir}`;
+        const url = `${BASE}/api/v1/research/abstracts?q=${encodeURIComponent(q)}&verifiers=${filter}&page=${page}&page_size=${pageSize}&sort=${sort}&dir=${dir}`;
         try {
             const data = await fetchJSON(url);
             renderList(abstractList, data.items || data || [], 'abstract');
