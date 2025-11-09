@@ -213,7 +213,7 @@
     let cordinatorSection = '';
     if (isCordinator) {
       const cordinatorLinks = [
-        { href: BASE + '/admin/add-verifier', label: 'Add Abstract Verifier' },
+        { href: BASE + '/coordinator/add-verifier', label: 'Add Abstract Verifier' },
       ];
       const cordinatorLinksHtml = cordinatorLinks.map(l => `<a class="block px-3 py-2 rounded hover:bg-(--brand-50) no-underline" href="${escapeAttr(l.href)}">${escapeHtml(l.label)}</a>`).join('');
       cordinatorSection = `

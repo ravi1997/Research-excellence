@@ -64,12 +64,11 @@ def privacy_page():
 def admin_unverified_page():  # injected by decorator
     return render_template('admin/admin_unverified.html')
 
-@view_bp.route('/admin/add-verifier')
+@view_bp.route('/coordinator/add-verifier')
 @jwt_required()
 @require_roles(Role.COORDINATOR.value, Role.ADMIN.value, Role.SUPERADMIN.value)
 def add_verifier_page():
-    return render_template('admin/add_verifier.html')
-
+    return render_template('coordinator/add_verifier.html')
 
 @view_bp.route('/admin/dashboard')        # canonical path
 @jwt_required()

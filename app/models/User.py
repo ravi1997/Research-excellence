@@ -12,7 +12,7 @@ from sqlalchemy import (
     Column, String, Boolean, DateTime, Integer, Enum as SqlEnum, Table, ForeignKey
 )
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, validates
 from flask import current_app
 
 from app.models.enumerations import Role, UserType
@@ -74,7 +74,7 @@ class User(db.Model):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     username = Column(String(50), unique=False)
     email = Column(String(120), unique=True)
-    employee_id = Column(String(30), unique=True)
+    employee_id = Column(String(30), unique=True, nullable=True)
     mobile = Column(String(15), unique=True)
 
     
@@ -197,6 +197,14 @@ class User(db.Model):
         back_populates="users",
         lazy=True,
     )
+
+    @validates("employee_id")
+    def _normalize_employee_id(self, key, value):
+        """Treat blank employee IDs as NULL so the unique constraint isn't tripped."""
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized if normalized else None
 
     # --- Security Methods ---
 

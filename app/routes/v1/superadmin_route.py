@@ -433,6 +433,8 @@ def create_user():
             temp_password = generate_strong_password(12)
             user.set_password(temp_password)
         
+        user.require_password_change = True
+        
         # Add roles
         roles = data.get('roles', [])
         for role_name in roles:
