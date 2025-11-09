@@ -1,0 +1,98 @@
+{% extends "components/layout.html" %}
+
+{% block title %}Abstract Gradings{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <header class="space-y-2">
+        <p class="text-sm font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wide">Coordinator Console</p>
+        <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Abstract Gradings</h1>
+                <p class="text-sm text-gray-600 dark:text-gray-400 max-w-2xl">
+                    Track how verifiers have graded submitted abstracts. Filter by cycle, search for a specific submission,
+                    and drill down into the full scoring history to unblock follow-ups with verifiers.
+                </p>
+            </div>
+            <div class="flex flex-wrap gap-3">
+                <button id="refreshButton" type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v6h6M20 20v-6h-6M5 19A8 8 0 0119 5" />
+                    </svg>
+                    Refresh
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <section class="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+        <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <label class="space-y-1 text-sm text-gray-600 dark:text-gray-300">
+                <span class="font-medium">Cycle</span>
+                <select id="cycleFilter" class="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100">
+                    <option value="">All cycles</option>
+                </select>
+            </label>
+            <label class="space-y-1 text-sm text-gray-600 dark:text-gray-300">
+                <span class="font-medium">Search</span>
+                <div class="relative">
+                    <input id="searchInput" type="search" placeholder="Title, category, abstract #" class="w-full rounded-xl border border-gray-300 bg-white py-2 pl-3 pr-10 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100">
+                    <button id="clearSearch" type="button" class="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300" aria-label="Clear search">
+                        &times;
+                    </button>
+                </div>
+            </label>
+            <div class="space-y-1 text-sm text-gray-600 dark:text-gray-300">
+                <span class="font-medium">Review phase</span>
+                <select id="phaseFilter" class="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100">
+                    <option value="">All phases</option>
+                    <option value="1">Phase 1</option>
+                    <option value="2">Phase 2</option>
+                    <option value="3">Phase 3</option>
+                </select>
+            </div>
+            <div class="space-y-1 text-sm text-gray-600 dark:text-gray-300">
+                <span class="font-medium">Status</span>
+                <select id="statusFilter" class="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100">
+                    <option value="">All statuses</option>
+                    <option value="PENDING">Pending</option>
+                    <option value="UNDER_REVIEW">Under review</option>
+                    <option value="ACCEPTED">Accepted</option>
+                    <option value="REJECTED">Rejected</option>
+                </select>
+            </div>
+        </div>
+    </section>
+
+    <section class="grid gap-6 lg:grid-cols-2">
+        <div class="rounded-3xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
+            <div class="flex items-center justify-between border-b border-gray-100 px-5 py-4 dark:border-gray-800">
+                <div>
+                    <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Abstracts</h2>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Showing <span id="abstractCount">0</span> records</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button id="prevPage" class="rounded-lg border border-gray-300 bg-white px-3 py-1 text-sm text-gray-600 transition hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300" disabled>Prev</button>
+                    <button id="nextPage" class="rounded-lg border border-gray-300 bg-white px-3 py-1 text-sm text-gray-600 transition hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300" disabled>Next</button>
+                </div>
+            </div>
+            <div id="abstractList" class="divide-y divide-gray-100 dark:divide-gray-800">
+                <div class="p-5 text-sm text-gray-500 dark:text-gray-400">Use the filters above to load abstracts.</div>
+            </div>
+        </div>
+        <div class="rounded-3xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
+            <div class="border-b border-gray-100 px-5 py-4 dark:border-gray-800">
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Gradings</h2>
+                <p class="text-xs text-gray-500 dark:text-gray-400">Select an abstract to see verifier scores.</p>
+            </div>
+            <div id="gradingPanel" class="p-6 space-y-4">
+                <p class="text-sm text-gray-500 dark:text-gray-400">No abstract selected.</p>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/coordinator/abstract_gradings.js') }}" defer></script>
+{% endblock %}

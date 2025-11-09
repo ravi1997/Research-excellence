@@ -20,6 +20,7 @@ from app.models.Cycle import (
     Abstracts,
     Author,
     Category,
+    Cycle,
 )
 from app.models.Token import Token
 from app.models.User import User
@@ -600,6 +601,7 @@ def get_abstracts():
         sort_by = request.args.get('sort', 'id')
         sort_dir = request.args.get('dir', 'desc').lower()
         verifier_filter = request.args.get('verifier', '').strip().lower() == 'true'
+        cycle_id = request.args.get('cycle_id', '').strip()
         # Add review_phase filter
         review_phase = request.args.get('review_phase', '').strip()
 
@@ -629,8 +631,7 @@ def get_abstracts():
             )
 
         if status in {'PENDING', 'UNDER_REVIEW', 'ACCEPTED', 'REJECTED'}:
-            status_value = Status[status]
-            filters.append(Abstracts.status == status_value)
+            filters.append(Abstracts.status == status)
         elif status:  # Invalid status provided
             error_msg = f"Validation failed: Invalid status '{status}'. Valid statuses are PENDING, UNDER_REVIEW, ACCEPTED, REJECTED"
             log_audit_event(
@@ -655,6 +656,31 @@ def get_abstracts():
                     ip_address=request.remote_addr
                 )
                 return jsonify({"error": error_msg}), 400
+
+        if cycle_id:
+            try:
+                uuid.UUID(cycle_id)
+            except ValueError:
+                error_msg = f"Validation failed: Invalid cycle_id '{cycle_id}'"
+                log_audit_event(
+                    event_type="abstract.list.failed",
+                    user_id=actor_id,
+                    details={"error": error_msg, "invalid_cycle_id": cycle_id},
+                    ip_address=request.remote_addr,
+                )
+                return jsonify({"error": error_msg}), 400
+
+            cycle_exists = Cycle.query.get(cycle_id)
+            if not cycle_exists:
+                error_msg = f"Validation failed: Cycle '{cycle_id}' not found"
+                log_audit_event(
+                    event_type="abstract.list.failed",
+                    user_id=actor_id,
+                    details={"error": error_msg, "invalid_cycle_id": cycle_id},
+                    ip_address=request.remote_addr,
+                )
+                return jsonify({"error": error_msg}), 404
+            filters.append(Abstracts.cycle_id == cycle_id)
 
         privileged = any(
             user.has_role(role)
@@ -707,7 +733,9 @@ def get_abstracts():
                 ip_address=request.remote_addr
             )
             return jsonify({"error": error_msg}), 400
-
+        
+        current_app.logger.info("Listing abstracts ready")
+        
         abstracts_all = list(
             abstract_utils.list_abstracts(
                 filters=filters,
@@ -745,6 +773,7 @@ def get_abstracts():
                 "filters_applied": bool(filters),
                 "search_query": q if q else None,
                 "status_filter": status if status else None,
+                "cycle_filter": cycle_id if cycle_id else None,
                 "review_phase_filter": review_phase if review_phase else None,
                 "verifier_filter": verifier_filter,
                 "results_count": len(abstracts_data),
@@ -1067,7 +1096,7 @@ def get_abstract_submission_status():
 
 @research_bp.route('/abstracts/<abstract_id>/verifiers/<user_id>', methods=['POST'])
 @jwt_required()
-@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
+@require_roles(Role.COORDINATOR.value, Role.ADMIN.value, Role.SUPERADMIN.value)
 def assign_verifier_to_abstract(abstract_id, user_id):
     """Assign a verifier to an abstract."""
     actor_id, context = _resolve_actor_context("assign_verifier_to_abstract")

@@ -1,0 +1,421 @@
+(function () {
+  const BASE = "";
+
+  const cycleFilter = document.getElementById("cycleFilter");
+  const searchInput = document.getElementById("searchInput");
+  const clearSearchBtn = document.getElementById("clearSearch");
+  const phaseFilter = document.getElementById("phaseFilter");
+  const statusFilter = document.getElementById("statusFilter");
+  const refreshButton = document.getElementById("refreshButton");
+  const abstractList = document.getElementById("abstractList");
+  const abstractCount = document.getElementById("abstractCount");
+  const gradingPanel = document.getElementById("gradingPanel");
+  const prevPageBtn = document.getElementById("prevPage");
+  const nextPageBtn = document.getElementById("nextPage");
+
+  const state = {
+    page: 1,
+    pageSize: 10,
+    total: 0,
+    pages: 1,
+    abstracts: [],
+    cycles: new Map(),
+    selectedAbstractId: null,
+    gradingCache: new Map(),
+    isLoading: false,
+  };
+
+  init();
+
+  function init() {
+    bindEvents();
+    fetchCycles().finally(fetchAbstracts);
+  }
+
+  function bindEvents() {
+    cycleFilter?.addEventListener("change", () => {
+      state.page = 1;
+      fetchAbstracts();
+    });
+
+    phaseFilter?.addEventListener("change", () => {
+      state.page = 1;
+      fetchAbstracts();
+    });
+
+    statusFilter?.addEventListener("change", () => {
+      state.page = 1;
+      fetchAbstracts();
+    });
+
+    if (searchInput) {
+      searchInput.addEventListener("keypress", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          state.page = 1;
+          fetchAbstracts();
+        }
+      });
+      searchInput.addEventListener("input", () => {
+        if (!searchInput.value) {
+          state.page = 1;
+          fetchAbstracts();
+        }
+      });
+    }
+
+    clearSearchBtn?.addEventListener("click", () => {
+      if (!searchInput) return;
+      searchInput.value = "";
+      searchInput.dispatchEvent(new Event("input"));
+    });
+
+    refreshButton?.addEventListener("click", () => fetchAbstracts());
+
+    prevPageBtn?.addEventListener("click", () => {
+      if (state.page > 1) {
+        state.page -= 1;
+        fetchAbstracts();
+      }
+    });
+
+    nextPageBtn?.addEventListener("click", () => {
+      if (state.page < state.pages) {
+        state.page += 1;
+        fetchAbstracts();
+      }
+    });
+
+    abstractList?.addEventListener("click", (event) => {
+      const row = event.target.closest("[data-abstract-id]");
+      if (!row) return;
+      const abstractId = row.getAttribute("data-abstract-id");
+      selectAbstract(abstractId);
+    });
+  }
+
+  function authHeaders() {
+    const token = localStorage.getItem("access_token") || localStorage.getItem("token");
+    return token ? { Authorization: "Bearer " + token } : {};
+  }
+
+  async function fetchCycles() {
+    if (!cycleFilter) return;
+    try {
+      const response = await fetch(`${BASE}/api/v1/research/cycles`, { headers: authHeaders() });
+      if (!response.ok) {
+        throw new Error(`Failed to load cycles ${response.status}`);
+      }
+      const data = await response.json();
+      const cycles = Array.isArray(data) ? data : Array.isArray(data.items) ? data.items : [];
+      state.cycles.clear();
+      cycleFilter.innerHTML = `<option value="">All cycles</option>`;
+      cycles.forEach((cycle) => {
+        if (!cycle?.id) return;
+        state.cycles.set(String(cycle.id), cycle);
+        const option = document.createElement("option");
+        option.value = cycle.id;
+        option.textContent = `${cycle.name || "Untitled"} (${formatDateRange(cycle.start_date, cycle.end_date)})`;
+        cycleFilter.appendChild(option);
+      });
+    } catch (error) {
+      console.error("Unable to load cycles", error);
+      cycleFilter.innerHTML = `<option value="">Unable to load cycles</option>`;
+    }
+  }
+
+  async function fetchAbstracts() {
+    if (!abstractList) return;
+    state.isLoading = true;
+    renderAbstracts();
+    try {
+      const params = new URLSearchParams({
+        page: state.page,
+        page_size: state.pageSize,
+        sort: "created_at",
+        dir: "desc",
+      });
+      if (searchInput?.value) params.set("q", searchInput.value.trim());
+      if (phaseFilter?.value) params.set("review_phase", phaseFilter.value);
+      if (statusFilter?.value) params.set("status", statusFilter.value);
+      if (cycleFilter?.value) params.set("cycle_id", cycleFilter.value);
+
+      const response = await fetch(`${BASE}/api/v1/research/abstracts?${params.toString()}`, {
+        headers: authHeaders(),
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to load abstracts ${response.status}`);
+      }
+      const data = await response.json();
+      const items = Array.isArray(data.items) ? data.items : [];
+      state.abstracts = items;
+      state.total = data.total ?? items.length ?? 0;
+      state.page = data.page ?? state.page;
+      state.pages = data.pages ?? 1;
+      state.isLoading = false;
+      renderAbstracts();
+      updatePagination();
+    } catch (error) {
+      console.error("Unable to load abstracts", error);
+      abstractList.innerHTML =
+        `<div class="p-5 text-sm text-red-600 dark:text-red-300">Failed to load abstracts. ${escapeHtml(error.message || "")}</div>`;
+      state.abstracts = [];
+      state.total = 0;
+      updatePagination();
+    } finally {
+      state.isLoading = false;
+    }
+  }
+
+  function renderAbstracts() {
+    if (!abstractList) return;
+    if (state.isLoading) {
+      abstractList.innerHTML =
+        `<div class="p-5 text-sm text-gray-500 dark:text-gray-400 animate-pulse">Loading abstracts...</div>`;
+      return;
+    }
+
+    if (!state.abstracts.length) {
+      abstractList.innerHTML =
+        `<div class="p-5 text-sm text-gray-500 dark:text-gray-400">No abstracts match the current filters.</div>`;
+      abstractCount && (abstractCount.textContent = "0");
+      return;
+    }
+
+    abstractCount && (abstractCount.textContent = String(state.total));
+
+    const rows = state.abstracts
+      .map((abstract) => {
+        const isSelected = state.selectedAbstractId === String(abstract.id);
+        const cycleName = state.cycles.get(String(abstract.cycle_id))?.name || "Unassigned";
+        const badge = statusBadge(abstract.status);
+        const category = abstract.category?.name || "Uncategorized";
+        const number = abstract.abstract_number ? `#${abstract.abstract_number}` : "—";
+        const reviewers = (abstract.verifiers_count ?? ((abstract.verifiers || []).length)) || 0;
+        const phase = abstract.review_phase ?? "—";
+        return `
+          <button data-abstract-id="${escapeAttr(abstract.id)}" class="w-full text-left transition ${isSelected ? "bg-blue-50 dark:bg-blue-500/10" : "hover:bg-gray-50 dark:hover:bg-gray-800/40"} focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
+            <div class="px-5 py-4 space-y-2">
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">${escapeHtml(number)} · ${escapeHtml(category)}</p>
+                  <h3 class="text-base font-semibold text-gray-900 dark:text-white line-clamp-2">${escapeHtml(abstract.title || "Untitled abstract")}</h3>
+                </div>
+                <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${badge.class}">${badge.label}</span>
+              </div>
+              <dl class="grid grid-cols-2 gap-2 text-xs text-gray-500 dark:text-gray-400">
+                <div>
+                  <dt class="font-semibold text-gray-600 dark:text-gray-300">Cycle</dt>
+                  <dd>${escapeHtml(cycleName)}</dd>
+                </div>
+                <div>
+                  <dt class="font-semibold text-gray-600 dark:text-gray-300">Review phase</dt>
+                  <dd>Phase ${escapeHtml(String(phase))}</dd>
+                </div>
+                <div>
+                  <dt class="font-semibold text-gray-600 dark:text-gray-300">Verifiers</dt>
+                  <dd>${escapeHtml(String(reviewers))}</dd>
+                </div>
+                <div>
+                  <dt class="font-semibold text-gray-600 dark:text-gray-300">Updated</dt>
+                  <dd>${formatDate(abstract.updated_at) || "—"}</dd>
+                </div>
+              </dl>
+            </div>
+          </button>`;
+      })
+      .join("");
+
+    abstractList.innerHTML = rows;
+  }
+
+  function updatePagination() {
+    if (prevPageBtn) {
+      prevPageBtn.disabled = state.page <= 1;
+    }
+    if (nextPageBtn) {
+      nextPageBtn.disabled = state.page >= state.pages;
+    }
+  }
+
+  function selectAbstract(abstractId) {
+    if (!abstractId) return;
+    if (state.selectedAbstractId === abstractId) return;
+    state.selectedAbstractId = abstractId;
+    renderAbstracts();
+    fetchGradings(abstractId);
+  }
+
+  async function fetchGradings(abstractId) {
+    if (!gradingPanel) return;
+    const selected = state.abstracts.find((item) => String(item.id) === String(abstractId));
+    gradingPanel.innerHTML = `
+      <div class="space-y-3">
+        <div>
+          <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Abstract</p>
+          <p class="text-base font-semibold text-gray-900 dark:text-white">${escapeHtml(selected?.title || "Untitled abstract")}</p>
+        </div>
+        <p class="text-sm text-gray-500 dark:text-gray-400">Loading gradings…</p>
+      </div>
+    `;
+
+    if (state.gradingCache.has(abstractId)) {
+      renderGradings(state.gradingCache.get(abstractId), selected);
+      return;
+    }
+
+    try {
+      const response = await fetch(`${BASE}/api/v1/research/abstracts/${abstractId}/gradings`, {
+        headers: authHeaders(),
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to load gradings ${response.status}`);
+      }
+      const gradings = await response.json();
+      state.gradingCache.set(abstractId, gradings);
+      renderGradings(gradings, selected);
+    } catch (error) {
+      console.error("Unable to load gradings", error);
+      gradingPanel.innerHTML = `<div class="space-y-3">
+        <div>
+          <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Abstract</p>
+          <p class="text-base font-semibold text-gray-900 dark:text-white">${escapeHtml(selected?.title || "Untitled abstract")}</p>
+        </div>
+        <p class="text-sm text-red-600 dark:text-red-300">Failed to load gradings (${escapeHtml(error.message || "unknown error")}).</p>
+      </div>`;
+    }
+  }
+
+  function renderGradings(gradings, abstract) {
+    if (!gradingPanel) return;
+    const cycleName = state.cycles.get(String(abstract?.cycle_id))?.name || "Unassigned";
+    const summary = buildGradingSummary(gradings || []);
+
+    if (!gradings || !gradings.length) {
+      gradingPanel.innerHTML = `
+        <div class="space-y-3">
+          ${abstractDetailsMarkup(abstract, cycleName)}
+          <div class="rounded-2xl border border-dashed border-gray-300 p-4 text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
+            No gradings have been submitted for this abstract yet.
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    const entries = gradings
+      .map((grading) => {
+        const grader = grading.graded_by;
+        const gradingType = grading.grading_type;
+        return `
+          <article class="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-950/40">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <p class="text-sm font-semibold text-gray-900 dark:text-white">${escapeHtml(gradingType?.criteria || "Unnamed criteria")}</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400">Score ${escapeHtml(String(grading.score))} / ${escapeHtml(String(gradingType?.max_score ?? "—"))}</p>
+              </div>
+              <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-200">
+                Phase ${escapeHtml(String(grading.review_phase ?? "—"))}
+              </span>
+            </div>
+            <dl class="mt-3 grid gap-3 text-xs text-gray-500 dark:text-gray-400 md:grid-cols-2">
+              <div>
+                <dt class="font-semibold text-gray-600 dark:text-gray-300">Verifier</dt>
+                <dd>${escapeHtml(grader?.username || grader?.email || "Unknown verifier")}</dd>
+              </div>
+              <div>
+                <dt class="font-semibold text-gray-600 dark:text-gray-300">Recorded</dt>
+                <dd>${formatDate(grading.graded_on || grading.created_at) || "—"}</dd>
+              </div>
+            </dl>
+            ${grading.comments ? `<p class="mt-3 text-sm text-gray-700 dark:text-gray-300">${escapeHtml(grading.comments)}</p>` : ""}
+          </article>`;
+      })
+      .join("");
+
+    gradingPanel.innerHTML = `
+      <div class="space-y-4">
+        ${abstractDetailsMarkup(abstract, cycleName)}
+        <div class="rounded-2xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
+          <p class="font-semibold text-gray-900 dark:text-white">${escapeHtml(summary)}</p>
+        </div>
+        <div class="space-y-3">${entries}</div>
+      </div>
+    `;
+  }
+
+  function abstractDetailsMarkup(abstract, cycleName) {
+    if (!abstract) return "";
+    const category = abstract.category?.name || "Uncategorized";
+    const status = statusBadge(abstract.status);
+    return `
+      <div class="space-y-2">
+        <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">${escapeHtml(category)} · ${cycleName ? escapeHtml(cycleName) : "No cycle"}</p>
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-white">${escapeHtml(abstract.title || "Untitled abstract")}</h3>
+        <div class="flex flex-wrap gap-2 text-xs text-gray-500 dark:text-gray-400">
+          <span class="inline-flex items-center rounded-full px-2.5 py-0.5 font-semibold ${status.class}">${status.label}</span>
+          <span class="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-gray-700 dark:bg-gray-800 dark:text-gray-200">Phase ${escapeHtml(String(abstract.review_phase ?? "—"))}</span>
+          <span class="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-gray-700 dark:bg-gray-800 dark:text-gray-200">${(abstract.verifiers_count ?? ((abstract.verifiers || []).length)) || 0} verifier(s)</span>
+        </div>
+      </div>
+    `;
+  }
+
+  function buildGradingSummary(gradings) {
+    if (!gradings.length) return "No gradings recorded.";
+    const scores = gradings.map((g) => g.score).filter((s) => typeof s === "number");
+    if (!scores.length) return `${gradings.length} gradings recorded.`;
+    const total = scores.reduce((sum, value) => sum + value, 0);
+    const average = (total / scores.length).toFixed(1);
+    const maxScore = Math.max(...scores);
+    const minScore = Math.min(...scores);
+    return `${gradings.length} grading${gradings.length === 1 ? "" : "s"} · Avg ${average} · High ${maxScore} · Low ${minScore}`;
+  }
+
+  function formatDate(value) {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    return date.toLocaleString(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+  }
+
+  function formatDateRange(start, end) {
+    if (!start && !end) return "dates TBD";
+    const startDate = start ? new Date(start) : null;
+    const endDate = end ? new Date(end) : null;
+    const startStr = startDate && !Number.isNaN(startDate.getTime()) ? startDate.toLocaleDateString() : "TBD";
+    const endStr = endDate && !Number.isNaN(endDate.getTime()) ? endDate.toLocaleDateString() : "TBD";
+    return `${startStr} – ${endStr}`;
+  }
+
+  function statusBadge(status) {
+    const normalized = String(status || "").toUpperCase();
+    switch (normalized) {
+      case "STATUS.ACCEPTED":
+        return { label: "Accepted", class: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200" };
+      case "STATUS.REJECTED":
+        return { label: "Rejected", class: "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-200" };
+      case "STATUS.UNDER_REVIEW":
+        return { label: "Under review", class: "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-200" };
+      default:
+        return { label: "Pending", class: "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200" };
+    }
+  }
+
+  function escapeHtml(value) {
+    if (value === null || value === undefined) return "";
+    return String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function escapeAttr(value) {
+    return escapeHtml(value);
+  }
+})();

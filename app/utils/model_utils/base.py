@@ -212,6 +212,7 @@ def list_instances(
         if limit is not None:
             query = query.limit(limit)
 
+        logger.info("Executing list query for %s",query)
         results = list(query)
         logger.info("Listed %s count=%s", model_cls.__name__, len(results))
         _emit_audit(
