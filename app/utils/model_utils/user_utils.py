@@ -100,6 +100,7 @@ def list_users(
             joinedload(User.role_associations),
             joinedload(User.department),
             joinedload(User.category),
+            joinedload(User.categories),
         ]
         if eager
         else None

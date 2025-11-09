@@ -124,6 +124,29 @@ class Author(db.Model):
     best_papers = db.relationship("BestPaper", back_populates="author", lazy=True)
 
 
+user_categories = db.Table(
+    "user_categories",
+    db.Column(
+        "user_id",
+        UUID(as_uuid=True),
+        db.ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    db.Column(
+        "category_id",
+        UUID(as_uuid=True),
+        db.ForeignKey("categories.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    db.Column(
+        "assigned_at",
+        db.DateTime,
+        nullable=False,
+        server_default=db.func.current_timestamp(),
+    ),
+)
+
+
 class Category(db.Model):
     __tablename__ = "categories"
 
@@ -131,7 +154,13 @@ class Category(db.Model):
     name = db.Column(db.String(100), nullable=False, unique=True)
 
     abstracts = db.relationship("Abstracts", back_populates="category", lazy=True)
-    users = db.relationship("User", back_populates="category", lazy=True)
+    primary_users = db.relationship("User", back_populates="category", lazy=True)
+    users = db.relationship(
+        "User",
+        secondary=user_categories,
+        back_populates="categories",
+        lazy=True,
+    )
 
 
 class Abstracts(db.Model):

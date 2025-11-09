@@ -49,6 +49,9 @@ class UserSchema(ma.SQLAlchemyAutoSchema):
     # Password reset fields
     reset_token_hash = fields.String(load_only=True, allow_none=True)
     reset_token_expires = fields.DateTime(load_only=True, allow_none=True)
+
+    # Category relationships
+    categories = fields.Method("get_categories", dump_only=True)
     
     # Removed gradings nested relationship to prevent recursion depth during grading dumps
     # gradings = fields.Nested(GradingSchema, many=True, dump_only=True)
@@ -62,3 +65,22 @@ class UserSchema(ma.SQLAlchemyAutoSchema):
         if 'password' in data:
             data.pop('password', None)
         return data
+
+    def get_categories(self, obj):
+        """Return a user's categories allowing for single- or multi-category setups."""
+        categories = getattr(obj, "categories", None)
+        if categories is None:
+            fallback = getattr(obj, "category", None)
+            categories = [fallback] if fallback else []
+
+        category_list = []
+        for category in categories:
+            if not category:
+                continue
+            category_list.append(
+                {
+                    "id": str(category.id) if getattr(category, "id", None) else None,
+                    "name": getattr(category, "name", None),
+                }
+            )
+        return category_list

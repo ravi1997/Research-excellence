@@ -16,6 +16,7 @@ from sqlalchemy.orm import relationship
 from flask import current_app
 
 from app.models.enumerations import Role, UserType
+from app.models.Cycle import user_categories
 from app.security_utils import password_strong
 from app.utils.generators import generate_strong_password
 from app.utils.services.sms import send_sms
@@ -184,9 +185,18 @@ class User(db.Model):
     best_papers_to_verify = db.relationship(
         "BestPaper", secondary="best_paper_verifiers", back_populates="verifiers")
 
-    category_id = db.Column(UUID(as_uuid=True), db.ForeignKey(
-        'categories.id'), nullable=True)
-    category = db.relationship("Category", back_populates="users")
+    category_id = db.Column(
+        UUID(as_uuid=True),
+        db.ForeignKey("categories.id"),
+        nullable=True,
+    )
+    category = db.relationship("Category", back_populates="primary_users")
+    categories = db.relationship(
+        "Category",
+        secondary=user_categories,
+        back_populates="users",
+        lazy=True,
+    )
 
     # --- Security Methods ---
 
