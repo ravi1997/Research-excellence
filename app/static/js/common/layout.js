@@ -256,6 +256,7 @@
         { href: BASE + '/admin/super/users', label: 'Users' },
         { href: BASE + '/admin/super/roles', label: 'Roles' },
         { href: BASE + '/admin/super/audit', label: 'Audit Logs' },
+        { href: BASE + '/research/grades', label: 'Gradings' },
       ];
       const superLinksHtml = superLinks.map(l => `<a class="block px-3 py-2 rounded hover:bg-(--brand-50) no-underline text-sm" href="${escapeAttr(l.href)}">${escapeHtml(l.label)}</a>`).join('');
       superSection = `

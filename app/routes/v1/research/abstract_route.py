@@ -667,7 +667,9 @@ def get_abstracts():
         )
         if not privileged:
             filters.append(Abstracts.created_by_id == actor_id)
-
+        else:
+            if user.has_role(Role.COORDINATOR.value):
+                filters.append(User.categories.any(Category.id == Abstracts.category_id))
         if verifiers:
             if verifiers.lower() == 'yes':
                 filters.append(Abstracts.verifiers.any())

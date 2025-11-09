@@ -196,7 +196,7 @@ def list_best_paper():
 
 @view_bp.route('/research/grades')
 @jwt_required()
-@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value, Role.VERIFIER.value)
+@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
 def grade_management():
     """Grade management page for administrators and verifiers."""
     return render_template('grade_management.html')

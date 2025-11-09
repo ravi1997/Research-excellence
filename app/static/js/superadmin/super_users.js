@@ -59,14 +59,22 @@
   const sortButtons = document.querySelectorAll("[data-sort]");
   const rolesContainer = document.getElementById("roles");
   const rolesHelpText = document.getElementById("roles-help");
+  const categoriesContainer = document.getElementById("categories");
+  const categoriesHelpText = document.getElementById("categories-help");
 
   const metricFallback = (el) => el && (el.textContent = "0");
   const getRoleInputs = () =>
     rolesContainer ? rolesContainer.querySelectorAll("input[name='roles']") : [];
+  const getCategoryInputs = () =>
+    categoriesContainer ? categoriesContainer.querySelectorAll("input[name='category_ids']") : [];
 
   let availableRoles = [];
   let rolesReady = false;
   let pendingRoleSelection = [];
+
+  let availableCategories = [];
+  let categoriesReady = false;
+  let pendingCategorySelection = [];
 
   // Utilities
   const debounce = (fn, delay = 300) => {
@@ -213,6 +221,103 @@
         rolesHelpText.textContent = "Role information could not be loaded. Retry or refresh the page.";
       }
       document.getElementById("retry-load-roles")?.addEventListener("click", fetchAvailableRoles);
+    }
+  }
+
+  function setCategorySelection(categoryValues = []) {
+    pendingCategorySelection = Array.isArray(categoryValues)
+      ? categoryValues
+          .map((value) => String(value).trim())
+          .filter((value) => Boolean(value))
+      : [];
+    if (!categoriesReady) return;
+    const selectedSet = new Set(pendingCategorySelection);
+    getCategoryInputs().forEach((input) => {
+      input.checked = selectedSet.has(input.value);
+    });
+  }
+
+  function renderCategoryOptions() {
+    if (!categoriesContainer) return;
+
+    if (!availableCategories.length) {
+      categoriesContainer.innerHTML = `<div class="col-span-full rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-500 dark:border-gray-700 dark:bg-gray-800/80 dark:text-gray-300">
+        No categories are currently configured. Create categories first to assign them to users.
+      </div>`;
+      categoriesReady = true;
+      if (categoriesHelpText) {
+        categoriesHelpText.textContent = "No categories available.";
+      }
+      setCategorySelection([]);
+      return;
+    }
+
+    categoriesContainer.innerHTML = availableCategories
+      .map(
+        (category) => `
+        <label class="flex w-full cursor-pointer items-start gap-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm transition hover:border-emerald-400 hover:shadow-md focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-emerald-400/60">
+          <input
+            type="checkbox"
+            name="category_ids"
+            value="${escapeHtml(category.id)}"
+            class="mt-1 h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 dark:border-gray-600"
+          >
+          <span class="flex flex-col">
+            <span class="text-sm font-semibold text-gray-900 dark:text-gray-100">${escapeHtml(category.name || "Untitled category")}</span>
+            <span class="text-xs text-gray-500 dark:text-gray-400">Assign this user to ${escapeHtml(category.name || "this category")}.</span>
+          </span>
+        </label>`
+      )
+      .join("");
+
+    categoriesReady = true;
+    if (categoriesHelpText) {
+      const count = availableCategories.length;
+      categoriesHelpText.textContent = `${count} categor${count === 1 ? "y" : "ies"} available. Select all that apply.`;
+    }
+    setCategorySelection(pendingCategorySelection);
+  }
+
+  async function fetchAvailableCategories() {
+    if (!categoriesContainer) return;
+
+    categoriesReady = false;
+    categoriesContainer.innerHTML = `<div class="col-span-full flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600 shadow-inner dark:border-gray-700 dark:bg-gray-800/80 dark:text-gray-300">
+      <svg class="h-4 w-4 animate-spin text-blue-500" viewBox="0 0 24 24" fill="none">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 00-8 8h4z"/>
+      </svg>
+      Loading available categories…
+    </div>`;
+
+    try {
+      const response = await fetch(`${BASE}/api/v1/research/categories`, {
+        headers: authHeader(),
+      });
+      if (!response.ok) {
+        throw new Error(`Failed with status ${response.status}`);
+      }
+      const data = await response.json();
+      availableCategories = Array.isArray(data)
+        ? data
+        : Array.isArray(data.items)
+        ? data.items
+        : [];
+      renderCategoryOptions();
+    } catch (error) {
+      console.error("Unable to load categories", error);
+      categoriesContainer.innerHTML = `<div class="col-span-full space-y-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-600 shadow-sm dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-100">
+        <p class="font-medium">Unable to load categories</p>
+        <p class="text-xs text-red-500 dark:text-red-200">We could not fetch the available categories. Please try again.</p>
+        <button id="retry-load-categories" type="button" class="inline-flex items-center gap-2 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:border-red-400/40 dark:bg-red-500/10 dark:text-red-100 dark:hover:bg-red-500/20">
+          Retry
+        </button>
+      </div>`;
+      categoriesReady = false;
+      if (categoriesHelpText) {
+        categoriesHelpText.textContent = "Category information could not be loaded. Retry or refresh the page.";
+      }
+      document.getElementById("retry-load-categories")?.addEventListener("click", fetchAvailableCategories);
     }
   }
 
@@ -375,6 +480,21 @@
         </span>`;
       }).join("");
 
+      const resolvedCategories = Array.isArray(user.categories) && user.categories.length
+        ? user.categories
+        : user.category
+        ? [user.category]
+        : [];
+      const categoriesMarkup = resolvedCategories
+        .map((cat) => {
+          const categoryName = String(cat?.name || "").trim() || "Unassigned";
+          const badgeClass = "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200";
+          return `<span class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${badgeClass}">
+            ${escapeHtml(categoryName)}
+          </span>`;
+        })
+        .join("");
+
       tr.className = [
         "bg-white dark:bg-gray-900/40",
         "hover:bg-gray-50 dark:hover:bg-gray-800/60 transition",
@@ -400,6 +520,9 @@
         <td class="px-6 py-4 align-middle text-sm text-gray-600 dark:text-gray-300 hidden lg:table-cell">${escapeHtml(user.mobile || "—")}</td>
         <td class="px-6 py-4 align-middle text-sm text-gray-600 dark:text-gray-300">
           <div class="flex flex-wrap gap-1">${roles || '<span class="text-xs text-gray-400 dark:text-gray-500">No roles</span>'}</div>
+        </td>
+        <td class="px-6 py-4 align-middle text-sm text-gray-600 dark:text-gray-300">
+          <div class="flex flex-wrap gap-1">${categoriesMarkup || '<span class="text-xs text-gray-400 dark:text-gray-500">No category</span>'}</div>
         </td>
         <td class="px-6 py-4 align-middle">
           <span class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusBadgeClass}">
@@ -540,6 +663,7 @@
     });
 
     setRoleSelection([]);
+    setCategorySelection([]);
 
     const statusSelect = document.getElementById("status");
     if (statusSelect) statusSelect.value = "active";
@@ -570,6 +694,17 @@
       const roles = Array.isArray(user.roles) ? user.roles.map((r) => String(r)) : [];
       setRoleSelection(roles);
 
+      const categorySource = Array.isArray(user.categories) && user.categories.length
+        ? user.categories
+        : user.category
+        ? [user.category]
+        : [];
+      const categoryIds = categorySource
+        .map((c) => c && (c.id || c.category_id))
+        .filter((value) => Boolean(value))
+        .map((value) => String(value));
+      setCategorySelection(categoryIds);
+
       const statusSelect = document.getElementById("status");
       if (statusSelect) statusSelect.value = user.is_active ? "active" : user.lock_until ? "locked" : "inactive";
     } catch (error) {
@@ -597,6 +732,13 @@
       roles: selectedRoles,
       is_active: (document.getElementById("status")?.value || "active") === "active",
     };
+
+    const selectedCategoryIds = Array.from(getCategoryInputs())
+      .filter((input) => input.checked)
+      .map((input) => input.value)
+      .filter((value, index, arr) => value && arr.indexOf(value) === index);
+    payload.category_ids = selectedCategoryIds;
+    payload.category_id = selectedCategoryIds[0] || null;
 
     if (!userId) {
       payload.password = "TempPass123!"; // Platform requires initial password; users prompted to change on first login
@@ -819,7 +961,6 @@
   metricFallback(metricLockedEl);
   metricFallback(metricNewEl);
 
-  fetchAvailableRoles()
-    .catch(() => {})
+  Promise.allSettled([fetchAvailableRoles(), fetchAvailableCategories()])
     .finally(() => fetchUsers(1));
 })();
