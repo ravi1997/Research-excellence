@@ -440,7 +440,7 @@ def list_verifiers():
 
 @user_bp.route("/users/verifiers", methods=["GET"])
 @jwt_required()
-@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
+@require_roles(Role.COORDINATOR.value,Role.ADMIN.value, Role.SUPERADMIN.value)
 def list_verifiers_with_params():
     """Get all users with verifier role with filtering and pagination support."""
     try:

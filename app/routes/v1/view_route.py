@@ -66,7 +66,7 @@ def admin_unverified_page():  # injected by decorator
 
 @view_bp.route('/admin/add-verifier')
 @jwt_required()
-@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
+@require_roles(Role.COORDINATOR.value, Role.ADMIN.value, Role.SUPERADMIN.value)
 def add_verifier_page():
     return render_template('admin/add_verifier.html')
 
