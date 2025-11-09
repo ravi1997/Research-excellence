@@ -153,7 +153,7 @@
             if (type === 'abstract') {
                 li.innerHTML = `
                     <span class="flex items-center gap-3 w-full">
-                        <input type="checkbox" class="bulkChk accent-[color:var(--brand-600)] rounded h-5 w-5" data-id="${it.id}" ${selected ? 'checked' : ''}/>
+                        <input type="checkbox" class="hidden bulkChk accent-[color:var(--brand-600)] rounded h-5 w-5" data-id="${it.id}" ${selected ? 'checked' : ''}/>
                         <div class="flex-1 min-w-0">
                             <div class="font-medium text-gray-900 dark:text-white truncate">${escapeHtml(it.title || 'Untitled Abstract')}</div>
                             <div class="flex flex-wrap gap-2 mt-1">

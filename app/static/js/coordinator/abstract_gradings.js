@@ -303,35 +303,12 @@
       return;
     }
 
-    const entries = gradings
-      .map((grading) => {
-        const grader = grading.graded_by;
-        const gradingType = grading.grading_type;
-        return `
-          <article class="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-950/40">
-            <div class="flex items-start justify-between gap-3">
-              <div>
-                <p class="text-sm font-semibold text-gray-900 dark:text-white">${escapeHtml(gradingType?.criteria || "Unnamed criteria")}</p>
-                <p class="text-xs text-gray-500 dark:text-gray-400">Score ${escapeHtml(String(grading.score))} / ${escapeHtml(String(gradingType?.max_score ?? "—"))}</p>
-              </div>
-              <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-200">
-                Phase ${escapeHtml(String(grading.review_phase ?? "—"))}
-              </span>
-            </div>
-            <dl class="mt-3 grid gap-3 text-xs text-gray-500 dark:text-gray-400 md:grid-cols-2">
-              <div>
-                <dt class="font-semibold text-gray-600 dark:text-gray-300">Verifier</dt>
-                <dd>${escapeHtml(grader?.username || grader?.email || "Unknown verifier")}</dd>
-              </div>
-              <div>
-                <dt class="font-semibold text-gray-600 dark:text-gray-300">Recorded</dt>
-                <dd>${formatDate(grading.graded_on || grading.created_at) || "—"}</dd>
-              </div>
-            </dl>
-            ${grading.comments ? `<p class="mt-3 text-sm text-gray-700 dark:text-gray-300">${escapeHtml(grading.comments)}</p>` : ""}
-          </article>`;
-      })
-      .join("");
+    const phaseTables = buildPhaseTables(gradings || []);
+    const tablesMarkup = phaseTables.length
+      ? phaseTables.join("")
+      : `<div class="rounded-2xl border border-dashed border-gray-300 p-4 text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
+          No grading details are available.
+        </div>`;
 
     gradingPanel.innerHTML = `
       <div class="space-y-4">
@@ -339,8 +316,127 @@
         <div class="rounded-2xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
           <p class="font-semibold text-gray-900 dark:text-white">${escapeHtml(summary)}</p>
         </div>
-        <div class="space-y-3">${entries}</div>
+        <div class="space-y-4">${tablesMarkup}</div>
       </div>
+    `;
+  }
+
+  function buildPhaseTables(gradings) {
+    const phaseMap = new Map();
+
+    gradings.forEach((grading) => {
+      const phase = grading.review_phase ?? 1;
+      const phaseKey = String(phase);
+      if (!phaseMap.has(phaseKey)) {
+        phaseMap.set(phaseKey, {
+          columns: [],
+          columnSet: new Set(),
+          rows: new Map(),
+        });
+      }
+      const phaseData = phaseMap.get(phaseKey);
+
+      const criteria = grading.grading_type?.criteria || "Unnamed criteria";
+      if (!phaseData.columnSet.has(criteria)) {
+        phaseData.columnSet.add(criteria);
+        phaseData.columns.push(criteria);
+      }
+
+      const verifierId = grading.graded_by?.id || `unknown-${phaseData.rows.size}`;
+      if (!phaseData.rows.has(verifierId)) {
+        phaseData.rows.set(verifierId, {
+          verifier: grading.graded_by,
+          grades: new Map(),
+        });
+      }
+
+      phaseData.rows.get(verifierId).grades.set(criteria, grading);
+    });
+
+    return Array.from(phaseMap.entries())
+      .sort((a, b) => Number(a[0]) - Number(b[0]))
+      .map(([phaseKey, phaseData]) => renderPhaseTable(phaseKey, phaseData));
+  }
+
+  function renderPhaseTable(phaseKey, phaseData) {
+    const columns = phaseData.columns;
+    const rows = Array.from(phaseData.rows.values());
+    const headerCols = columns
+      .map(
+        (label) => `<th class="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+          ${escapeHtml(label)}
+        </th>`
+      )
+      .join("");
+
+    const bodyRows = rows.length
+      ? rows
+          .map((row) => {
+            const verifierName =
+              row.verifier?.full_name ||
+              row.verifier?.username ||
+              row.verifier?.email ||
+              "Unknown verifier";
+            const verifierDetail = row.verifier?.email || row.verifier?.username || "";
+            const cells = columns
+              .map((criteria) => {
+                const grade = row.grades.get(criteria);
+                if (!grade) {
+                  return `<td class="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">—</td>`;
+                }
+                const scoreMax = grade.grading_type?.max_score;
+                const scoreText = `${escapeHtml(String(grade.score))}${
+                  scoreMax ? ` / ${escapeHtml(String(scoreMax))}` : ""
+                }`;
+                const comment = grade.comments
+                  ? `<p class="mt-1 text-xs text-gray-500 dark:text-gray-400">${escapeHtml(grade.comments)}</p>`
+                  : "";
+                const recorded = formatDate(grade.graded_on || grade.created_at);
+                return `<td class="px-3 py-3 align-top text-sm text-gray-900 dark:text-gray-100">
+                  <div class="font-semibold">${scoreText}</div>
+                  ${recorded ? `<p class="text-[11px] text-gray-500 dark:text-gray-400">${escapeHtml(recorded)}</p>` : ""}
+                  ${comment}
+                </td>`;
+              })
+              .join("");
+            return `
+              <tr class="border-t border-gray-100 dark:border-gray-800">
+                <td class="px-3 py-3 align-top text-sm">
+                  <p class="font-semibold text-gray-900 dark:text-white">${escapeHtml(verifierName)}</p>
+                  ${verifierDetail ? `<p class="text-xs text-gray-500 dark:text-gray-400">${escapeHtml(verifierDetail)}</p>` : ""}
+                </td>
+                ${cells}
+              </tr>
+            `;
+          })
+          .join("")
+      : `<tr><td colspan="${columns.length + 1}" class="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">No gradings recorded for this phase.</td></tr>`;
+
+    return `
+      <section class="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-950/40">
+        <div class="flex items-center justify-between border-b border-gray-100 px-4 py-3 dark:border-gray-800">
+          <div>
+            <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Review phase</p>
+            <h3 class="text-base font-semibold text-gray-900 dark:text-white">Phase ${escapeHtml(phaseKey)}</h3>
+          </div>
+          <span class="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 dark:bg-blue-500/10 dark:text-blue-200">
+            ${rows.length} verifier${rows.length === 1 ? "" : "s"}
+          </span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-100 text-sm dark:divide-gray-800">
+            <thead class="bg-gray-50 dark:bg-gray-900/60">
+              <tr>
+                <th class="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Verifier</th>
+                ${headerCols}
+              </tr>
+            </thead>
+            <tbody class="bg-white dark:bg-gray-950/20">
+              ${bodyRows}
+            </tbody>
+          </table>
+        </div>
+      </section>
     `;
   }
 
