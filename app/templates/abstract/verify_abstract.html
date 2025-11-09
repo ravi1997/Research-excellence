@@ -8,7 +8,7 @@
 {% block content %}
 <section class="mb-6">
     <div class="flex flex-col sm:flex-row sm:items-center gap-4">
-        <div class="flex-shrink-0 p-3 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 shadow-lg">
+        <div class="shrink-0 p-3 rounded-xl bg-linear-to-br from-blue-500 to-blue-600 shadow-lg">
             <svg class="h-10 w-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 <circle cx="12" cy="12" r="10" stroke-width="2" />
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6" />
@@ -16,7 +16,7 @@
         </div>
         <div>
             <h1
-                class="text-3xl font-extrabold bg-gradient-to-r from-[color:var(--brand-600)] to-[color:var(--brand-400)] text-transparent bg-clip-text">
+                class="text-3xl font-extrabold bg-linear-to-r from-(--brand-600) to-(--brand-400) text-transparent bg-clip-text">
                 Verify Research Abstracts
             </h1>
             <p class="muted mt-1 text-base">
@@ -27,7 +27,7 @@
     </div>
 
     <div class="mt-4 flex flex-wrap gap-4 items-center text-sm">
-        <div class="flex flex-wrap gap-3 items-center bg-[color:var(--surface-alt)] px-4 py-3 rounded-xl shadow">
+        <div class="flex flex-wrap gap-3 items-center bg-(--surface-alt) px-4 py-3 rounded-xl shadow">
             <div class="flex items-center gap-2">
                 <span class="font-semibold">Total:</span>
                 <span id="statTotal"
@@ -51,13 +51,13 @@
         </div>
 
         <div
-            class="flex items-center gap-2 px-4 py-3 bg-[color:var(--surface-alt)] rounded-xl shadow shadow-blue-950 dark:shadow-white">
+            class="flex items-center gap-2 px-4 py-3 bg-(--surface-alt) rounded-xl shadow shadow-blue-950 dark:shadow-white">
             <svg class="h-5 w-5 text-blue-500 dark:text-blue-40" fill="none" viewBox="0 0 24 24" stroke="currentColor"
                 aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                     d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <span class="text-sm text-[color:var(--text-muted)]">
+            <span class="text-sm text-(--text-muted)">
                 Tip: Click an abstract to see details and take action.
             </span>
         </div>
@@ -66,16 +66,16 @@
 
 <!-- Global loading indicator -->
 <div id="globalLoading"
-    class="fixed top-0 left-0 right-0 h-1 bg-gradient-to-r from-[color:var(--brand-600)] via-[color:var(--brand-400)] to-[color:var(--brand-600)] animate-pulse hidden z-40">
+    class="fixed top-0 left-0 right-0 h-1 bg-linear-to-r from-(--brand-600) via-(--brand-400) to-(--brand-600) animate-pulse hidden z-40">
 </div>
 
 <div class="grid lg:grid-cols-2 gap-6 items-start">
     <!-- Abstracts Panel -->
     <div
-        class="glass p-0 rounded-2xl flex flex-col h-full shadow-lg shadow-black/5 dark:shadow-black/30 border border-[color:var(--border)]/60 overflow-hidden">
+        class="glass p-0 rounded-2xl flex flex-col h-full shadow-lg shadow-black/5 dark:shadow-black/30 border border-(--border)/60 overflow-hidden">
         <!-- Toolbar -->
         <div
-            class="p-5 pb-4 space-y-4 border-b border-[color:var(--border)]/60 bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900 dark:to-blue-800 sticky top-0 z-20 backdrop-blur supports-[backdrop-filter]:bg-blue-50/85 dark:supports-[backdrop-filter]:bg-blue-900/85">
+            class="p-5 pb-4 space-y-4 border-b border-(--border)/60 bg-linear-to-br from-blue-50 to-blue-100 dark:from-blue-900 dark:to-blue-800 sticky top-0 z-20 backdrop-blur supports-backdrop-filter:bg-blue-50/85 dark:supports-backdrop-filter:bg-blue-900/85">
             <div class="flex gap-4 w-full">
                 <div class="relative flex-1">
                     <label for="abstractSearch" class="sr-only">Search abstracts</label>
@@ -94,7 +94,7 @@
 
             <div class="flex flex-wrap gap-3 items-center mt-3">
                 <span class="font-semibold">Filter:</span>
-                <div id="abstractStatusGroup" class="flex gap-2 seg-group ring-[color:var(--border)]" role="group"
+                <div id="abstractStatusGroup" class="flex gap-2 seg-group ring-(--border)" role="group"
                     aria-label="Abstract status filter">
                     <button type="button" class="seg px-3 rounded-md bg-blue-40 p-1 mx-1 active" data-val=""
                         data-active="true" title="Show all abstracts">All</button>
@@ -110,7 +110,7 @@
 
                 <span class="font-semibold">Sort:</span>
                 <div id="abstractSortGroup"
-                    class="flex items-stretch overflow-hidden rounded-md border border-[color:var(--border)] divide-x divide-[color:var(--border)] bg-white/80 dark:bg-gray-800/70 text-xs">
+                    class="flex items-stretch overflow-hidden rounded-md border border-(--border) divide-x divide-(--border) bg-white/80 dark:bg-gray-800/70 text-xs">
                     <button type="button" data-key="id" class="px-2.5 py-1.5 sort-btn flex items-center gap-1"
                         title="Sort by ID">
                         <span>ID</span><span class="sort-arrow opacity-40">↕</span>
@@ -131,7 +131,7 @@
 
                 <span class="hidden font-semibold">Page:</span>
                 <div id="abstractPageSizeGroup"
-                    class="hidden seg-group ring-1 ring-[color:var(--border)] bg-white/80 dark:bg-gray-800/70"
+                    class="hidden seg-group ring-1 ring-(--border) bg-white/80 dark:bg-gray-800/70"
                     role="group" aria-label="Page size">
                     <button type="button" class="seg" data-size="10" title="Show 10 per page">10</button>
                     <button type="button" class="seg active" data-size="20" data-active="true"
@@ -169,9 +169,9 @@
             </div>
 
             <div
-                class="hidden flex items-center justify-between text-[11px] bg-blue-100/70 dark:bg-blue-900/70 backdrop-blur-sm px-4 py-2 rounded-md border border-[color:var(--border)]/60">
+                class="hidden flex items-center justify-between text-[11px] bg-blue-100/70 dark:bg-blue-900/70 backdrop-blur-sm px-4 py-2 rounded-md border border-(--border)/60">
                 <label class="flex items-center gap-2 cursor-pointer select-none">
-                    <input id="abstractMasterChk" type="checkbox" class="accent-[color:var(--brand-600)] rounded">
+                    <input id="abstractMasterChk" type="checkbox" class="accent-(--brand-600) rounded">
                     <span class="font-medium">Select all on page</span>
                 </label>
                 <div class="flex gap-2">
@@ -209,16 +209,16 @@
 
         <!-- List -->
         <ul id="abstractList"
-            class="overflow-auto h-[60vh] divide-y divide-[color:var(--border)] text-sm px-2 py-1 bg-gradient-to-b from-[color:var(--surface)] via-[color:var(--surface-alt)]/40 to-[color:var(--surface)]"
+            class="overflow-auto h-[60vh] divide-y divide-(--border) text-sm px-2 py-1 bg-gradient-to-b from-(--surface) via-(--surface-alt)/40 to-(--surface)"
             aria-label="Abstracts list"></ul>
     </div>
 
     <!-- Verification Panel -->
     <div
-        class="glass p-0 rounded-2xl flex flex-col h-full shadow-lg shadow-black/5 dark:shadow-black/30 border border-[color:var(--border)]/60 overflow-hidden">
+        class="glass p-0 rounded-2xl flex flex-col h-full shadow-lg shadow-black/5 dark:shadow-black/30 border border-(--border)/60 overflow-hidden">
         <!-- Toolbar -->
         <div
-            class="p-5 pb-4 border-b border-[color:var(--border)]/60 bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900 dark:to-blue-800 sticky top-0 z-20 backdrop-blur supports-[backdrop-filter]:bg-blue-50/85 dark:supports-[backdrop-filter]:bg-blue-900/85">
+            class="p-5 pb-4 border-b border-(--border)/60 bg-linear-to-br from-blue-50 to-blue-100 dark:from-blue-900 dark:to-blue-800 sticky top-0 z-20 backdrop-blur supports-backdrop-filter:bg-blue-50/85 dark:supports-backdrop-filter:bg-blue-900/85">
             <div class="flex justify-between w-full">
                 <div class="flex flex-row text-lg font-bold items-center gap-2">
                     <svg class="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"
@@ -254,7 +254,7 @@
             <div id="abstractDetails" class="space-y-4">
                 <div class="text-center muted py-12 flex flex-col items-center gap-2" id="noAbstractSelected">
                     <div class="p-4 rounded-full bg-blue-100 dark:bg-blue-900/50 mb-3">
-                        <svg class="h-12 w-12 text-[color:var(--brand-300)]" fill="none" viewBox="0 0 24 24"
+                        <svg class="h-12 w-12 text-(--brand-300)" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor" aria-hidden="true">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3" />
                             <circle cx="12" cy="12" r="10" stroke-width="2" />
@@ -269,9 +269,9 @@
 
                 <div id="abstractContent" class="hidden">
                     <div
-                        class="rounded-xl bg-gradient-to-br from-blue-50 to-white dark:from-blue-900 dark:to-gray-900 shadow p-6 mb-5 flex flex-col gap-4 border-blue-20 dark:border-blue-800/50">
+                        class="rounded-xl bg-linear-to-br from-blue-50 to-white dark:from-blue-900 dark:to-gray-900 shadow p-6 mb-5 flex flex-col gap-4 border-blue-20 dark:border-blue-800/50">
                         <div class="flex flex-col sm:flex-row sm:items-center gap-4">
-                            <div class="flex-shrink-0 p-3 rounded-lg bg-blue-100 dark:bg-blue-900/50">
+                            <div class="shrink-0 p-3 rounded-lg bg-blue-100 dark:bg-blue-900/50">
                                 <svg class="h-8 w-8 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"
                                     aria-hidden="true">
                                     <circle cx="12" cy="12" r="10" stroke-width="2" />
@@ -337,20 +337,20 @@
 
     <!-- Modal Panel -->
     <div
-        class="w-full max-w-5xl rounded-2xl border border-[color:var(--border)]/70 bg-white text-[13px] shadow-2xl ring-1 ring-black/5 dark:bg-gray-900 dark:ring-white/10 overflow-hidden">
+        class="w-full max-w-5xl rounded-2xl border border-(--border)/70 bg-white text-[13px] shadow-2xl ring-1 ring-black/5 dark:bg-gray-900 dark:ring-white/10 overflow-hidden">
 
         <!-- Decorative gradient bar -->
         <div
-            class="h-1 w-full bg-gradient-to-r from-[color:var(--brand-600)] via-[color:var(--brand-400)] to-[color:var(--brand-600)]">
+            class="h-1 w-full bg-linear-to-r from-(--brand-600) via-(--brand-400) to-(--brand-600)">
         </div>
 
         <!-- Header -->
         <div
-            class="flex items-start justify-between gap-3 border-b border-[color:var(--border)]/60 bg-[color:var(--surface-alt)]/60 px-4 py-4 md:px-5 supports-[backdrop-filter]:bg-[color:var(--surface-alt)]/40">
+            class="flex items-start justify-between gap-3 border-b border-(--border)/60 bg-(--surface-alt)/60 px-4 py-4 md:px-5 supports-backdrop-filter:bg-(--surface-alt)/40">
             <div class="space-y-1">
                 <h3 id="gradingModalTitle"
                     class="flex items-center gap-2 text-lg font-bold tracking-tight text-gray-900 dark:text-white md:text-xl">
-                    <svg class="h-6 w-6 text-[color:var(--brand-600)]" fill="none" viewBox="0 0 24 24"
+                    <svg class="h-6 w-6 text-(--brand-600)" fill="none" viewBox="0 0 24 24"
                         stroke="currentColor" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M9 12h6m-6 4h6M12 6h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -358,13 +358,13 @@
                     Grade Abstract
                 </h3>
                 <p id="gradingModalDesc"
-                    class="max-w-prose leading-snug text-[11px] text-[color:var(--text-muted)] md:text-xs">
+                    class="max-w-prose leading-snug text-[11px] text-(--text-muted) md:text-xs">
                     Provide scores for each criterion and optionally include overall comments. Your grading helps
                     determine acceptance and prioritization.
                 </p>
             </div>
             <button id="closeGradingModal" type="button"
-                class="group rounded-lg p-2 hover:bg-black/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-500)] dark:hover:bg-white/10"
+                class="group rounded-lg p-2 hover:bg-black/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-(--brand-500) dark:hover:bg-white/10"
                 aria-label="Close grading dialog">
                 <svg class="h-5 w-5 text-gray-500 group-hover:text-gray-800 dark:text-gray-400 dark:group-hover:text-gray-200"
                     fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
@@ -381,7 +381,7 @@
 
                     <!-- Abstract Summary (sticky) -->
                     <section aria-labelledby="gradingAbstractHeading"
-                        class="sticky top-0 z-10 rounded-lg border border-[color:var(--border)]/60 bg-[color:var(--surface-alt)]/60 p-3 backdrop-blur supports-[backdrop-filter]:bg-[color:var(--surface-alt)]/70 dark:bg-gray-800/60">
+                        class="sticky top-0 z-10 rounded-lg border border-(--border)/60 bg-(--surface-alt)/60 p-3 backdrop-blur supports-backdrop-filter:bg-(--surface-alt)/70 dark:bg-gray-800/60">
                         <h4 id="gradingAbstractHeading"
                             class="mb-0.5 text-[11px] font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-200 md:text-xs">
                             Abstract
@@ -396,7 +396,7 @@
                         <div class="mb-0.5 flex flex-col justify-between gap-1 sm:flex-row sm:items-center">
                             <h4 id="gradingCriteriaHeading"
                                 class="flex items-center gap-1.5 leading-none text-[11px] font-semibold text-gray-700 dark:text-gray-200 md:text-xs">
-                                <svg class="h-4 w-4 text-[color:var(--brand-600)]" viewBox="0 0 24 24" fill="none"
+                                <svg class="h-4 w-4 text-(--brand-600)" viewBox="0 0 24 24" fill="none"
                                     stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="M4 7h16M4 12h16M4 17h16" />
@@ -408,14 +408,14 @@
                                     <input id="criteriaFilter" type="text" placeholder="Filter…"
                                         class="input h-8 w-full pl-7 pr-2 text-[12px]"
                                         aria-label="Filter grading criteria" />
-                                    <svg class="absolute left-2 top-2 h-4 w-4 text-[color:var(--text-muted)]"
+                                    <svg class="absolute left-2 top-2 h-4 w-4 text-(--text-muted)"
                                         viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2">
                                         <path stroke-linecap="round" stroke-linejoin="round"
                                             d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                                     </svg>
                                 </div>
                                 <span id="gradingCriteriaCount"
-                                    class="hidden whitespace-nowrap leading-none text-[10px] text-[color:var(--text-muted)]"></span>
+                                    class="hidden whitespace-nowrap leading-none text-[10px] text-(--text-muted)"></span>
                             </div>
                         </div>
 
@@ -428,10 +428,10 @@
                         <div id="gradingSkeleton" class="grid gap-4 md:grid-cols-2 xl:grid-cols-3" aria-hidden="true">
                             {% for _ in range(0, 3) %}
                             <div
-                                class="space-y-3 rounded-lg border border-[color:var(--border)]/60 bg-white/40 p-4 dark:bg-gray-800/40 animate-pulse">
-                                <div class="h-3 w-1/2 rounded bg-[color:var(--border)]/70"></div>
-                                <div class="h-8 w-full rounded bg-[color:var(--border)]/70"></div>
-                                <div class="h-2 w-2/3 rounded bg-[color:var(--border)]/50"></div>
+                                class="space-y-3 rounded-lg border border-(--border)/60 bg-white/40 p-4 dark:bg-gray-800/40 animate-pulse">
+                                <div class="h-3 w-1/2 rounded bg-(--border)/70"></div>
+                                <div class="h-8 w-full rounded bg-(--border)/70"></div>
+                                <div class="h-2 w-2/3 rounded bg-(--border)/50"></div>
                             </div>
                             {% endfor %}
                         </div>
@@ -439,14 +439,14 @@
 
                     <!-- Overall Comments -->
                     <section aria-labelledby="overallCommentsLabel"
-                        class="space-y-1.5 border-t border-[color:var(--border)]/50 pt-2">
+                        class="space-y-1.5 border-t border-(--border)/50 pt-2">
                         <label id="overallCommentsLabel" for="overallComments"
                             class="block text-[11px] font-medium text-gray-700 dark:text-gray-300 md:text-xs">
-                            Overall Comments <span class="font-normal text-[color:var(--text-muted)]">(Optional)</span>
+                            Overall Comments <span class="font-normal text-(--text-muted)">(Optional)</span>
                         </label>
                         <textarea id="overallComments" rows="3" class="input w-full resize-y leading-snug text-[12px]"
                             placeholder="Overall summary or justification..."></textarea>
-                        <p class="leading-tight text-[10px] text-[color:var(--text-muted)] md:text-[11px]">
+                        <p class="leading-tight text-[10px] text-(--text-muted) md:text-[11px]">
                             Comments may be visible to administrators and (anonymized) to authors.
                         </p>
                     </section>
@@ -456,9 +456,9 @@
                 <aside class="h-fit space-y-4 lg:sticky lg:top-1.5" data-side-panel>
                     <!-- Score Overview -->
                     <section
-                        class="flex flex-col gap-2.5 rounded-lg border border-[color:var(--border)]/60 bg-[color:var(--surface-alt)]/40 p-3 dark:bg-gray-800/40">
+                        class="flex flex-col gap-2.5 rounded-lg border border-(--border)/60 bg-(--surface-alt)/40 p-3 dark:bg-gray-800/40">
                         <h4 class="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-200">
-                            <svg class="h-4 w-4 text-[color:var(--brand-600)]" viewBox="0 0 24 24" fill="none"
+                            <svg class="h-4 w-4 text-(--brand-600)" viewBox="0 0 24 24" fill="none"
                                 stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6l4 2" />
                             </svg>
@@ -482,32 +482,32 @@
                                 </svg>
                                 <div class="absolute inset-0 flex flex-col items-center justify-center text-center">
                                     <span
-                                        class="text-[10px] uppercase tracking-wide text-[color:var(--text-muted)]">Avg</span>
+                                        class="text-[10px] uppercase tracking-wide text-(--text-muted)">Avg</span>
                                     <span data-score-avg class="text-lg font-bold leading-none">-</span>
-                                    <span class="text-[10px] text-[color:var(--text-muted)]"
+                                    <span class="text-[10px] text-(--text-muted)"
                                         data-score-filled>0/0</span>
                                 </div>
                             </div>
                             <div class="grid flex-1 grid-cols-2 gap-2 text-[11px] leading-tight md:gap-2.5">
                                 <div
-                                    class="flex flex-col gap-0.5 rounded border border-[color:var(--border)]/60 bg-white/60 p-1.5 dark:bg-gray-900/50">
+                                    class="flex flex-col gap-0.5 rounded border border-(--border)/60 bg-white/60 p-1.5 dark:bg-gray-900/50">
                                     <span
-                                        class="text-[10px] font-medium uppercase tracking-wide text-[color:var(--text-muted)]">Total</span>
+                                        class="text-[10px] font-medium uppercase tracking-wide text-(--text-muted)">Total</span>
                                     <span data-score-total class="text-sm font-semibold">-</span>
                                 </div>
                                 <div
-                                    class="flex flex-col gap-0.5 rounded border border-[color:var(--border)]/60 bg-white/60 p-1.5 dark:bg-gray-900/50">
+                                    class="flex flex-col gap-0.5 rounded border border-(--border)/60 bg-white/60 p-1.5 dark:bg-gray-900/50">
                                     <span
-                                        class="text-[10px] font-medium uppercase tracking-wide text-[color:var(--text-muted)]">Average</span>
+                                        class="text-[10px] font-medium uppercase tracking-wide text-(--text-muted)">Average</span>
                                     <span data-score-average class="text-sm font-semibold">-</span>
                                 </div>
                                 <div
-                                    class="col-span-2 rounded border border-[color:var(--border)]/60 bg-white/60 p-1.5 dark:bg-gray-900/50">
+                                    class="col-span-2 rounded border border-(--border)/60 bg-white/60 p-1.5 dark:bg-gray-900/50">
                                     <span
-                                        class="text-[10px] font-medium uppercase tracking-wide text-[color:var(--text-muted)]">Progress</span>
+                                        class="text-[10px] font-medium uppercase tracking-wide text-(--text-muted)">Progress</span>
                                     <div class="mt-1 h-2 w-full overflow-hidden rounded bg-gray-200 dark:bg-gray-700">
                                         <div data-score-progress
-                                            class="h-full bg-gradient-to-r from-[color:var(--brand-600)] to-[color:var(--brand-400)] transition-all"
+                                            class="h-full bg-linear-to-r from-(--brand-600) to-(--brand-400) transition-all"
                                             style="width:0%"></div>
                                     </div>
                                 </div>
@@ -517,10 +517,10 @@
 
                     <!-- Rubric Guidance -->
                     <section
-                        class="flex flex-col gap-2 rounded-lg border border-[color:var(--border)]/60 bg-white/60 p-3 text-[11px] leading-relaxed dark:bg-gray-800/40">
+                        class="flex flex-col gap-2 rounded-lg border border-(--border)/60 bg-white/60 p-3 text-[11px] leading-relaxed dark:bg-gray-800/40">
                         <div class="flex items-center justify-between">
                             <h4 class="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-200">
-                                <svg class="h-4 w-4 text-[color:var(--brand-600)]" viewBox="0 0 24 24" fill="none"
+                                <svg class="h-4 w-4 text-(--brand-600)" viewBox="0 0 24 24" fill="none"
                                     stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="M12 6v6m0 4h.01M6 12h.01M18 12h.01" />
@@ -528,21 +528,21 @@
                                 Rubric Guidance
                             </h4>
                             <button type="button" data-toggle-rubric
-                                class="text-xs text-[color:var(--brand-600)] hover:underline">Toggle</button>
+                                class="text-xs text-(--brand-600) hover:underline">Toggle</button>
                         </div>
                         <div data-rubric-body class="space-y-2 md:space-y-3">
-                            <p class="text-[color:var(--text-muted)]">Use the rubric to ensure consistent evaluation
+                            <p class="text-(--text-muted)">Use the rubric to ensure consistent evaluation
                                 across abstracts. Scores closer to the maximum should reflect exceptional clarity,
                                 originality, and impact.</p>
                             <ul class="space-y-1">
                                 <li class="flex items-center gap-2"><span
-                                        class="h-3 w-3 rounded bg-gradient-to-r from-green-400 to-green-600"></span><span>High:
+                                        class="h-3 w-3 rounded bg-linear-to-r from-green-400 to-green-600"></span><span>High:
                                         Outstanding quality / exceeds expectations</span></li>
                                 <li class="flex items-center gap-2"><span
-                                        class="h-3 w-3 rounded bg-gradient-to-r from-yellow-300 to-yellow-500"></span><span>Mid:
+                                        class="h-3 w-3 rounded bg-linear-to-r from-yellow-300 to-yellow-500"></span><span>Mid:
                                         Adequate / acceptable with minor issues</span></li>
                                 <li class="flex items-center gap-2"><span
-                                        class="h-3 w-3 rounded bg-gradient-to-r from-red-300 to-red-500"></span><span>Low:
+                                        class="h-3 w-3 rounded bg-linear-to-r from-red-300 to-red-500"></span><span>Low:
                                         Deficient / significant revisions needed</span></li>
                             </ul>
                         </div>
@@ -550,9 +550,9 @@
 
                     <!-- Tips -->
                     <section
-                        class="flex flex-col gap-2 rounded-lg border border-[color:var(--border)]/60 bg-white/60 p-3 text-[11px] leading-snug dark:bg-gray-800/40">
+                        class="flex flex-col gap-2 rounded-lg border border-(--border)/60 bg-white/60 p-3 text-[11px] leading-snug dark:bg-gray-800/40">
                         <h4 class="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-200">
-                            <svg class="h-4 w-4 text-[color:var(--brand-600)]" viewBox="0 0 24 24" fill="none"
+                            <svg class="h-4 w-4 text-(--brand-600)" viewBox="0 0 24 24" fill="none"
                                 stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -571,8 +571,8 @@
 
         <!-- Footer -->
         <div
-            class="flex flex-col gap-2 border-t border-[color:var(--border)]/60 bg-[color:var(--surface-alt)]/40 px-4 py-3 text-[12px] md:flex-row md:items-center md:justify-between md:gap-3 md:px-5 md:text-[13px] dark:bg-gray-800/40">
-            <div class="flex items-center gap-2 text-xs text-[color:var(--text-muted)]">
+            class="flex flex-col gap-2 border-t border-(--border)/60 bg-(--surface-alt)/40 px-4 py-3 text-[12px] md:flex-row md:items-center md:justify-between md:gap-3 md:px-5 md:text-[13px] dark:bg-gray-800/40">
+            <div class="flex items-center gap-2 text-xs text-(--text-muted)">
                 <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                 </svg>
@@ -581,7 +581,7 @@
             <div class="flex justify-end gap-3">
                 <button id="cancelGrading" type="button" class="btn btn-ghost px-3 py-1.5 text-sm">Cancel</button>
                 <button id="submitGrading" type="button"
-                    class="btn btn-primary relative px-4 py-1.5 text-sm bg-[color:var(--brand-600)] hover:bg-[color:var(--brand-500)] focus-visible:ring-2 focus-visible:ring-[color:var(--brand-500)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60">
+                    class="btn btn-primary relative px-4 py-1.5 text-sm bg-(--brand-600) hover:bg-(--brand-500) focus-visible:ring-2 focus-visible:ring-(--brand-500) focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60">
                     <span class="inline-flex items-center gap-2" data-default-label>
                         <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"

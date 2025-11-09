@@ -153,7 +153,7 @@
             if (type === 'abstract') {
                 li.innerHTML = `
                     <span class="flex items-center gap-3 w-full">
-                        <input type="checkbox" class="hidden bulkChk accent-[color:var(--brand-600)] rounded h-5 w-5" data-id="${it.id}" ${selected ? 'checked' : ''}/>
+                        <input type="checkbox" class="hidden bulkChk accent-(--brand-600) rounded h-5 w-5" data-id="${it.id}" ${selected ? 'checked' : ''}/>
                         <div class="flex-1 min-w-0">
                             <div class="font-medium text-gray-900 dark:text-white truncate">${escapeHtml(it.title || 'Untitled Abstract')}</div>
                             <div class="flex flex-wrap gap-2 mt-1">
@@ -630,7 +630,7 @@
                          <span><strong>Filled:</strong> <span data-filled-count>0</span>/<span data-total-count>0</span></span>
                      </div>
                      <div class="relative h-2 bg-gray-200 dark:bg-gray-700 rounded overflow-hidden">
-                         <div class="absolute inset-y-0 left-0 bg-gradient-to-r from-[color:var(--brand-600)] to-[color:var(--brand-40)] transition-all" data-filled-bar style="width:0%"></div>
+                         <div class="absolute inset-y-0 left-0 bg-linear-to-r from-(--brand-600) to-(--brand-40) transition-all" data-filled-bar style="width:0%"></div>
                      </div>
                      <div id="gradingAggregateLive" role="status" aria-live="polite" class="absolute w-px h-px -m-px overflow-hidden whitespace-nowrap border-0 p-0">No scores yet.</div>`;
           }
@@ -656,13 +656,13 @@
                                     <label for="${safeId}_number" class="group block text-sm font-semibold text-gray-80 dark:text-gray-200 relative">
                                         <span class="inline-flex items-center gap-1">
                                           <span>${escapeHtml(type.criteria)}</span>
-                                          <span class="ml-1 text-[color:var(--text-muted)] font-normal">(${min} - ${max})</span>
+                                          <span class="ml-1 text-(--text-muted) font-normal">(${min} - ${max})</span>
                                           <span class="inline-flex items-center justify-center w-4 h-4 text-[10px] rounded-full bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 cursor-help" data-tooltip="Score range: ${min}-${max}. Use consistent rubric.">i</span>
                                           <span class="ml-1" data-validity-badge aria-hidden="true"></span>
                                         </span>
                                         <span class="invisible opacity-0 group-hover:opacity-100 group-hover:visible transition pointer-events-none absolute z-10 top-full left-0 mt-1 w-48 text-[10px] leading-snug bg-black/80 text-white rounded px-2 py-1" role="tooltip">${escapeHtml(type.description || 'Provide a fair score based on the rubric.')}</span>
                                     </label>
-                                    <div class="text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 bg-[color:var(--brand-50)] dark:bg-[color:var(--brand-900)]/40 text-[color:var(--brand-600)] dark:text-[color:var(--brand-300)] font-medium" data-range-pill>${span} range</div>
+                                    <div class="text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 bg-(--brand-50) dark:bg-(--brand-900)/40 text-(--brand-600) dark:text-(--brand-30) font-medium" data-range-pill>${span} range</div>
                                 </div>
                                 <div class="grid grid-cols-5 gap-3 items-center">
                                      <div class="col-span-2 flex flex-col gap-1">
@@ -679,7 +679,7 @@
                                                 required
                                             />
                                             <div class="relative h-2 mt-1 bg-gray-200 dark:bg-gray-700 rounded overflow-hidden" aria-hidden="true">
-                                                <div class="absolute inset-y-0 left-0 bg-gradient-to-r from-[color:var(--brand-500)] to-[color:var(--brand-300)] transition-all" data-progress style="width:0%"></div>
+                                                <div class="absolute inset-y-0 left-0 bg-linear-to-r from-(--brand-500) to-(--brand-300) transition-all" data-progress style="width:0%"></div>
                                                 <div class="absolute inset-0 flex justify-between text-[8px] leading-none text-gray-500 dark:text-gray-400 pt-2 select-none">
                                                     <span>${min}</span><span>${Math.round(min + span * 0.25)}</span><span>${Math.round(min + span * 0.5)}</span><span>${Math.round(min + span * 0.75)}</span><span>${max}</span>
                                                 </div>
@@ -691,14 +691,14 @@
                                                 min="${min}" 
                                                 max="${max}" 
                                                 step="1" 
-                                                class="w-full accent-[color:var(--brand-600)] cursor-pointer" 
+                                                class="w-full accent-(--brand-600) cursor-pointer"
                                                 aria-label="${escapeHtml(type.criteria)} score slider"
                                             />
                                             <div class="flex justify-between text-[10px] text-gray-500 dark:text-gray-400 font-medium">
-                                                <span>Low</span><span class="text-[color:var(--brand-600)] dark:text-[color:var(--brand-400)]">Score</span><span>High</span>
+                                                <span>Low</span><span class="text-(--brand-600) dark:text-(--brand-400)">Score</span><span>High</span>
                                             </div>
                                      </div>
-                                <button type="button" data-toggle-comment class="mt-3 text-[11px] font-medium inline-flex items-center gap-1 text-[color:var(--brand-600)] hover:underline focus:outline-none">
+                                <button type="button" data-toggle-comment class="mt-3 text-[11px] font-medium inline-flex items-center gap-1 text-(--brand-600) hover:underline focus:outline-none">
                                      <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" /></svg>
                                      Add Comment
                                 </button>
