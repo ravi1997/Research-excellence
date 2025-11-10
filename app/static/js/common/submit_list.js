@@ -32,7 +32,7 @@
         if (tk) h["Authorization"] = "Bearer " + tk;
         return h;
     };
-    const token = () => (localStorage.getItem("access_token") || "").trim();
+    const token = () => (localStorage.getItem("token") || "").trim();
     async function fetchJSON(url, params = {}, init = {}) {
         const u = new URL(url, window.location.origin);
         Object.entries(params).forEach(([k, v]) => (v !== undefined && v !== null && v !== "") && u.searchParams.set(k, v));
@@ -350,6 +350,55 @@
         }
     }
 
+    // Function to handle download functionality
+    async function handleDownload(downloadUrl, fileName = 'data.zip') {
+        try {
+            const downloadBtn = document.getElementById('DownloadBtn');
+            if (downloadBtn) {
+                // Show loading state
+                const originalText = downloadBtn.textContent;
+                downloadBtn.textContent = 'Downloading...';
+                downloadBtn.disabled = true;
+                
+                // Make API call to download endpoint
+                const response = await fetch(downloadUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token()}`
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                // Create a blob from the response and trigger download
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = fileName;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                toast('Download started successfully', 'bg-green-600 text-white');
+            }
+        } catch (error) {
+            logError('Download failed:', error);
+            toast('Download failed. Please try again.', 'bg-red-600 text-white');
+        } finally {
+            // Restore button state
+            const downloadBtn = document.getElementById('DownloadBtn');
+            if (downloadBtn) {
+                downloadBtn.textContent = 'Download Data';
+                downloadBtn.disabled = false;
+            }
+        }
+    }
+
     global.SubmitList = {
         init, Controller,
         utils: {
@@ -357,6 +406,8 @@
             wireSegmentedControls, wireSortGroups, applySortStyles, highlightSelection,
             // Additional utilities for abstract relationships
             addAuthorToAbstract, removeAuthorFromAbstract, assignVerifiersToAbstract, removeVerifierFromAbstract
-        }
+        },
+        // Export the download function for use in specific page implementations
+        handleDownload
     };
 })(window);

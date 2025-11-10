@@ -1,4 +1,4 @@
-/*! tailwindcss v4.1.17 | MIT License | https://tailwindcss.com */
+/*! tailwindcss v4.1.13 | MIT License | https://tailwindcss.com */
 @layer properties;
 @layer theme, base, components, utilities;
 @layer theme {
@@ -804,9 +804,6 @@
   .min-w-\[140px\] {
     min-width: 140px;
   }
-  .min-w-\[160px\] {
-    min-width: 160px;
-  }
   .min-w-\[220px\] {
     min-width: 220px;
   }
@@ -1308,18 +1305,6 @@
   .bg-\[color\:var\(--border\)\] {
     background-color: var(--border);
   }
-  .bg-\[color\:var\(--border\)\]\/50 {
-    background-color: var(--border);
-    @supports (color: color-mix(in lab, red, red)) {
-      background-color: color-mix(in oklab, var(--border) 50%, transparent);
-    }
-  }
-  .bg-\[color\:var\(--border\)\]\/70 {
-    background-color: var(--border);
-    @supports (color: color-mix(in lab, red, red)) {
-      background-color: color-mix(in oklab, var(--border) 70%, transparent);
-    }
-  }
   .bg-\[color\:var\(--brand-50\)\] {
     background-color: var(--brand-50);
   }
@@ -1337,18 +1322,6 @@
   }
   .bg-\[color\:var\(--surface-alt\)\] {
     background-color: var(--surface-alt);
-  }
-  .bg-\[color\:var\(--surface-alt\)\]\/40 {
-    background-color: var(--surface-alt);
-    @supports (color: color-mix(in lab, red, red)) {
-      background-color: color-mix(in oklab, var(--surface-alt) 40%, transparent);
-    }
-  }
-  .bg-\[color\:var\(--surface-alt\)\]\/60 {
-    background-color: var(--surface-alt);
-    @supports (color: color-mix(in lab, red, red)) {
-      background-color: color-mix(in oklab, var(--surface-alt) 60%, transparent);
-    }
   }
   .bg-amber-100 {
     background-color: var(--color-amber-100);
@@ -1547,6 +1520,9 @@
   }
   .bg-yellow-500 {
     background-color: var(--color-yellow-500);
+  }
+  .bg-yellow-600 {
+    background-color: var(--color-yellow-600);
   }
   .bg-linear-to-b {
     --tw-gradient-position: to bottom;
@@ -2626,13 +2602,6 @@
       }
     }
   }
-  .hover\:bg-\[color\:var\(--brand-500\)\] {
-    &:hover {
-      @media (hover: hover) {
-        background-color: var(--brand-500);
-      }
-    }
-  }
   .hover\:bg-\[color\:var\(--surface-alt\)\] {
     &:hover {
       @media (hover: hover) {
@@ -3020,11 +2989,6 @@
       --tw-ring-color: var(--brand-500);
     }
   }
-  .focus-visible\:ring-\[color\:var\(--brand-500\)\] {
-    &:focus-visible {
-      --tw-ring-color: var(--brand-500);
-    }
-  }
   .focus-visible\:ring-blue-500 {
     &:focus-visible {
       --tw-ring-color: var(--color-blue-500);
@@ -3096,38 +3060,6 @@
       background-color: color-mix(in srgb, oklch(97.7% 0.014 308.299) 85%, transparent);
       @supports (color: color-mix(in lab, red, red)) {
         background-color: color-mix(in oklab, var(--color-purple-50) 85%, transparent);
-      }
-    }
-  }
-  .supports-\[backdrop-filter\]\:bg-\(--surface-alt\)\/40 {
-    @supports (backdrop-filter: var(--tw)) {
-      background-color: var(--surface-alt);
-      @supports (color: color-mix(in lab, red, red)) {
-        background-color: color-mix(in oklab, var(--surface-alt) 40%, transparent);
-      }
-    }
-  }
-  .supports-\[backdrop-filter\]\:bg-\(--surface-alt\)\/70 {
-    @supports (backdrop-filter: var(--tw)) {
-      background-color: var(--surface-alt);
-      @supports (color: color-mix(in lab, red, red)) {
-        background-color: color-mix(in oklab, var(--surface-alt) 70%, transparent);
-      }
-    }
-  }
-  .supports-\[backdrop-filter\]\:bg-\[color\:var\(--surface-alt\)\]\/40 {
-    @supports (backdrop-filter: var(--tw)) {
-      background-color: var(--surface-alt);
-      @supports (color: color-mix(in lab, red, red)) {
-        background-color: color-mix(in oklab, var(--surface-alt) 40%, transparent);
-      }
-    }
-  }
-  .supports-\[backdrop-filter\]\:bg-\[color\:var\(--surface-alt\)\]\/70 {
-    @supports (backdrop-filter: var(--tw)) {
-      background-color: var(--surface-alt);
-      @supports (color: color-mix(in lab, red, red)) {
-        background-color: color-mix(in oklab, var(--surface-alt) 70%, transparent);
       }
     }
   }

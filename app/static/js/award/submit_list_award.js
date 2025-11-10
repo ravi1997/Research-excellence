@@ -442,4 +442,15 @@
         }
     };
 
+    // Add event listener for DownloadBtn using the common download function
+    document.addEventListener('DOMContentLoaded', function() {
+        const downloadBtn = document.getElementById('DownloadBtn');
+        if (downloadBtn) {
+            downloadBtn.addEventListener('click', function() {
+                // Use the common download function from SubmitList
+                window.SubmitList.handleDownload(`${BASE}/awards/export-pdf-zip`, 'awards_data.zip');
+            });
+        }
+    });
+
 })();
