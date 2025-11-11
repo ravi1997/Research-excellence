@@ -736,6 +736,37 @@ def export_audit_logs():
             'count': 0,
             'error': f'System error occurred: {str(e)}'
         }), 500
+
+
+@super_api_bp.route('/audit/events', methods=['GET'])
+@jwt_required()
+@require_roles(Role.SUPERADMIN.value)
+def get_unique_audit_events():
+    """API endpoint to get unique event types from audit logs."""
+    try:
+        # Query unique event types from the audit logs table
+        unique_events = db.session.query(AuditLog.event).distinct(AuditLog.event).all()
+        
+        # Extract event names from the tuples returned by the query
+        event_list = [event[0] for event in unique_events if event[0] is not None]
+        
+        # Sort the events alphabetically for better UX
+        event_list.sort()
+        
+        return jsonify({
+            'events': event_list,
+            'count': len(event_list)
+        }), 200
+    
+    except Exception as e:
+        current_app.logger.error(f"Error in get_unique_audit_events: {str(e)}")
+        return jsonify({
+            'events': [],
+            'count': 0,
+            'error': f'System error occurred: {str(e)}'
+        }), 500
+
+
 _DB_ROLE_CACHE = None
 
 

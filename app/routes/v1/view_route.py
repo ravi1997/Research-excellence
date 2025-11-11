@@ -68,7 +68,7 @@ def admin_unverified_page():  # injected by decorator
 @jwt_required()
 @require_roles(Role.COORDINATOR.value, Role.ADMIN.value, Role.SUPERADMIN.value)
 def add_verifier_page():
-    return render_template('coordinator/add_verifier.html')
+    return render_template('abstract/add_verifier.html')
 
 @view_bp.route('/coordinator/abstract-gradings')
 @jwt_required()

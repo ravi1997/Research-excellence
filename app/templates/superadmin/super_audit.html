@@ -59,18 +59,9 @@
                     <div class="space-y-2">
                         <label for="event" class="block text-sm font-medium text-gray-700">Event Type</label>
                         <div class="relative">
-                            <select id="event" name="event" class="w-full rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 py-3 px-4 transition duration-200">
-                                <option value="">All Events</option>
-                                <option value="login">Login/Logout</option>
-                                <option value="user">User Management</option>
-                                <option value="admin">Admin Actions</option>
-                                <option value="security">Security Events</option>
+                            <select id="event" name="event" class="w-full rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 py-3 px-4 transition duration-200 appearance-none bg-white bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyIiBjbGFzcz0ibXctZjQ0Ij48cGF0aCBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIGQ9Ik0xOSA5bC03IDctNy03Ij48L3BhdGg+PC9zdmc+')] bg-no-repeat bg-[right_1rem_center] bg-[length:1rem] pr-10">
+                                <option value="" selected>Loading events...</option>
                             </select>
-                            <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                                </svg>
-                            </div>
                         </div>
                     </div>
 

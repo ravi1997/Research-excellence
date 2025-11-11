@@ -18,6 +18,9 @@ class AuditLogsManager {
       pagination: {
         defaultLimit: 50,
         maxLimit: 200
+      },
+      endpoints: {
+        uniqueEvents: '/api/v1/super/audit/events'
       }
     };
     
@@ -70,6 +73,11 @@ class AuditLogsManager {
    */
   async initialize() {
     this.updateAuditStatus('active');
+    
+    // First, populate the event dropdown with unique events from the database
+    await this.populateEventDropdown();
+    
+    // Then fetch audit logs
     await this.fetchAudit(this.state.activeParams);
     
     // Initialize charts after a short delay to ensure DOM is fully loaded
@@ -383,12 +391,88 @@ class AuditLogsManager {
   }
   
   /**
-   * Get CSS class for event badge based on event type
-   * @param {string} event - Event type
-   * @returns {string} CSS class name
-   */
+    * Get CSS class for event badge based on event type
+    * @param {string} event - Event type
+    * @returns {string} CSS class name
+    */
   getEventBadgeClass(event) {
     const eventTypes = {
+      // Authentication events
+      'login_success': 'bg-green-100 text-green-800',
+      'login_failed': 'bg-red-100 text-red-800',
+      'logout': 'bg-gray-100 text-gray-800',
+      'token_refreshed': 'bg-blue-100 text-blue-800',
+      'register_success': 'bg-green-100 text-green-800',
+      'register_failed': 'bg-red-100 text-red-800',
+      
+      // Password events
+      'password_changed': 'bg-blue-100 text-blue-800',
+      'password_change_failed': 'bg-red-100 text-red-800',
+      'password_reset': 'bg-blue-100 text-blue-800',
+      'password_reset_failed': 'bg-red-100 text-red-800',
+      
+      // User management events
+      'user_create': 'bg-blue-100 text-blue-800',
+      'user_create_failed': 'bg-red-100 text-red-800',
+      'user_update': 'bg-blue-100 text-blue-800',
+      'user_update_failed': 'bg-red-100 text-red-800',
+      'user_delete': 'bg-red-100 text-red-800',
+      'user_delete_failed': 'bg-red-100 text-red-800',
+      'user_lock': 'bg-yellow-100 text-yellow-800',
+      'user_unlock': 'bg-green-100 text-green-800',
+      
+      // Verification events
+      'verify_user_success': 'bg-green-100 text-green-800',
+      'verify_user_failed': 'bg-red-100 text-red-800',
+      'verify_user_skipped': 'bg-yellow-100 text-yellow-800',
+      
+      // Forgot password events
+      'forgot_password_token_sent': 'bg-blue-100 text-blue-800',
+      'forgot_password_failed': 'bg-red-100 text-red-800',
+      'forgot_password_unknown': 'bg-gray-100 text-gray-800',
+      
+      // Grant user events
+      'grant_user_success': 'bg-green-100 text-green-800',
+      'grant_user_failed': 'bg-red-100 text-red-800',
+      'grant_user_skipped': 'bg-yellow-100 text-yellow-800',
+      
+      // Bulk operations
+      'bulk_verify_success': 'bg-green-100 text-green-800',
+      'bulk_verify_failed': 'bg-red-100 text-red-800',
+      'bulk_discard_success': 'bg-red-100 text-red-800',
+      'bulk_discard_failed': 'bg-red-100 text-red-800',
+      
+      // OTP events
+      'generate_otp_success': 'bg-blue-100 text-blue-800',
+      'generate_otp_failed': 'bg-red-100 text-red-800',
+      'verify_otp_success': 'bg-green-100 text-green-800',
+      'verify_otp_failed': 'bg-red-100 text-red-800',
+      
+      // Account creation
+      'create_account_success': 'bg-green-100 text-green-800',
+      'create_account_failed': 'bg-red-100 text-red-800',
+      
+      // Upload events
+      'upload_temp_id_success': 'bg-blue-100 text-blue-800',
+      'upload_temp_id_failed': 'bg-red-100 text-red-800',
+      'upload_id_success': 'bg-blue-100 text-blue-800',
+      'upload_id_failed': 'bg-red-100 text-red-800',
+      
+      // Other events
+      'list_unverified': 'bg-gray-100 text-gray-800',
+      'me_view': 'bg-gray-100 text-gray-800',
+      'auth_status': 'bg-gray-100 text-gray-800',
+      'auth_status_failed': 'bg-red-100 text-red-800',
+      'user_list': 'bg-gray-100 text-gray-800',
+      'user_list_failed': 'bg-red-100 text-red-800',
+      'user_get': 'bg-gray-100 text-gray-800',
+      'user_get_failed': 'bg-red-100 text-red-800',
+      'settings_get': 'bg-gray-100 text-gray-800',
+      'settings_get_failed': 'bg-red-100 text-red-800',
+      'settings_update': 'bg-blue-100 text-blue-800',
+      'settings_update_failed': 'bg-red-100 text-red-800',
+      
+      // Legacy events
       'login': 'bg-green-100 text-green-800',
       'logout': 'bg-red-100 text-red-800',
       'user_create': 'bg-blue-100 text-blue-800',
@@ -398,27 +482,75 @@ class AuditLogsManager {
       'security_event': 'bg-yellow-100 text-yellow-800'
     };
     
-    // Default to security event if specific type not found
+    // Default to gray if specific type not found
     return eventTypes[event] || 'bg-gray-100 text-gray-800';
   }
   
   /**
-   * Format event name for display
-   * @param {string} event - Event type
-   * @returns {string} Formatted event name
-   */
+    * Format event name for display
+    * @param {string} event - Event type
+    * @returns {string} Formatted event name
+    */
   formatEventName(event) {
     const eventNames = {
-      'login': 'Login',
+      'login_success': 'Login Success',
+      'login_failed': 'Login Failed',
       'logout': 'Logout',
-      'user_create': 'User Create',
-      'user_update': 'User Update',
-      'user_delete': 'User Delete',
-      'admin_action': 'Admin Action',
-      'security_event': 'Security Event'
+      'token_refreshed': 'Token Refreshed',
+      'register_success': 'Registration Success',
+      'register_failed': 'Registration Failed',
+      'password_changed': 'Password Changed',
+      'password_change_failed': 'Password Change Failed',
+      'password_reset': 'Password Reset',
+      'password_reset_failed': 'Password Reset Failed',
+      'user_create': 'User Created',
+      'user_create_failed': 'User Creation Failed',
+      'user_update': 'User Updated',
+      'user_update_failed': 'User Update Failed',
+      'user_delete': 'User Deleted',
+      'user_delete_failed': 'User Deletion Failed',
+      'user_lock': 'User Locked',
+      'user_unlock': 'User Unlocked',
+      'verify_user_success': 'User Verification Success',
+      'verify_user_failed': 'User Verification Failed',
+      'forgot_password_token_sent': 'Forgot Password Token Sent',
+      'forgot_password_failed': 'Forgot Password Failed',
+      'forgot_password_unknown': 'Forgot Password Unknown User',
+      'grant_user_success': 'Grant User Success',
+      'grant_user_failed': 'Grant User Failed',
+      'bulk_verify_success': 'Bulk Verify Success',
+      'bulk_verify_failed': 'Bulk Verify Failed',
+      'bulk_discard_success': 'Bulk Discard Success',
+      'bulk_discard_failed': 'Bulk Discard Failed',
+      'list_unverified': 'List Unverified Users',
+      'me_view': 'View Profile',
+      'generate_otp_success': 'OTP Generation Success',
+      'generate_otp_failed': 'OTP Generation Failed',
+      'verify_otp_success': 'OTP Verification Success',
+      'verify_otp_failed': 'OTP Verification Failed',
+      'create_account_success': 'Account Creation Success',
+      'create_account_failed': 'Account Creation Failed',
+      'upload_temp_id_success': 'Temp ID Upload Success',
+      'upload_temp_id_failed': 'Temp ID Upload Failed',
+      'upload_id_success': 'ID Upload Success',
+      'upload_id_failed': 'ID Upload Failed',
+      'auth_status': 'Auth Status Check',
+      'auth_status_failed': 'Auth Status Check Failed',
+      'user_list': 'User List',
+      'user_list_failed': 'User List Failed',
+      'user_get': 'User Get',
+      'user_get_failed': 'User Get Failed',
+      'settings_get': 'Settings Get',
+      'settings_get_failed': 'Settings Get Failed',
+      'settings_update': 'Settings Update',
+      'settings_update_failed': 'Settings Update Failed',
+      'login': 'Login',
+      'user': 'User Management',
+      'admin': 'Admin Actions',
+      'security': 'Security Events'
     };
     
-    return eventNames[event] || event.charAt(0).toUpperCase() + event.slice(1);
+    return eventNames[event] || event.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
   }
   
   /**
@@ -1028,7 +1160,81 @@ class AuditLogsManager {
     this.charts.activityChart.data.datasets[0].data = sortedDates.map(date => activityByDate[date]);
     this.charts.activityChart.update();
   }
+  /**
+   * Fetch unique event types from the API and populate the event dropdown
+   */
+  async populateEventDropdown() {
+    try {
+      const response = await fetch(`${this.config.api.base}${this.config.endpoints.uniqueEvents}`);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch unique events: ${response.status} ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      
+      // Get the event dropdown element
+      const eventSelect = document.getElementById('event');
+      if (!eventSelect) {
+        console.error('Event dropdown element not found');
+        return;
+      }
+      
+      // Clear existing options except the "Loading..." option
+      eventSelect.innerHTML = '';
+      
+      // Add the "All Events" option first
+      const allEventsOption = document.createElement('option');
+      allEventsOption.value = '';
+      allEventsOption.textContent = 'All Events';
+      allEventsOption.selected = true;
+      eventSelect.appendChild(allEventsOption);
+      
+      // Add the unique events from the API response
+      data.events.forEach(event => {
+        const option = document.createElement('option');
+        option.value = event;
+        option.textContent = this.formatEventName(event);
+        eventSelect.appendChild(option);
+      });
+      
+      console.log(`Populated dropdown with ${data.events.length} unique events`);
+    } catch (error) {
+      console.error('Error populating event dropdown:', error);
+      
+      // Fallback: populate with common event types if API fails
+      const eventSelect = document.getElementById('event');
+      if (eventSelect) {
+        eventSelect.innerHTML = '';
+        
+        // Add "All Events" option
+        const allEventsOption = document.createElement('option');
+        allEventsOption.value = '';
+        allEventsOption.textContent = 'All Events';
+        allEventsOption.selected = true;
+        eventSelect.appendChild(allEventsOption);
+        
+        // Add common event types as fallback
+        const commonEvents = [
+          'login_success', 'login_failed', 'logout', 'token_refreshed',
+          'register_success', 'register_failed', 'password_changed', 'password_change_failed',
+          'user_create', 'user_update', 'user_delete', 'user_lock', 'user_unlock'
+        ];
+        
+        commonEvents.forEach(event => {
+          const option = document.createElement('option');
+          option.value = event;
+          option.textContent = this.formatEventName(event);
+          eventSelect.appendChild(option);
+        });
+      }
+      
+      // Show notification about the fallback
+      this.showNotification('Could not load event types from server. Using default options.', 'warning');
+    }
+  }
 }
+
 
 // Initialize the audit logs manager when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
