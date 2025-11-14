@@ -3,7 +3,9 @@ import json
 import os
 import uuid
 from flask_jwt_extended import jwt_required, get_jwt_identity
+import openpyxl
 from app.models.User import User
+from app.routes.v1.audit_log_route import _resolve_actor_context
 from app.routes.v1.research import research_bp
 from app.models.Cycle import AwardVerifiers, Awards, Author, Category, PaperCategory, Cycle
 from app.schemas.awards_schema import AwardsSchema
@@ -11,7 +13,11 @@ from app.extensions import db
 from app.utils.decorator import require_roles
 from app.models.enumerations import Role, Status
 from werkzeug.utils import secure_filename
+from openpyxl.styles import Font, PatternFill, Alignment
+from openpyxl.utils import get_column_letter
 
+
+from app.utils.model_utils import award_utils
 from app.utils.services.mail import send_mail
 from app.utils.services.sms import send_sms
 
@@ -1457,6 +1463,365 @@ def bulk_unassign_verifiers_from_awards():
             event_type="award.verifiers.bulk_unassign.failed",
             user_id=current_user_id,
             details={"error": error_msg, "exception_type": type(e).__name__, "exception_message": str(e)},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 400
+
+
+
+def create_awards_excel(awards):
+    """Create an Excel workbook with all awards data"""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Awards Master Sheet"
+    
+    # Define headers with more detailed information from the models
+    headers = [
+        "ID", "Award Number", "Title", "Category", "Status",
+        "Created By", "Created At", "Updated At", "PDF Path",
+        "Review Phase", "Cycle Name", "Cycle Start Date", "Cycle End Date", 
+        "Authors", "Author Emails", "Affiliations"
+    ]
+    
+    # Add headers to worksheet
+    for col_num, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col_num, value=header)
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    # Add award data to worksheet
+    for row_num, award in enumerate(awards, 2):
+        # Get author information
+        authors_list = award.author.name if award.author else []
+        author_emails_list = award.author.email if award.author else []
+        affiliations_list = award.author.affiliation if award.author else []
+
+        # Get creator name
+        creator_name = award.created_by.username if award.created_by_id else "N/A"
+
+        # Get cycle information
+        cycle_name = award.cycle.name if award.cycle else "N/A"
+        cycle_start_date = award.cycle.start_date.isoformat() if award.cycle and award.cycle.start_date else "N/A"
+        cycle_end_date = award.cycle.end_date.isoformat() if award.cycle and award.cycle.end_date else "N/A"
+
+        # Get category information
+        category_name = award.category.name if award.category else "N/A"
+
+        # Add row data
+        row_data = [
+            str(award.id),  # Convert UUID to string
+            award.award_number,
+            award.title,
+            category_name,
+            award.status.name if award.status else "N/A",
+            creator_name,
+            award.created_at.isoformat() if award.created_at else "N/A",
+            award.updated_at.isoformat() if award.updated_at else "N/A",
+            award.complete_pdf or "N/A",
+            award.review_phase,
+            cycle_name,
+            cycle_start_date,
+            cycle_end_date,
+            "; ".join(authors_list),
+            "; ".join(str(e) for e in author_emails_list if e),
+            "; ".join(str(e) for e in affiliations_list if e),
+        ]
+        
+        for col_num, value in enumerate(row_data, 1):
+            cell = ws.cell(row=row_num, column=col_num, value=str(value) if value is not None else "")
+            cell.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
+    
+    # Auto-adjust column widths
+    for column in ws.columns:
+        max_length = 0
+        column_letter = get_column_letter(column[0].column)
+        for cell in column:
+            try:
+                if len(str(cell.value)) > max_length:
+                    max_length = len(str(cell.value))
+            except:
+                pass
+        adjusted_width = min(max_length + 2, 50)  # Limit max width to 50
+        ws.column_dimensions[column_letter].width = adjusted_width
+    
+    return wb
+
+
+
+
+@research_bp.route('/awards/export-excel', methods=['GET'])
+@jwt_required()
+@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
+def export_awards_to_excel():
+    """Export all awards to an Excel file."""
+    actor_id, context = _resolve_actor_context("export_awards_excel")
+    try:
+        # Get all awards with related data
+        awards = award_utils.list_awards(
+            actor_id=actor_id,
+            context=context
+        )
+        
+        # Create Excel workbook
+        wb = create_awards_excel(awards)
+        
+        # Save to a temporary file
+        from io import BytesIO
+        from flask import send_file
+        import tempfile
+        import os
+        
+        # Create a temporary file
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx')
+        wb.save(temp_file.name)
+        temp_file.close()  # Close the file so it can be read by send_file
+
+        # Log successful export
+        log_audit_event(
+            event_type="award.excel.export.success",
+            user_id=actor_id,
+            details={
+                "exported_count": len(awards),
+                "file_path": temp_file.name
+            },
+            ip_address=request.remote_addr
+        )
+
+        # Send the file to the user
+        return send_file(
+            temp_file.name,
+            as_attachment=True,
+            download_name=f"awards_master_{uuid.uuid4().hex[:8]}.xlsx",
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        
+    except Exception as exc:
+        current_app.logger.exception("Error exporting awards to Excel")
+        error_msg = f"System error occurred while exporting awards to Excel: {str(exc)}"
+        log_audit_event(
+            event_type="award.excel.export.failed",
+            user_id=actor_id,
+            details={"error": error_msg, "exception_type": type(exc).__name__, "exception_message": str(exc)},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 400
+
+
+@research_bp.route('/awards/export-pdf-zip', methods=['GET'])
+@jwt_required()
+@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
+def export_awards_pdf_zip():
+    """Export all award PDFs in a ZIP file organized by category, including an Excel summary."""
+    actor_id, context = _resolve_actor_context("export_awards_pdf_zip")
+    try:
+        import zipfile
+        import shutil
+        from io import BytesIO
+        import tempfile
+
+        # Get all awards with related data
+        awards = award_utils.list_awards(
+            actor_id=actor_id,
+            context=context
+        )
+        
+        # Base path where PDF files are stored
+        base_path = current_app.config.get("UPLOAD_FOLDER", "uploads")
+        
+        # Create a temporary directory to organize files
+        temp_dir = tempfile.mkdtemp()
+        
+        # Organize awards by category
+        categories = {}
+        for award in awards:
+            if award.complete_pdf and award.category:
+                category_name = award.category.name
+                if category_name not in categories:
+                    categories[category_name] = []
+                categories[category_name].append(award)
+
+        # Create subdirectories for each category and copy PDF files
+        for category_name, award_list in categories.items():
+            category_dir = os.path.join(temp_dir, category_name)
+            os.makedirs(category_dir, exist_ok=True)
+
+            for award in award_list:
+                if award.complete_pdf:
+                    # Construct the full path from the base path
+                    full_pdf_path = os.path.join(base_path, os.path.basename(award.complete_pdf))
+
+                    # Verify the file exists before copying
+                    if os.path.exists(full_pdf_path):
+                        # Get the original filename
+                        original_filename = os.path.basename(full_pdf_path)
+                        # Create new filename with abstract ID to avoid conflicts
+                        new_filename = f"{award.id.hex}_{original_filename}"
+                        destination_path = os.path.join(category_dir, new_filename)
+                        
+                        # Copy the PDF file to the category folder
+                        shutil.copy2(full_pdf_path, destination_path)
+                    else:
+                        current_app.logger.warning(f"PDF file not found at path: {full_pdf_path}")
+
+        # Generate Excel file with all awards data using the existing function
+        excel_wb = create_awards_excel(awards)
+
+        # Save the Excel file to the temporary directory root
+        excel_path = os.path.join(temp_dir, f"awards_summary_{uuid.uuid4().hex[:8]}.xlsx")
+        excel_wb.save(excel_path)
+        
+        # Create a ZIP file from the organized directory structure
+        zip_buffer = BytesIO()
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            for root, dirs, files in os.walk(temp_dir):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    # Calculate the archive name (path inside the ZIP)
+                    archive_name = os.path.relpath(file_path, temp_dir)
+                    zip_file.write(file_path, archive_name)
+        
+        # Clean up the temporary directory
+        shutil.rmtree(temp_dir)
+        
+        # Prepare the ZIP file for download
+        zip_buffer.seek(0)
+        
+        # Log successful export
+        log_audit_event(
+            event_type="award.pdf.excel.zip.export.success",
+            user_id=actor_id,
+            details={
+                "exported_count": len(awards),
+                "categories_count": len(categories),
+                "categories": list(categories.keys())
+            },
+            ip_address=request.remote_addr
+        )
+        
+        # Send the ZIP file to the user
+        return send_file(
+            zip_buffer,
+            as_attachment=True,
+            download_name=f"awards_pdfs_with_excel_{uuid.uuid4().hex[:8]}.zip",
+            mimetype='application/zip'
+        )
+        
+    except Exception as exc:
+        current_app.logger.exception("Error exporting awards PDFs to ZIP")
+        error_msg = f"System error occurred while exporting awards PDFs to ZIP: {str(exc)}"
+        log_audit_event(
+            event_type="award.pdf.excel.zip.export.failed",
+            user_id=actor_id,
+            details={"error": error_msg, "exception_type": type(exc).__name__, "exception_message": str(exc)},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 400
+
+@research_bp.route('/awards/export-with-pdfs', methods=['GET'])
+@jwt_required()
+@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
+def export_awards_with_pdfs():
+    """Export all awards with PDFs organized by category in a ZIP file, including an Excel summary."""
+    actor_id, context = _resolve_actor_context("export_awards_with_pdfs")
+    try:
+        import zipfile
+        import shutil
+        from io import BytesIO
+        import tempfile
+
+        # Get all awards with related data
+        awards = award_utils.list_awards(
+            actor_id=actor_id,
+            context=context
+        )
+        
+        # Base path where PDF files are stored
+        base_path = current_app.config.get("UPLOAD_FOLDER", "uploads")
+        
+        # Create a temporary directory to organize files
+        temp_dir = tempfile.mkdtemp()
+        
+        # Organize awards by category
+        categories = {}
+        for award in awards:
+            if award.complete_pdf and award.category:
+                category_name = award.category.name
+                if category_name not in categories:
+                    categories[category_name] = []
+                categories[category_name].append(award)
+        
+        # Create subdirectories for each category and copy PDF files
+        for category_name, award_list in categories.items():
+            category_dir = os.path.join(temp_dir, category_name)
+            os.makedirs(category_dir, exist_ok=True)
+
+            for award in award_list:
+                if award.complete_pdf:
+                    # Construct the full path from the base path
+                    full_pdf_path = os.path.join(base_path, os.path.basename(award.complete_pdf))
+
+                    # Verify the file exists before copying
+                    if os.path.exists(full_pdf_path):
+                        # Get the original filename
+                        original_filename = os.path.basename(full_pdf_path)
+                        # Create new filename with award ID to avoid conflicts
+                        new_filename = f"{award.id.hex}_{original_filename}"
+                        destination_path = os.path.join(category_dir, new_filename)
+                        
+                        # Copy the PDF file to the category folder
+                        shutil.copy2(full_pdf_path, destination_path)
+                    else:
+                        current_app.logger.warning(f"PDF file not found at path: {full_pdf_path}")
+
+        # Generate Excel file with all awards data using the existing function
+        excel_wb = create_awards_excel(awards)
+
+        # Save the Excel file to the temporary directory root
+        excel_path = os.path.join(temp_dir, f"awards_summary_{uuid.uuid4().hex[:8]}.xlsx")
+        excel_wb.save(excel_path)
+        
+        # Create a ZIP file from the organized directory structure
+        zip_buffer = BytesIO()
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            for root, dirs, files in os.walk(temp_dir):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    # Calculate the archive name (path inside the ZIP)
+                    archive_name = os.path.relpath(file_path, temp_dir)
+                    zip_file.write(file_path, archive_name)
+        
+        # Clean up the temporary directory
+        shutil.rmtree(temp_dir)
+        
+        # Prepare the ZIP file for download
+        zip_buffer.seek(0)
+        
+        # Log successful export
+        log_audit_event(
+            event_type="award.pdf.excel.zip.export.success",
+            user_id=actor_id,
+            details={
+                "exported_count": len(awards),
+                "categories_count": len(categories),
+                "categories": list(categories.keys())
+            },
+            ip_address=request.remote_addr
+        )
+        
+        # Send the ZIP file to the user
+        return send_file(
+            zip_buffer,
+            as_attachment=True,
+            download_name=f"awards_pdfs_with_excel_{uuid.uuid4().hex[:8]}.zip",
+            mimetype='application/zip'
+        )
+        
+    except Exception as exc:
+        current_app.logger.exception("Error exporting awards with PDFs to ZIP")
+        error_msg = f"System error occurred while exporting awards with PDFs to ZIP: {str(exc)}"
+        log_audit_event(
+            event_type="award.pdf.excel.zip.export.failed",
+            user_id=actor_id,
+            details={"error": error_msg, "exception_type": type(exc).__name__, "exception_message": str(exc)},
             ip_address=request.remote_addr
         )
         return jsonify({"error": error_msg}), 400

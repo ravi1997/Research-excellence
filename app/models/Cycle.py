@@ -475,6 +475,12 @@ class Awards(db.Model):
     submitted_by = synonym("created_by")
     submitted_by_id = synonym("created_by_id")
     updated_on = synonym("updated_at")
+    review_phase = db.Column(
+        db.Integer,
+        nullable=False,
+        default=1,
+        server_default="1",
+    )
 
 class AwardVerifiers(db.Model):
     __tablename__ = "award_verifiers"
@@ -647,6 +653,12 @@ class BestPaper(db.Model):
     submitted_by_id = synonym("created_by_id")
     updated_on = synonym("updated_at")
     paper_number = synonym("bestpaper_number")
+    review_phase = db.Column(
+        db.Integer,
+        nullable=False,
+        default=1,
+        server_default="1",
+    )
 
 class BestPaperVerifiers(db.Model):
     __tablename__ = "best_paper_verifiers"
