@@ -43,7 +43,8 @@ def list_users():
             search_filter = or_(
                 User.username.ilike(f'%{search}%'),
                 User.email.ilike(f'%{search}%'),
-                User.employee_id.ilike(f'%{search}%')
+                User.employee_id.ilike(f'%{search}%'),
+                User.mobile.ilike(f'%{search}%'),
             )
             query = query.filter(search_filter)
         

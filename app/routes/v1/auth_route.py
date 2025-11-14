@@ -212,7 +212,8 @@ def login():
             if not user:
                 current_app.logger.warning(
                     f"Login failed: No user found for identifier {identifier}")
-                log_login_failed('user_not_found')
+                log_login_failed(
+                    f"Login failed: No user found for identifier {identifier}")
                 return _htmx_or_json_error("Invalid credentials", 401)
             if not user.is_verified:
                 current_app.logger.warning(f"Login failed: user {identifier} not verified by admin")
@@ -237,7 +238,8 @@ def login():
         if not user:
             current_app.logger.warning(
                 f"Login failed: No user found for mobile {mobile}")
-            log_login_failed('otp_user_not_found')
+            log_login_failed(
+                f"Login failed: No user found for mobile {mobile}")
             return _htmx_or_json_error("Invalid OTP", 401)
         if not user.verify_otp(otp):
             current_app.logger.warning(
@@ -408,13 +410,16 @@ def generate_otp():
     mobile = data.get("mobile")
 
     if not mobile:
-        audit_log('generate_otp_failed', detail='missing_mobile')
+        current_app.logger.warning("OTP generation failed: Missing mobile number")
+        audit_log('generate_otp_failed',
+                  detail="OTP generation failed: Missing mobile number")
         return jsonify({"msg": "Mobile number required", "success": False}), 400
 
     # Using SQLAlchemy (Postgres) instead of Mongo-style API
     user = _get_user_by_mobile(mobile)
     if not user:
-        audit_log('generate_otp_failed', detail='user_not_found')
+        audit_log('generate_otp_failed',
+                  detail='"OTP generation failed: Missing mobile number"')
         return jsonify({"msg": "User with this mobile not found", "success": False}), 404
 
     # Generate 6-digit OTP
@@ -663,12 +668,12 @@ def verify_otp():
     code = data.get('otp')
 
     if not mobile or not code:
-        audit_log('verify_otp_failed', detail='missing_params')
+        audit_log('verify_otp_failed', detail=f"missing_fields mobile:{'yes' if mobile else 'no'} otp:{'yes' if code else 'no'}")
         return jsonify({'msg': 'mobile and otp required'}), 400
 
     user = _get_user_by_mobile(mobile)
     if not user:
-        audit_log('verify_otp_failed', detail='user_not_found')
+        audit_log('verify_otp_failed', detail=f"user not found mobile:{mobile}")
         return jsonify({'msg': 'user not found'}), 404
 
     if not user.verify_otp(code):
@@ -899,7 +904,7 @@ def upload_id(user_id):
         context={"route": "auth.upload_id.lookup"},
     )
     if not user:
-        audit_log('upload_id_failed', target_user_id=user_id, detail='user_not_found')
+        audit_log('upload_id_failed', target_user_id=user_id, detail=f'user not found for user_id : {user_id}')
         return jsonify({'msg': 'user not found'}), 404
     user.document_submitted = True
     user_utils.update_user(
@@ -943,7 +948,7 @@ def verify_user():
         data = request.form or {}
     target_id = (data.get('user_id') or '').strip()
     if not target_id:
-        audit_log('verify_user_failed', detail='missing_user_id')
+        audit_log('verify_user_failed', detail='user id not provided.')
         return jsonify({'msg': 'user_id required'}), 400
     target = user_utils.get_user_by_id(
         target_id,
