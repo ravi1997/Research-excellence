@@ -1375,7 +1375,7 @@ def get_abstracts_for_verifier(user_id):
 
 @research_bp.route('/abstracts/bulk-assign-verifiers', methods=['POST'])
 @jwt_required()
-@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
+@require_roles(Role.COORDINATOR.value, Role.ADMIN.value, Role.SUPERADMIN.value)
 def bulk_assign_verifiers():
     """Bulk assign verifiers to multiple abstracts."""
     actor_id, context = _resolve_actor_context("bulk_assign_verifiers")
@@ -1486,7 +1486,7 @@ def bulk_assign_verifiers():
 
 @research_bp.route('/abstracts/bulk-unassign-verifiers', methods=['POST'])
 @jwt_required()
-@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
+@require_roles(Role.COORDINATOR.value, Role.ADMIN.value, Role.SUPERADMIN.value)
 def bulk_unassign_verifiers():
     """Bulk unassign verifiers from multiple abstracts."""
     actor_id, context = _resolve_actor_context("bulk_unassign_verifiers")
