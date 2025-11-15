@@ -1568,7 +1568,7 @@ def export_papers_excel():
     actor_id, context = _resolve_actor_context("export_papers_excel")
     try:
         # Get all abstracts with related data
-        abstracts = best_paper_utils.list_papers(
+        abstracts = best_paper_utils.list_best_papers(
             actor_id=actor_id,
             context=context
         )
@@ -1632,7 +1632,7 @@ def export_papers_pdf_zip():
         import tempfile
 
         # Get all awards with related data
-        papers = best_paper_utils.list_papers(
+        papers = best_paper_utils.list_best_papers(
             actor_id=actor_id,
             context=context
         )
@@ -1747,7 +1747,7 @@ def export_papers_with_pdfs():
         import tempfile
 
         # Get all awards with related data
-        papers = best_paper_utils.list_papers(
+        papers = best_paper_utils.list_best_papers(
             actor_id=actor_id,
             context=context
         )

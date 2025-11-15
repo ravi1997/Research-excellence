@@ -570,4 +570,14 @@
             console.warn("Best paper list controller not ready or already on first page");
         }
     };
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const downloadBtn = document.getElementById('DownloadBtn');
+        if (downloadBtn) {
+            downloadBtn.addEventListener('click', function () {
+                // Use the common download function from SubmitList
+                window.SubmitList.handleDownload(`${BASE}/best-papers/export-pdf-zip`, 'best_papers_data.zip');
+            });
+        }
+    });
 })();
