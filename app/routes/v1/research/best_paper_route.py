@@ -1,3 +1,5 @@
+import re
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from flask import request, jsonify, current_app, abort, send_file
 import json
 import os
@@ -1460,6 +1462,25 @@ def bulk_unassign_verifiers_from_best_papers():
         return jsonify({"error": error_msg}), 400
 
 
+def sanitize_excel_value(value):
+    """
+    Convert to string and strip characters illegal in Excel.
+    """
+    if value is None:
+        return ""
+
+    # If it's not string, convert
+    if not isinstance(value, str):
+        value = str(value)
+
+    # Remove illegal characters (ASCII control chars that Excel doesn't allow)
+    value = ILLEGAL_CHARACTERS_RE.sub("", value)
+
+    # Optional: also strip other weird control chars if you want
+    # value = re.sub(r"[\x00-\x08\x0B\x0C\x0E-\x1F]", "", value)
+
+    return value
+
 def create_paper_excel(papers):
     """Create an Excel workbook with all papers data"""
     wb = openpyxl.Workbook()
@@ -1482,9 +1503,9 @@ def create_paper_excel(papers):
     # Add paper data to worksheet
     for row_num, paper in enumerate(papers, 2):
         # Get author information
-        authors_list = paper.author.name if paper.author else []
-        author_emails_list = paper.author.email if paper.author else []
-        affiliations_list = paper.author.affiliation if paper.author else []
+        authors_list = paper.author.name if paper.author else None
+        author_emails_list = paper.author.email if paper.author else None
+        affiliations_list = paper.author.affiliation if paper.author else None
 
         # Get creator name
         creator_name = paper.created_by.username if paper.created_by_id else "N/A"
@@ -1500,26 +1521,26 @@ def create_paper_excel(papers):
         # Add row data
         row_data = [
             str(paper.id),  # Convert UUID to string
-            paper.paper_number,
-            paper.title,
-            category_name,
+            paper.paper_number or "N/A",
+            paper.title or "N/A",
+            category_name or "N/A",
             paper.status.name if paper.status else "N/A",
-            creator_name,
+            creator_name or "N/A",
             paper.created_at.isoformat() if paper.created_at else "N/A",
             paper.updated_at.isoformat() if paper.updated_at else "N/A",
             paper.complete_pdf or "N/A",
-            paper.review_phase,
-            cycle_name,
-            cycle_start_date,
-            cycle_end_date,
-            "; ".join(authors_list),
-            "; ".join(str(e) for e in author_emails_list if e),
-            "; ".join(str(e) for e in affiliations_list if e),
+            paper.review_phase or "N/A",
+            cycle_name or "N/A",
+            cycle_start_date or "N/A",
+            cycle_end_date or "N/A",
+            authors_list or "N/A",
+            author_emails_list or "N/A",
+            affiliations_list or "N/A",
         ]
 
         for col_num, value in enumerate(row_data, 1):
-            cell = ws.cell(row=row_num, column=col_num, value=str(
-                value) if value is not None else "")
+            cell = ws.cell(row=row_num, column=col_num,
+                           value=sanitize_excel_value(value))
             cell.alignment = Alignment(
                 horizontal="left", vertical="top", wrap_text=True)
 

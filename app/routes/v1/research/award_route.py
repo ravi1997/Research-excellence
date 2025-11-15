@@ -1,3 +1,4 @@
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from flask import request, jsonify, current_app, abort, send_file
 import json
 import os
@@ -1468,6 +1469,26 @@ def bulk_unassign_verifiers_from_awards():
         return jsonify({"error": error_msg}), 400
 
 
+import re
+
+def sanitize_excel_value(value):
+    """
+    Convert to string and strip characters illegal in Excel.
+    """
+    if value is None:
+        return ""
+
+    # If it's not string, convert
+    if not isinstance(value, str):
+        value = str(value)
+
+    # Remove illegal characters (ASCII control chars that Excel doesn't allow)
+    value = ILLEGAL_CHARACTERS_RE.sub("", value)
+
+    # Optional: also strip other weird control chars if you want
+    # value = re.sub(r"[\x00-\x08\x0B\x0C\x0E-\x1F]", "", value)
+
+    return value
 
 def create_awards_excel(awards):
     """Create an Excel workbook with all awards data"""
@@ -1491,9 +1512,9 @@ def create_awards_excel(awards):
     # Add award data to worksheet
     for row_num, award in enumerate(awards, 2):
         # Get author information
-        authors_list = award.author.name if award.author else []
-        author_emails_list = award.author.email if award.author else []
-        affiliations_list = award.author.affiliation if award.author else []
+        authors_list = award.author.name if award.author else None
+        author_emails_list = award.author.email if award.author else None
+        affiliations_list = award.author.affiliation if award.author else None
 
         # Get creator name
         creator_name = award.created_by.username if award.created_by_id else "N/A"
@@ -1509,25 +1530,26 @@ def create_awards_excel(awards):
         # Add row data
         row_data = [
             str(award.id),  # Convert UUID to string
-            award.award_number,
-            award.title,
-            category_name,
+            award.award_number or "N/A",
+            award.title or "N/A",
+            category_name or "N/A",
             award.status.name if award.status else "N/A",
-            creator_name,
+            creator_name or "N/A",
             award.created_at.isoformat() if award.created_at else "N/A",
             award.updated_at.isoformat() if award.updated_at else "N/A",
             award.complete_pdf or "N/A",
-            award.review_phase,
-            cycle_name,
-            cycle_start_date,
-            cycle_end_date,
-            "; ".join(authors_list),
-            "; ".join(str(e) for e in author_emails_list if e),
-            "; ".join(str(e) for e in affiliations_list if e),
+            award.review_phase or "N/A",
+            cycle_name or "N/A",
+            cycle_start_date or "N/A",
+            cycle_end_date or "N/A",
+            authors_list or "N/A",
+            author_emails_list or "N/A",
+            affiliations_list or "N/A",
         ]
         
         for col_num, value in enumerate(row_data, 1):
-            cell = ws.cell(row=row_num, column=col_num, value=str(value) if value is not None else "")
+            cell = ws.cell(row=row_num, column=col_num,
+                           value=sanitize_excel_value(value))
             cell.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
     
     # Auto-adjust column widths
