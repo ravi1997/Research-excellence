@@ -6,6 +6,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.models.User import User
 from app.routes.v1.research import research_bp
 from app.models.Cycle import BestPaperVerifiers, BestPaper, Author, Category, PaperCategory, Cycle
+from app.routes.v1.user_role_route import _resolve_actor_context
 from app.schemas.best_paper_schema import BestPaperSchema
 from app.extensions import db
 from app.utils.decorator import require_roles
@@ -14,6 +15,7 @@ from werkzeug.utils import secure_filename
 
 from app.utils.services.mail import send_mail
 from app.utils.services.sms import send_sms
+from app.utils.model_utils import best_paper_utils
 
 # Import utility functions
 from app.utils.model_utils.best_paper_utils import (
@@ -37,6 +39,10 @@ from app.utils.model_utils.audit_log_utils import (
     create_audit_log as create_audit_log_util,
     record_event as record_event_util,
 )
+
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment
+from openpyxl.utils import get_column_letter
 
 # NOTE: Underlying model/schema still named BestPaper for now; outward API renamed to best_papers
 best_paper_schema = BestPaperSchema()
@@ -1449,6 +1455,375 @@ def bulk_unassign_verifiers_from_best_papers():
             event_type="best_paper.verifiers.bulk_unassign.failed",
             user_id=current_user_id,
             details={"error": error_msg, "exception_type": type(e).__name__, "exception_message": str(e)},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 400
+
+
+def create_paper_excel(papers):
+    """Create an Excel workbook with all papers data"""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Papers Master Sheet"
+
+    # Define headers with more detailed information from the models
+    headers = [
+        "ID", "Paper Number", "Title", "Category", "Status",
+        "Created By", "Created At", "Updated At", "PDF Path",
+        "Review Phase", "Cycle Name", "Cycle Start Date", "Cycle End Date",
+        "Authors", "Author Emails", "Affiliations"
+    ]
+
+    # Add headers to worksheet
+    for col_num, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col_num, value=header)
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    # Add paper data to worksheet
+    for row_num, paper in enumerate(papers, 2):
+        # Get author information
+        authors_list = paper.author.name if paper.author else []
+        author_emails_list = paper.author.email if paper.author else []
+        affiliations_list = paper.author.affiliation if paper.author else []
+
+        # Get creator name
+        creator_name = paper.created_by.username if paper.created_by_id else "N/A"
+
+        # Get cycle information
+        cycle_name = paper.cycle.name if paper.cycle else "N/A"
+        cycle_start_date = paper.cycle.start_date.isoformat() if paper.cycle and paper.cycle.start_date else "N/A"
+        cycle_end_date = paper.cycle.end_date.isoformat() if paper.cycle and paper.cycle.end_date else "N/A"
+
+        # Get category information
+        category_name = paper.category.name if paper.category else "N/A"
+
+        # Add row data
+        row_data = [
+            str(paper.id),  # Convert UUID to string
+            paper.paper_number,
+            paper.title,
+            category_name,
+            paper.status.name if paper.status else "N/A",
+            creator_name,
+            paper.created_at.isoformat() if paper.created_at else "N/A",
+            paper.updated_at.isoformat() if paper.updated_at else "N/A",
+            paper.complete_pdf or "N/A",
+            paper.review_phase,
+            cycle_name,
+            cycle_start_date,
+            cycle_end_date,
+            "; ".join(authors_list),
+            "; ".join(str(e) for e in author_emails_list if e),
+            "; ".join(str(e) for e in affiliations_list if e),
+        ]
+
+        for col_num, value in enumerate(row_data, 1):
+            cell = ws.cell(row=row_num, column=col_num, value=str(
+                value) if value is not None else "")
+            cell.alignment = Alignment(
+                horizontal="left", vertical="top", wrap_text=True)
+
+    # Auto-adjust column widths
+    for column in ws.columns:
+        max_length = 0
+        column_letter = get_column_letter(column[0].column)
+        for cell in column:
+            try:
+                if len(str(cell.value)) > max_length:
+                    max_length = len(str(cell.value))
+            except:
+                pass
+        adjusted_width = min(max_length + 2, 50)  # Limit max width to 50
+        ws.column_dimensions[column_letter].width = adjusted_width
+
+    return wb
+
+
+@research_bp.route('/best-papers/export-excel', methods=['GET'])
+@jwt_required()
+@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
+def export_papers_excel():
+    """Export all papers to an Excel file."""
+    actor_id, context = _resolve_actor_context("export_papers_excel")
+    try:
+        # Get all abstracts with related data
+        abstracts = best_paper_utils.list_papers(
+            actor_id=actor_id,
+            context=context
+        )
+
+        # Create Excel workbook
+        wb = create_paper_excel(abstracts)
+
+        # Save to a temporary file
+        from io import BytesIO
+        from flask import send_file
+        import tempfile
+        import os
+
+        # Create a temporary file
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx')
+        wb.save(temp_file.name)
+        temp_file.close()  # Close the file so it can be read by send_file
+
+        # Log successful export
+        log_audit_event(
+            event_type="abstract.excel.export.success",
+            user_id=actor_id,
+            details={
+                "exported_count": len(abstracts),
+                "file_path": temp_file.name
+            },
+            ip_address=request.remote_addr
+        )
+
+        # Send the file to the user
+        return send_file(
+            temp_file.name,
+            as_attachment=True,
+            download_name=f"papers_master_{uuid.uuid4().hex[:8]}.xlsx",
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+
+    except Exception as exc:
+        current_app.logger.exception("Error exporting papers to Excel")
+        error_msg = f"System error occurred while exporting papers to Excel: {str(exc)}"
+        log_audit_event(
+            event_type="paper.excel.export.failed",
+            user_id=actor_id,
+            details={"error": error_msg, "exception_type": type(
+                exc).__name__, "exception_message": str(exc)},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 400
+
+
+@research_bp.route('/best-papers/export-pdf-zip', methods=['GET'])
+@jwt_required()
+@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
+def export_papers_pdf_zip():
+    """Export all award PDFs in a ZIP file organized by category, including an Excel summary."""
+    actor_id, context = _resolve_actor_context("export_papers_pdf_zip")
+    try:
+        import zipfile
+        import shutil
+        from io import BytesIO
+        import tempfile
+
+        # Get all awards with related data
+        papers = best_paper_utils.list_papers(
+            actor_id=actor_id,
+            context=context
+        )
+
+        # Base path where PDF files are stored
+        base_path = current_app.config.get("UPLOAD_FOLDER", "uploads")
+
+        # Create a temporary directory to organize files
+        temp_dir = tempfile.mkdtemp()
+
+        # Organize awards by category
+        categories = {}
+        for paper in papers:
+            if paper.complete_pdf and paper.category:
+                category_name = paper.category.name
+                if category_name not in categories:
+                    categories[category_name] = []
+                categories[category_name].append(paper)
+        # Create subdirectories for each category and copy PDF files
+        for category_name, paper_list in categories.items():
+            category_dir = os.path.join(temp_dir, category_name)
+            os.makedirs(category_dir, exist_ok=True)
+
+            for paper in paper_list:
+                if paper.complete_pdf:
+                    # Construct the full path from the base path
+                    full_pdf_path = os.path.join(
+                        base_path, os.path.basename(paper.complete_pdf))
+
+                    # Verify the file exists before copying
+                    if os.path.exists(full_pdf_path):
+                        # Get the original filename
+                        original_filename = os.path.basename(full_pdf_path)
+                        # Create new filename with abstract ID to avoid conflicts
+                        new_filename = f"{paper.id.hex}_{original_filename}"
+                        destination_path = os.path.join(
+                            category_dir, new_filename)
+
+                        # Copy the PDF file to the category folder
+                        shutil.copy2(full_pdf_path, destination_path)
+                    else:
+                        current_app.logger.warning(
+                            f"PDF file not found at path: {full_pdf_path}")
+
+        # Generate Excel file with all awards data using the existing function
+        excel_wb = create_paper_excel(papers)
+
+        # Save the Excel file to the temporary directory root
+        excel_path = os.path.join(
+            temp_dir, f"papers_summary_{uuid.uuid4().hex[:8]}.xlsx")
+        excel_wb.save(excel_path)
+
+        # Create a ZIP file from the organized directory structure
+        zip_buffer = BytesIO()
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            for root, dirs, files in os.walk(temp_dir):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    # Calculate the archive name (path inside the ZIP)
+                    archive_name = os.path.relpath(file_path, temp_dir)
+                    zip_file.write(file_path, archive_name)
+
+        # Clean up the temporary directory
+        shutil.rmtree(temp_dir)
+
+        # Prepare the ZIP file for download
+        zip_buffer.seek(0)
+
+        # Log successful export
+        log_audit_event(
+            event_type="paper.pdf.excel.zip.export.success",
+            user_id=actor_id,
+            details={
+                "exported_count": len(papers),
+                "categories_count": len(categories),
+                "categories": list(categories.keys())
+            },
+            ip_address=request.remote_addr
+        )
+
+        # Send the ZIP file to the user
+        return send_file(
+            zip_buffer,
+            as_attachment=True,
+            download_name=f"papers_pdfs_with_excel_{uuid.uuid4().hex[:8]}.zip",
+            mimetype='application/zip'
+        )
+
+    except Exception as exc:
+        current_app.logger.exception("Error exporting papers PDFs to ZIP")
+        error_msg = f"System error occurred while exporting papers PDFs to ZIP: {str(exc)}"
+        log_audit_event(
+            event_type="paper.pdf.excel.zip.export.failed",
+            user_id=actor_id,
+            details={"error": error_msg, "exception_type": type(
+                exc).__name__, "exception_message": str(exc)},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 400
+
+
+@research_bp.route('/best-papers/export-with-pdfs', methods=['GET'])
+@jwt_required()
+@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
+def export_papers_with_pdfs():
+    """Export all papers with PDFs organized by category in a ZIP file, including an Excel summary."""
+    actor_id, context = _resolve_actor_context("export_papers_with_pdfs")
+    try:
+        import zipfile
+        import shutil
+        from io import BytesIO
+        import tempfile
+
+        # Get all awards with related data
+        papers = best_paper_utils.list_papers(
+            actor_id=actor_id,
+            context=context
+        )
+
+        # Base path where PDF files are stored
+        base_path = current_app.config.get("UPLOAD_FOLDER", "uploads")
+
+        # Create a temporary directory to organize files
+        temp_dir = tempfile.mkdtemp()
+
+        # Organize awards by category
+        categories = {}
+        for paper in papers:
+            if paper.complete_pdf and paper.category:
+                category_name = paper.category.name
+                if category_name not in categories:
+                    categories[category_name] = []
+                categories[category_name].append(paper)
+
+        # Create subdirectories for each category and copy PDF files
+        for category_name, paper_list in categories.items():
+            category_dir = os.path.join(temp_dir, category_name)
+            os.makedirs(category_dir, exist_ok=True)
+
+            for paper in paper_list:
+                if paper.complete_pdf:
+                    # Construct the full path from the base path
+                    full_pdf_path = os.path.join(
+                        base_path, os.path.basename(paper.complete_pdf))
+
+                    # Verify the file exists before copying
+                    if os.path.exists(full_pdf_path):
+                        # Get the original filename
+                        original_filename = os.path.basename(full_pdf_path)
+                        # Create new filename with paper ID to avoid conflicts
+                        new_filename = f"{paper.id.hex}_{original_filename}"
+                        destination_path = os.path.join(
+                            category_dir, new_filename)
+
+                        # Copy the PDF file to the category folder
+                        shutil.copy2(full_pdf_path, destination_path)
+                    else:
+                        current_app.logger.warning(
+                            f"PDF file not found at path: {full_pdf_path}")
+
+        # Generate Excel file with all awards data using the existing function
+        excel_wb = create_paper_excel(papers)
+
+        # Save the Excel file to the temporary directory root
+        excel_path = os.path.join(
+            temp_dir, f"papers_summary_{uuid.uuid4().hex[:8]}.xlsx")
+        excel_wb.save(excel_path)
+
+        # Create a ZIP file from the organized directory structure
+        zip_buffer = BytesIO()
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            for root, dirs, files in os.walk(temp_dir):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    # Calculate the archive name (path inside the ZIP)
+                    archive_name = os.path.relpath(file_path, temp_dir)
+                    zip_file.write(file_path, archive_name)
+
+        # Clean up the temporary directory
+        shutil.rmtree(temp_dir)
+
+        # Prepare the ZIP file for download
+        zip_buffer.seek(0)
+
+        # Log successful export
+        log_audit_event(
+            event_type="award.pdf.excel.zip.export.success",
+            user_id=actor_id,
+            details={
+                "exported_count": len(papers),
+                "categories_count": len(categories),
+                "categories": list(categories.keys())
+            },
+            ip_address=request.remote_addr
+        )
+
+        # Send the ZIP file to the user
+        return send_file(
+            zip_buffer,
+            as_attachment=True,
+            download_name=f"papers_pdfs_with_excel_{uuid.uuid4().hex[:8]}.zip",
+            mimetype='application/zip'
+        )
+
+    except Exception as exc:
+        current_app.logger.exception("Error exporting papers with PDFs to ZIP")
+        error_msg = f"System error occurred while exporting papers with PDFs to ZIP: {str(exc)}"
+        log_audit_event(
+            event_type="paper.pdf.excel.zip.export.failed",
+            user_id=actor_id,
+            details={"error": error_msg, "exception_type": type(
+                exc).__name__, "exception_message": str(exc)},
             ip_address=request.remote_addr
         )
         return jsonify({"error": error_msg}), 400
