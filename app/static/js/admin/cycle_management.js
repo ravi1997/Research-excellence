@@ -53,6 +53,11 @@ document.addEventListener('DOMContentLoaded', function() {
             const windowId = e.target.getAttribute('data-window-id');
             deleteWindow(cycleId, windowId);
         }
+        else{
+            const cycleId = e.target.getAttribute('data-cycle-id');
+            const windowId = e.target.getAttribute('data-window-id');
+            deleteWindow(cycleId, windowId);
+        }
     });
 });
 
@@ -166,9 +171,9 @@ function renderCycleWindows(windows) {
         const endDate = new Date(window.end_date).toLocaleDateString();
         
         html += `
-            <div class="border border-gray-200 rounded-lg p-4 bg-gray-50">
-                <div class="flex justify-between items-start">
-                    <div>
+            <div class="border border-gray-200 rounded-lg p-4 bg-gray-50" data-cycle-id="${window.cycle_id}" data-window-id="${window.id}">
+                <div class="flex justify-between items-start" data-cycle-id="${window.cycle_id}" data-window-id="${window.id}">
+                    <div data-cycle-id="${window.cycle_id}" data-window-id="${window.id}">
                         <h4 class="font-medium text-gray-800">${phaseDisplay}</h4>
                         <p class="text-sm text-gray-600">${startDate} to ${endDate}</p>
                     </div>
