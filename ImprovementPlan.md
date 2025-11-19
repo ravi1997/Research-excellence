@@ -1,7 +1,7 @@
-# Detailed Improvement Plan for Route Consolidation
+# Detailed Improvement Plan for ResearchCycle Framework and Route Consolidation
 
 ## Executive Summary
-The route files in `app/routes/v1` exhibit significant code duplication, especially in the research modules (abstracts, awards, best papers). This document outlines specific improvements to reduce redundancy and increase maintainability.
+The route files in `app/routes/v1` exhibit significant code duplication, especially in the research modules (abstracts, awards, best papers). This document outlines specific improvements to reduce redundancy and increase maintainability, with special focus on the ResearchCycle framework and reviewer management system.
 
 ## Priority Improvements
 
@@ -216,7 +216,7 @@ def create_abstract():
 ### 3. Generic Verifier Management Module
 
 #### Current State
-All three research entities have identical verifier assignment logic:
+All three research entities have identical reviewer assignment logic:
 
 **Before (Duplicated in abstract, award, and best paper routes)**:
 ```python
@@ -451,7 +451,7 @@ def create_abstract():
 3. Refactor Best Paper routes using generic controller
 
 ### Phase 3: Advanced Consolidation (Week 3)
-1. Create generic verifier management module
+1. Create generic reviewer management module
 2. Consolidate user management operations
 3. Implement bulk operation generics
 

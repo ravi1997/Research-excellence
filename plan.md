@@ -1,4 +1,4 @@
-# Academic Submission System - Model Enhancement Plan
+# ResearchCycle Framework - Model Enhancement Plan
 
 ## Overview
 This document outlines the plan to enhance the existing models in the `app/models` folder to implement a comprehensive academic submission system with multi-period cycle management.
@@ -99,7 +99,7 @@ This document outlines the plan to enhance the existing models in the `app/model
 ## Implementation Plan
 
 ### Phase 1: Enhanced Cycle Management
-1. Enhance `Cycle` model with submission_start_date, submission_end_date, verification_start_date, verification_end_date, final_start_date, final_end_date
+1. Enhance `ResearchCycle` model with submission_start_date, submission_end_date, verification_start_date, verification_end_date, final_start_date, final_end_date
 2. Add status field and extension_days field
 3. Implement period validation methods
 4. Add constraints to prevent temporal overlap
@@ -177,8 +177,8 @@ This document outlines the plan to enhance the existing models in the `app/model
 
 ### Enhanced Cycle Model
 ```python
-class AcademicCycle(db.Model):
-    __tablename__ = "academic_cycles"
+class ResearchCycle(db.Model):
+    __tablename__ = "research_cycles"
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     cycle_name = db.Column(db.String(100), nullable=False, unique=True)
     submission_start_date = db.Column(db.DateTime(timezone=True), nullable=False)
@@ -416,5 +416,34 @@ def validate_pdf_file(file_path, max_size_mb=10):
 3. Implement data migration scripts if needed
 4. Test thoroughly to ensure no data loss
 5. Deploy in phases to minimize disruption
+
+## Redis Configuration Details
+
+The system now includes Redis for caching and session management. The following configuration is required:
+
+```python
+# Redis configuration in app/config.py
+class Config:
+    # ... other configurations ...
+    REDIS_URL = os.environ.get('REDIS_URL') or 'redis://localhost:6379/0'
+    REDIS_HOST = os.environ.get('REDIS_HOST') or 'localhost'
+    REDIS_PORT = int(os.environ.get('REDIS_PORT') or 6379)
+    REDIS_DB = int(os.environ.get('REDIS_DB') or 0)
+    REDIS_PASSWORD = os.environ.get('REDIS_PASSWORD') or None
+    REDIS_SSL = os.environ.get('REDIS_SSL', 'False').lower() == 'true'
+    
+    # Session configuration using Redis
+    SESSION_TYPE = 'redis'
+    SESSION_REDIS = redis.from_url(REDIS_URL)
+    SESSION_PERMANENT = False
+    SESSION_USE_SIGNER = True
+    SESSION_KEY_PREFIX = 'research_session:'
+    
+    # Cache configuration using Redis
+    CACHE_TYPE = 'redis'
+    CACHE_REDIS_URL = REDIS_URL
+    CACHE_KEY_PREFIX = 'research_cache:'
+    CACHE_DEFAULT_TIMEOUT = 300
+```
 
 This comprehensive plan addresses all the requirements specified in the task while maintaining the existing functionality and ensuring proper data integrity.

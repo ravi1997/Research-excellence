@@ -1,7 +1,7 @@
-# Route Comparison Summary
+# ResearchCycle Framework and Route Comparison Summary
 
 ## Overview
-This document analyzes the routes in the `app/routes/v1` directory to identify similar, redundant, or duplicate code that can be improved. The application follows a research excellence platform structure with authentication, user management, and research-specific functionality.
+This document analyzes the routes in the `app/routes/v1` directory to identify similar, redundant, or duplicate code that can be improved. The application follows a research excellence platform structure with authentication, user management, and ResearchCycle-specific functionality.
 
 ## Route Categories Analysis
 
@@ -84,10 +84,10 @@ This document analyzes the routes in the `app/routes/v1` directory to identify s
 ### 2. Verifier Assignment Pattern
 **Files**: `abstract_route.py`, `award_route.py`, `best_paper_route.py`
 **Pattern**: Identical functions for:
-- Assigning verifiers to entities
-- Unassigning verifiers from entities
-- Getting verifiers for entities
-- Getting entities for verifiers
+- Assigning reviewers to entities
+- Unassigning reviewers from entities
+- Getting reviewers for entities
+- Getting entities for reviewers
 - Bulk assignment/unassignment operations
 
 **Improvement Opportunity**: Create a reusable verifier management module with generic functions.
@@ -180,5 +180,29 @@ Abstract common functionality into base classes that can be inherited by specifi
 
 ## Conclusion
 The codebase shows good consistency in patterns but significant duplication across the three research entities (abstracts, awards, best papers). The most impactful improvements would be to create generic controllers for the research entities and centralize common utilities like audit logging, error handling, and authentication patterns. This would reduce code duplication by approximately 40-50% while maintaining the same functionality.
+
+## Additional Documentation Requirements
+
+The system now includes several important new features that require documentation:
+
+### ResearchCycle Framework
+The application now implements a ResearchCycle framework that manages three distinct phases:
+- Submission phase: For submitting research abstracts, awards, and best papers
+- Verification phase: For review and verification by designated reviewers
+- Final phase: For final screening and selection
+
+### Grading and Category Management
+New features include:
+- Grading system with customizable criteria and weights
+- Category management for organizing research submissions
+- Flexible cycle framework supporting independent time windows
+
+### Security Implementation
+Comprehensive security measures have been implemented:
+- JWT-based authentication with configurable token expiration
+- Role-based access control (SUPERADMIN, ADMIN, USER, REVIEWER)
+- Password complexity enforcement
+- Account lockout after failed login attempts
+- Content Security Policy headers
 
 Additional improvements could include creating shared modules for file handling, bulk operations, and permission checks to further standardize the codebase.

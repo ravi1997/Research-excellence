@@ -1,4 +1,4 @@
-# Flexible Cycle Framework Enhancement Plan
+# ResearchCycle Framework Enhancement Plan
 
 ## Overview
 The current system has a Cycle model with CycleWindow that supports different phases (SUBMISSION, VERIFICATION, FINAL). We need to enhance this to support independent time windows specifically for abstract submissions, best paper nominations, and awards ceremonies.
@@ -80,6 +80,35 @@ def _ensure_submission_window(connection, submission_model, required_phase=None)
         raise ValueError(
             f"Submissions are allowed only during the {required_phase} period for the cycle.",
         )
+```
+
+### 5. Redis Configuration Details
+
+The system now includes Redis for caching and session management. The following configuration is required:
+
+```python
+# Redis configuration in app/config.py
+class Config:
+    # ... other configurations ...
+    REDIS_URL = os.environ.get('REDIS_URL') or 'redis://localhost:6379/0'
+    REDIS_HOST = os.environ.get('REDIS_HOST') or 'localhost'
+    REDIS_PORT = int(os.environ.get('REDIS_PORT') or 6379)
+    REDIS_DB = int(os.environ.get('REDIS_DB') or 0)
+    REDIS_PASSWORD = os.environ.get('REDIS_PASSWORD') or None
+    REDIS_SSL = os.environ.get('REDIS_SSL', 'False').lower() == 'true'
+    
+    # Session configuration using Redis
+    SESSION_TYPE = 'redis'
+    SESSION_REDIS = redis.from_url(REDIS_URL)
+    SESSION_PERMANENT = False
+    SESSION_USE_SIGNER = True
+    SESSION_KEY_PREFIX = 'research_session:'
+    
+    # Cache configuration using Redis
+    CACHE_TYPE = 'redis'
+    CACHE_REDIS_URL = REDIS_URL
+    CACHE_KEY_PREFIX = 'research_cache:'
+    CACHE_DEFAULT_TIMEOUT = 300
 ```
 
 ### 5. Schema Updates
