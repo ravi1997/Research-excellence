@@ -1,7 +1,7 @@
 from marshmallow import fields
 from marshmallow_enum import EnumField
 
-from app.models.Cycle import Cycle, CycleWindow
+from app.models.Cycle import ResearchCycle as Cycle, CycleWindow
 from app.models.enumerations import CyclePhase
 from app.extensions import ma
 

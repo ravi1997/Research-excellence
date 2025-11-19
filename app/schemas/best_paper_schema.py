@@ -1,7 +1,7 @@
 from marshmallow import fields
 from marshmallow_enum import EnumField
 
-from app.models.Cycle import BestPaper, Status
+from app.models.Cycle import BestPaper, Status, PaperType
 from app.extensions import ma
 from app.schemas.author_schema import AuthorSchema
 from app.schemas.paper_category_schema import PaperCategorySchema

@@ -1,41 +1,42 @@
-"""Lightweight in-process cache for admin dashboard metrics.
+"""Redis-based cache for admin dashboard metrics and research data."""
 
-Provides get/set/invalidate so writers across modules can invalidate without
-import cycles. This is intentionally simple; for multi-process deployments,
-back this with Redis in the future.
-"""
-from __future__ import annotations
-
-from typing import Any, Optional
-import time
-
-_CACHE = {
-    'ts': 0.0,      # epoch seconds
-    'ttl': 30.0,    # seconds; keep short to avoid stale UI
-    'data': None,   # cached payload (dict)
-}
+from app.extensions import cache
+from flask import current_app
+import json
 
 
-def configure_ttl(seconds: float) -> None:
-    _CACHE['ttl'] = max(1.0, float(seconds))
-
-
-def get() -> Optional[Any]:
-    now = time.time()
-    data = _CACHE['data']
-    if data is None:
-        return None
-    if (now - _CACHE['ts']) < _CACHE['ttl']:
-        return data
+def get() -> dict | None:
+    """Retrieve cached data."""
+    cached_data = cache.get("dashboard_metrics")
+    if cached_data:
+        return json.loads(cached_data)
     return None
 
 
-def set(data: Any) -> None:
-    _CACHE['data'] = data
-    _CACHE['ts'] = time.time()
+def set(data: dict) -> None:
+    """Store data in cache with 5 minute TTL."""
+    cache.set("dashboard_metrics", json.dumps(data), timeout=300)
 
 
 def invalidate() -> None:
-    _CACHE['data'] = None
-    _CACHE['ts'] = 0.0
+    """Invalidate the cache."""
+    cache.delete("dashboard_metrics")
+
+
+def get_cached_data(key: str) -> dict | None:
+    """Retrieve cached data by key."""
+    cached_data = cache.get(key)
+    if cached_data:
+        return json.loads(cached_data)
+    return None
+
+
+def set_cached_data(key: str, data: dict, timeout: int = 300) -> None:
+    """Store data in cache with custom TTL."""
+    cache.set(key, json.dumps(data), timeout=timeout)
+
+
+def invalidate_cached_data(key: str) -> None:
+    """Invalidate cached data by key."""
+    cache.delete(key)
 

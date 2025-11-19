@@ -3,7 +3,7 @@ import json
 from flask import request, jsonify, current_app
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from app.extensions import db
-from app.models.Cycle import CycleWindow, Cycle
+from app.models.Cycle import CycleWindow, ResearchCycle as Cycle
 from app.models.Token import Token
 from app.models.User import User
 from app.models.enumerations import Role, CyclePhase

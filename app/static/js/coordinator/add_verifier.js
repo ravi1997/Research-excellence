@@ -478,7 +478,7 @@
             vList.appendChild(frag);
         }
         const rejectBtn = $('rejectAbstractBtn');
-        if ((verifiers.length === 0) && (a?.status === 'Status.PENDING'))
+        if ((verifiers.length === 0) && (a?.status === 'Status.UNDER_REVIEW'))
             rejectBtn.classList.remove('hidden');
         else
             rejectBtn.classList.add('hidden');

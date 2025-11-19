@@ -7,7 +7,7 @@ from typing import Dict, Iterable, Optional, Sequence
 from sqlalchemy.orm import joinedload
 
 from app.extensions import db
-from app.models.Cycle import Cycle, CyclePhase, CycleWindow
+from app.models.Cycle import ResearchCycle as Cycle, CyclePhase, CycleWindow
 from app.security_utils import audit_log
 from app.utils.logging_utils import get_logger, log_context
 
@@ -265,7 +265,7 @@ def getActiveCycleForSubmission(
             CycleWindow.start_date <= reference_date,
             CycleWindow.end_date >= reference_date,
         )
-        .order_by(CycleWindow.start_date.asc(), Cycle.name.asc())
+        .order_by(CycleWindow.start_date.asc(), Cycle.cycle_name.asc())
     )
 
     if eager_load_windows:

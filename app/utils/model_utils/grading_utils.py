@@ -6,7 +6,7 @@ from typing import Dict, Optional, Sequence
 from sqlalchemy.orm import joinedload
 
 from app.extensions import db
-from app.models.Cycle import Grading, GradingFor, GradingType
+from app.models.Cycle import Grading, GradingFor, GradingType, ResearchCycle as Cycle
 from app.security_utils import audit_log
 from app.utils.logging_utils import get_logger, log_context
 

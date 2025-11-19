@@ -23,7 +23,7 @@ load_dotenv()
 
 # Import configuration after loading .env
 from .config import config, Config
-from .extensions import jwt, db, migrate, ma
+from .extensions import jwt, db, migrate, ma, cache, session
 from .security import init_jwt_callbacks
 from .models import *
 from app.models.enumerations import Role
@@ -135,6 +135,8 @@ def create_app(config_name=None):
     migrate.init_app(app, db)
     ma.init_app(app)
     jwt.init_app(app)
+    cache.init_app(app)
+    session.init_app(app)
     init_jwt_callbacks(jwt)
     app.cli.add_command(create_user)
     app.cli.add_command(create_superadmin)

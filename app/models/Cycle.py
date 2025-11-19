@@ -19,15 +19,73 @@ from ..extensions import db
 from app.models.enumerations import CyclePhase, GradingFor, Status
 
 
-class Cycle(db.Model):
-    __tablename__ = "cycles"
+from enum import Enum
+
+
+class CycleStatus(str, Enum):
+    ACTIVE = 'active'
+    INACTIVE = 'inactive'
+    COMPLETED = 'completed'
+    SUSPENDED = 'suspended'
+
+
+class AbstractType(str, Enum):
+    ORIGINAL = 'original'
+    REVIEW = 'review'
+    CORRIGENDUM = 'corrigendum'
+    RESEARCH = 'research'
+    CASE_STUDY = 'case_study'
+
+
+class AwardType(str, Enum):
+    BEST_PAPER = 'best_paper'
+    INNOVATION = 'innovation'
+    RESEARCH_EXCELLENCE = 'research_excellence'
+    SERVICE = 'service'
+    CAREER_ACHIEVEMENT = 'career_achievement'
+
+
+class PaperType(str, Enum):
+    RESEARCH = 'research'
+    REVIEW = 'review'
+    CASE_STUDY = 'case_study'
+    SHORT_COMMUNICATION = 'short_communication'
+    LETTER = 'letter'
+
+
+class GradeCategory(str, Enum):
+    ORIGINALITY = 'originality'
+    METHODOLOGY = 'methodology'
+    SIGNIFICANCE = 'significance'
+    CLARITY = 'clarity'
+    IMPACT = 'impact'
+    RELEVANCE = 'relevance'
+
+
+class GradeStatus(str, Enum):
+    PENDING = 'pending'
+    COMPLETED = 'completed'
+    UNDER_REVIEW = 'under_review'
+    REJECTED = 'rejected'
+
+
+class ResearchCycle(db.Model):
+    __tablename__ = "research_cycles"
 
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name = db.Column(db.String(100), nullable=False, unique=True)
+    cycle_name = db.Column(db.String(100), nullable=False, unique=True)
 
-    start_date = db.Column(db.Date, nullable=False)
-    end_date = db.Column(db.Date, nullable=False)
+    # Enhanced period management
+    submission_start_date = db.Column(db.DateTime(timezone=True), nullable=False)
+    submission_end_date = db.Column(db.DateTime(timezone=True), nullable=False)
+    verification_start_date = db.Column(db.DateTime(timezone=True), nullable=False)
+    verification_end_date = db.Column(db.DateTime(timezone=True), nullable=False)
+    final_start_date = db.Column(db.DateTime(timezone=True), nullable=False)
+    final_end_date = db.Column(db.DateTime(timezone=True), nullable=False)
+    status = db.Column(SqlEnum(CycleStatus), nullable=False, default=CycleStatus.ACTIVE)
+    extension_days = db.Column(db.Integer, default=0)
 
+    # Relationships
     best_papers = db.relationship("BestPaper", back_populates="cycle", lazy=True)
     abstracts = db.relationship("Abstracts", back_populates="cycle", lazy=True)
     awards = db.relationship("Awards", back_populates="cycle", lazy=True)
@@ -42,7 +100,7 @@ class Cycle(db.Model):
     submission_windows = db.relationship(
         "CycleWindow",
         primaryjoin=lambda: and_(
-            Cycle.id == CycleWindow.cycle_id,
+            ResearchCycle.id == CycleWindow.cycle_id,
             CycleWindow.phase == CyclePhase.SUBMISSION,
         ),
         viewonly=True,
@@ -52,7 +110,7 @@ class Cycle(db.Model):
     verification_windows = db.relationship(
         "CycleWindow",
         primaryjoin=lambda: and_(
-            Cycle.id == CycleWindow.cycle_id,
+            ResearchCycle.id == CycleWindow.cycle_id,
             CycleWindow.phase == CyclePhase.VERIFICATION,
         ),
         viewonly=True,
@@ -62,12 +120,51 @@ class Cycle(db.Model):
     final_windows = db.relationship(
         "CycleWindow",
         primaryjoin=lambda: and_(
-            Cycle.id == CycleWindow.cycle_id,
+            ResearchCycle.id == CycleWindow.cycle_id,
             CycleWindow.phase == CyclePhase.FINAL,
         ),
         viewonly=True,
         lazy=True,
     )
+
+    # Add check constraints to prevent temporal overlap
+    __table_args__ = (
+        CheckConstraint('submission_start_date < submission_end_date', name='check_submission_dates'),
+        CheckConstraint('verification_start_date < verification_end_date', name='check_verification_dates'),
+        CheckConstraint('final_start_date < final_end_date', name='check_final_dates'),
+        CheckConstraint('submission_end_date <= verification_start_date', name='check_submission_verification_no_overlap'),
+        CheckConstraint('verification_end_date <= final_start_date', name='check_verification_final_no_overlap'),
+    )
+
+    def is_currently_in_submission_period(self):
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        return self.submission_start_date <= now <= self.submission_end_date
+
+    def is_currently_in_verification_period(self):
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        return self.verification_start_date <= now <= self.verification_end_date
+
+    def is_currently_in_final_period(self):
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        return self.final_start_date <= now <= self.final_end_date
+
+    def can_submit_now(self):
+        return self.is_currently_in_submission_period()
+
+    def can_verify_now(self):
+        return self.is_currently_in_verification_period()
+
+    def can_finalize_now(self):
+        return self.is_currently_in_final_period()
+
+    def validate_no_temporal_overlap(self):
+        if self.submission_end_date > self.verification_start_date:
+            raise ValueError("Submission period cannot overlap with verification period")
+        if self.verification_end_date > self.final_start_date:
+            raise ValueError("Verification period cannot overlap with final period")
 
 
 class CycleWindow(db.Model):
@@ -77,10 +174,10 @@ class CycleWindow(db.Model):
 
     cycle_id = db.Column(
         UUID(as_uuid=True),
-        db.ForeignKey("cycles.id", ondelete="CASCADE"),
+        db.ForeignKey("research_cycles.id", ondelete="CASCADE"),
         nullable=False,
     )
-    cycle = db.relationship("Cycle", back_populates="windows")
+    cycle = db.relationship("ResearchCycle", back_populates="windows")
 
     phase = db.Column(SqlEnum(CyclePhase), nullable=False)
 
@@ -187,10 +284,10 @@ class Abstracts(db.Model):
 
     cycle_id = db.Column(
         UUID(as_uuid=True),
-        db.ForeignKey("cycles.id"),
+        db.ForeignKey("research_cycles.id"),
         nullable=False,
     )
-    cycle = db.relationship("Cycle", back_populates="abstracts")
+    cycle = db.relationship("ResearchCycle", back_populates="abstracts")
 
     created_at = db.Column(
         db.DateTime,
@@ -207,7 +304,7 @@ class Abstracts(db.Model):
     status = db.Column(
         SqlEnum(Status),
         nullable=False,
-        default=Status.PENDING.value,
+        default=Status.UNDER_REVIEW.value,
     )
 
     # Add fields to support two-phase review process
@@ -270,11 +367,29 @@ class Abstracts(db.Model):
     )
     gradings = synonym("grades")
 
+    # New fields for enhanced functionality
+    abstract_type = db.Column(SqlEnum(AbstractType), nullable=True)
+    word_count = db.Column(db.Integer, nullable=True)
+    keywords = db.Column(db.JSON, nullable=True)  # JSON array of keywords
+    content_body = db.Column(db.Text, nullable=True)  # Rich text content
+    consent_documentation = db.Column(db.String(500), nullable=True)  # Path to consent document
+    submitted_timestamp = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    submitted_by_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=False)
+    submitted_by = db.relationship("User", foreign_keys=[submitted_by_id])
+    authors_list = db.Column(db.JSON, nullable=True)  # JSON field for authors details
+
     pdf = synonym("pdf_path")
     submitted_on = synonym("created_at")
     updated_on = synonym("updated_at")
-    submitted_by = synonym("created_by")
-    submitted_by_id = synonym("created_by_id")
+    submitted_by_old = synonym("created_by")
+    submitted_by_id_old = synonym("created_by_id")
+
+    # Add indexes for performance
+    __table_args__ = (
+        Index('idx_abstract_cycle_title', 'cycle_id', 'title', unique=True),  # Unique title per cycle
+        Index('idx_abstract_status', 'status'),
+        Index('idx_abstract_created_at', 'created_at'),
+    )
 
 
 class AbstractAuthors(db.Model):
@@ -381,10 +496,10 @@ class Awards(db.Model):
 
     cycle_id = db.Column(
         UUID(as_uuid=True),
-        db.ForeignKey("cycles.id"),
+        db.ForeignKey("research_cycles.id"),
         nullable=False,
     )
-    cycle = db.relationship("Cycle", back_populates="awards")
+    cycle = db.relationship("ResearchCycle", back_populates="awards")
 
     forwarding_letter_path = db.Column(db.String(500), nullable=True)
     full_paper_path = db.Column(db.String(500), nullable=True)
@@ -412,7 +527,7 @@ class Awards(db.Model):
     status = db.Column(
         SqlEnum(Status),
         nullable=False,
-        default=Status.PENDING.value,
+        default=Status.UNDER_REVIEW.value,
     )
 
     created_by_id = db.Column(
@@ -464,6 +579,17 @@ class Awards(db.Model):
         unique=True,
     )
 
+    # New fields for enhanced functionality
+    award_type = db.Column(SqlEnum(AwardType), nullable=True)
+    eligibility_criteria = db.Column(db.Text, nullable=True)
+    supporting_documents = db.Column(db.JSON, nullable=True)  # JSON array of supporting document paths
+    covering_letter_pdf = db.Column(db.String(500), nullable=True)
+    complete_pdf_submission = db.Column(db.String(500), nullable=True)
+    aiims_work_documentation = db.Column(db.String(500), nullable=True)
+    submitted_timestamp = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    submitted_by_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=False)
+    submitted_by = db.relationship("User", foreign_keys=[submitted_by_id])
+
     complete_pdf_path = synonym("full_paper_path")
     complete_pdf = synonym("full_paper_path")
     covering_letter_pdf_path = synonym("forwarding_letter_path")
@@ -472,14 +598,21 @@ class Awards(db.Model):
     category = synonym("paper_category")
     category_id = synonym("paper_category_id")
     submitted_on = synonym("created_at")
-    submitted_by = synonym("created_by")
-    submitted_by_id = synonym("created_by_id")
+    submitted_by_old = synonym("created_by")
+    submitted_by_id_old = synonym("created_by_id")
     updated_on = synonym("updated_at")
     review_phase = db.Column(
         db.Integer,
         nullable=False,
         default=1,
         server_default="1",
+    )
+
+    # Add indexes for performance
+    __table_args__ = (
+        Index('idx_award_cycle_title', 'cycle_id', 'title', unique=True),  # Unique title per cycle
+        Index('idx_award_status', 'status'),
+        Index('idx_award_created_at', 'created_at'),
     )
 
 class AwardVerifiers(db.Model):
@@ -555,10 +688,10 @@ class BestPaper(db.Model):
 
     cycle_id = db.Column(
         UUID(as_uuid=True),
-        db.ForeignKey("cycles.id"),
+        db.ForeignKey("research_cycles.id"),
         nullable=False,
     )
-    cycle = db.relationship("Cycle", back_populates="best_papers")
+    cycle = db.relationship("ResearchCycle", back_populates="best_papers")
 
     forwarding_letter_path = db.Column(db.String(500), nullable=True)
     full_paper_path = db.Column(db.String(500), nullable=True)
@@ -589,7 +722,7 @@ class BestPaper(db.Model):
     status = db.Column(
         SqlEnum(Status),
         nullable=False,
-        default=Status.PENDING.value,
+        default=Status.UNDER_REVIEW.value,
     )
 
     created_by_id = db.Column(
@@ -641,6 +774,19 @@ class BestPaper(db.Model):
         unique=True,
     )
 
+    # New fields for enhanced functionality
+    paper_type = db.Column(SqlEnum(PaperType), nullable=True)
+    research_area = db.Column(db.String(200), nullable=True)
+    methodology_details = db.Column(db.Text, nullable=True)
+    results_summary = db.Column(db.Text, nullable=True)
+    references_list = db.Column(db.JSON, nullable=True)  # JSON array of references
+    covering_letter_pdf = db.Column(db.String(500), nullable=True)
+    complete_pdf_submission = db.Column(db.String(500), nullable=True)
+    aiims_work_documentation = db.Column(db.String(500), nullable=True)
+    submitted_timestamp = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    submitted_by_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=False)
+    submitted_by = db.relationship("User", foreign_keys=[submitted_by_id])
+
     complete_pdf_path = synonym("full_paper_path")
     complete_pdf = synonym("full_paper_path")
     covering_letter_pdf_path = synonym("forwarding_letter_path")
@@ -649,8 +795,8 @@ class BestPaper(db.Model):
     category = synonym("paper_category")
     category_id = synonym("paper_category_id")
     submitted_on = synonym("created_at")
-    submitted_by = synonym("created_by")
-    submitted_by_id = synonym("created_by_id")
+    submitted_by_old = synonym("created_by")
+    submitted_by_id_old = synonym("created_by_id")
     updated_on = synonym("updated_at")
     paper_number = synonym("bestpaper_number")
     review_phase = db.Column(
@@ -658,6 +804,13 @@ class BestPaper(db.Model):
         nullable=False,
         default=1,
         server_default="1",
+    )
+
+    # Add indexes for performance
+    __table_args__ = (
+        Index('idx_bestpaper_cycle_title', 'cycle_id', 'title', unique=True),  # Unique title per cycle
+        Index('idx_bestpaper_status', 'status'),
+        Index('idx_bestpaper_created_at', 'created_at'),
     )
 
 class BestPaperVerifiers(db.Model):
@@ -760,6 +913,12 @@ class GradingType(db.Model):
 class Grading(db.Model):
     __tablename__ = "gradings"
 
+    # Add check constraints to ensure grade_value is between 0 and maximum_value
+    __table_args__ = (
+        CheckConstraint('grade_value >= 0', name='check_grade_value_positive'),
+        CheckConstraint('grade_value <= maximum_possible_score', name='check_grade_value_not_exceed_max'),
+    )
+
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     score = db.Column(db.Integer, nullable=False)
     comments = db.Column(db.Text, nullable=True)
@@ -838,15 +997,23 @@ class Grading(db.Model):
         onupdate=db.func.current_timestamp(),
     )
 
+    # New fields for enhanced functionality
+    grade_value = db.Column(db.Numeric(precision=5, scale=2), nullable=False, default=0.00)  # For decimal precision
+    grade_category = db.Column(SqlEnum(GradeCategory), nullable=True)
+    maximum_possible_score = db.Column(db.Numeric(precision=5, scale=2), nullable=False, default=100.00)
+    grade_weight = db.Column(db.Numeric(precision=3, scale=2), nullable=False, default=1.00)  # Weight for weighted calculations
+    grade_status = db.Column(SqlEnum(GradeStatus), nullable=False, default=GradeStatus.PENDING)
+    graded_on = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
     created_at = synonym("graded_on")
     updated_at = synonym("updated_on")
 
-    @validates("score")
-    def validate_score(self, key, value):
+    @validates("grade_value")
+    def validate_grade_value(self, key, value):
         if value is None:
-            raise ValueError("A score must be supplied for the grade.")
+            raise ValueError("A grade value must be supplied for the grade.")
         if value < 0:
-            raise ValueError("A grade score cannot be negative.")
+            raise ValueError("A grade value cannot be negative.")
 
         max_score = None
         grading_type = getattr(self, "grading_type", None)
@@ -858,7 +1025,7 @@ class Grading(db.Model):
                 max_score = grading_type.max_score
 
         if max_score is not None and value > max_score:
-            raise ValueError("A grade score cannot exceed the configured maximum.")
+            raise ValueError("A grade value cannot exceed the configured maximum.")
 
         return value
 

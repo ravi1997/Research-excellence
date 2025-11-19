@@ -8,7 +8,7 @@ import openpyxl
 from app.models.User import User
 from app.routes.v1.audit_log_route import _resolve_actor_context
 from app.routes.v1.research import research_bp
-from app.models.Cycle import AwardVerifiers, Awards, Author, Category, PaperCategory, Cycle
+from app.models.Cycle import AwardVerifiers, Awards, Author, Category, PaperCategory, ResearchCycle as Cycle
 from app.schemas.awards_schema import AwardsSchema
 from app.extensions import db
 from app.utils.decorator import require_roles
@@ -982,7 +982,7 @@ def get_award_submission_status():
         # Count awards by status
         pending_awards = db.session.query(Awards).filter(
             *filters,
-            Awards.status == Status.PENDING
+            Awards.status == Status.UNDER_REVIEW
         ).count()
         
         under_review_awards = db.session.query(Awards).filter(

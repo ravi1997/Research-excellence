@@ -1,7 +1,7 @@
 from flask import request, jsonify, current_app
 from flask_jwt_extended import jwt_required
 from app.routes.v1.research import research_bp
-from app.models.Cycle import Cycle, CycleWindow
+from app.models.Cycle import ResearchCycle as Cycle, CycleWindow
 from app.schemas.cycle_schema import CycleSchema, CycleWindowSchema
 from app.extensions import db
 from app.utils.decorator import require_roles

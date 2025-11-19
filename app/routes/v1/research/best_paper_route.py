@@ -7,7 +7,7 @@ import uuid
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.models.User import User
 from app.routes.v1.research import research_bp
-from app.models.Cycle import BestPaperVerifiers, BestPaper, Author, Category, PaperCategory, Cycle
+from app.models.Cycle import BestPaperVerifiers, BestPaper, Author, Category, PaperCategory, ResearchCycle as Cycle
 from app.routes.v1.user_role_route import _resolve_actor_context
 from app.schemas.best_paper_schema import BestPaperSchema
 from app.extensions import db
@@ -975,7 +975,7 @@ def get_best_paper_submission_status():
         # Count best papers by status
         pending_count = db.session.query(BestPaper).filter(
             *filters,
-            BestPaper.status == Status.PENDING
+            BestPaper.status == Status.UNDER_REVIEW
         ).count()
         
         under_review_count = db.session.query(BestPaper).filter(

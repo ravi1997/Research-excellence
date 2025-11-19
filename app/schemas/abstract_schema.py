@@ -1,7 +1,7 @@
 from marshmallow import fields
 from marshmallow_enum import EnumField
 
-from app.models.Cycle import Abstracts, Status
+from app.models.Cycle import Abstracts, Status, AbstractType
 from app.extensions import ma
 from .category_schema import CategorySchema
 from .author_schema import AuthorSchema

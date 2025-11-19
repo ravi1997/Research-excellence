@@ -1,7 +1,7 @@
 from marshmallow import fields
 from marshmallow_enum import EnumField
 
-from app.models.Cycle import Awards, Status
+from app.models.Cycle import Awards, Status, AwardType
 from app.extensions import ma
 from app.schemas.author_schema import AuthorSchema
 from app.schemas.category_schema import CategorySchema

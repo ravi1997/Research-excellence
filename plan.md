@@ -294,7 +294,7 @@ class Grading(db.Model):
     grade_category = db.Column(SqlEnum(GradeCategory), nullable=True)
     maximum_possible_score = db.Column(db.Numeric(precision=5, scale=2), nullable=False)
     grade_weight = db.Column(db.Numeric(precision=3, scale=2), nullable=False, default=1.00)  # Weight for weighted calculations
-    grade_status = db.Column(SqlEnum(GradeStatus), nullable=False, default=GradeStatus.PENDING)
+    grade_status = db.Column(SqlEnum(GradeStatus), nullable=False, default=GradeStatus.UNDER_REVIEW)
     graded_on = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     
     # Add validation to ensure grade_value is between 0 and maximum_value

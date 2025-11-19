@@ -1,7 +1,7 @@
 import click
 from datetime import datetime, timezone
 from flask.cli import with_appcontext
-from app.models import Category, Cycle, PaperCategory
+from app.models import Category, ResearchCycle as Cycle, PaperCategory
 from app.extensions import db
 
 @click.command("seed")

@@ -22,10 +22,15 @@ class THEME_CHOICES(str, Enum):
 
 
 class Status(str, Enum):
-    PENDING = 'pending'
+    DRAFT = 'draft'
+    SUBMITTED = 'submitted'
     UNDER_REVIEW = 'under_review'
+    VERIFIED = 'verified'
     ACCEPTED = 'accepted'
     REJECTED = 'rejected'
+    WITHDRAWN = 'withdrawn'
+    FINAL_ACCEPTED = 'final_accepted'
+    FINAL_REJECTED = 'final_rejected'
 
 
 class GradingFor(str, Enum):

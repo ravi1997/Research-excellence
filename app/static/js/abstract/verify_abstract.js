@@ -73,7 +73,7 @@
         var btns = sQ('verifyActionBtns');
         if (!btns) return;
         console.log('Updating verify action buttons visibility for status:', status);
-        if ((status || '').toUpperCase() === 'STATUS.PENDING') btns.classList.remove('hidden');
+        if ((status || '').toUpperCase() === 'STATUS.UNDER_REVIEW') btns.classList.remove('hidden');
         else btns.classList.add('hidden');
     }
 

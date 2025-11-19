@@ -1,6 +1,6 @@
 from marshmallow import Schema, fields
 from app.extensions import ma
-from app.models.Cycle import Grading
+from app.models.Cycle import Grading, GradeCategory, GradeStatus
 
 
 class GradingSchema(ma.SQLAlchemyAutoSchema):

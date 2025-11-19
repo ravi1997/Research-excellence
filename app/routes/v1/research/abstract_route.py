@@ -20,7 +20,7 @@ from app.models.Cycle import (
     Abstracts,
     Author,
     Category,
-    Cycle,
+    ResearchCycle as Cycle,
 )
 from app.models.Token import Token
 from app.models.User import User
@@ -961,7 +961,7 @@ def submit_abstract(abstract_id):
             return jsonify({"error": error_msg}), 403
 
         # Only allow submission if the abstract is in PENDING status and phase 1
-        if abstract.status != Status.PENDING or abstract.review_phase != 1:
+        if abstract.status != Status.UNDER_REVIEW or abstract.review_phase != 1:
             error_msg = f"Cannot submit abstract: Abstract must be in PENDING status and phase 1 to be submitted for review. Current status: {abstract.status.name}, Current phase: {abstract.review_phase}"
             log_audit_event(
                 event_type="abstract.submit.failed",
@@ -1053,7 +1053,8 @@ def get_abstract_submission_status():
                 context={**context, "scope": "owner"},
             )
 
-        pending_abstracts = sum(1 for abstract in abstracts if abstract.status == Status.PENDING)
+        pending_abstracts = sum(
+            1 for abstract in abstracts if abstract.status == Status.UNDER_REVIEW)
         under_review_abstracts = sum(1 for abstract in abstracts if abstract.status == Status.UNDER_REVIEW)
         accepted_abstracts = sum(1 for abstract in abstracts if abstract.status == Status.ACCEPTED)
         rejected_abstracts = sum(1 for abstract in abstracts if abstract.status == Status.REJECTED)
