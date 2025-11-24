@@ -196,7 +196,7 @@
     let verifierSection = '';
     if (isVerifier) {
       const verifierLinks = [
-        { href: BASE + '/admin/dashboard', label: 'Dashboard' },
+        { href: BASE + '/verifier/dashboard', label: 'Dashboard' },
       ];
       const verifierLinksHtml = verifierLinks.map(l => `<a class="block px-3 py-2 rounded hover:bg-(--brand-50) no-underline" href="${escapeAttr(l.href)}">${escapeHtml(l.label)}</a>`).join('');
       verifierSection = `

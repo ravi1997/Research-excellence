@@ -5,8 +5,12 @@ from flask import Blueprint, current_app, render_template, request, jsonify, abo
 from app.config import Config
 from app.models.User import User
 from app.extensions import db
-from app.models.Cycle import Abstracts, Awards, BestPaper
+from app.models.Cycle import Abstracts, Awards, BestPaper, AbstractVerifiers, AwardVerifiers, BestPaperVerifiers
 from app.models.enumerations import Status
+from flask_jwt_extended import (
+    create_access_token, jwt_required,
+    get_jwt, set_access_cookies, unset_jwt_cookies, get_jwt_identity
+)
 from app.models.enumerations import Role
 # TokenBlocklist removed in favor of unified tokens model
 from app.schemas.user_schema import UserSchema
@@ -187,6 +191,80 @@ def admin_dashboard_page():
             recent_activities=[],
             reports_url='#'
         )
+
+
+@view_bp.route('/verifier/dashboard')
+@jwt_required()
+@require_roles(Role.VERIFIER.value, Role.ADMIN.value, Role.SUPERADMIN.value)
+def verifier_dashboard_page():
+    """Dashboard for verifiers showing assigned items and pending verifications."""
+    try:
+        current_user_id = get_jwt_identity()
+
+        # Counts of assignments
+        assigned_abstracts = db.session.query(db.func.count(AbstractVerifiers.abstract_id)).filter(AbstractVerifiers.user_id == current_user_id).scalar() or 0
+        assigned_awards = db.session.query(db.func.count(AwardVerifiers.award_id)).filter(AwardVerifiers.user_id == current_user_id).scalar() or 0
+        assigned_bestpapers = db.session.query(db.func.count(BestPaperVerifiers.best_paper_id)).filter(BestPaperVerifiers.user_id == current_user_id).scalar() or 0
+
+        # Pending to verify (limit to items in PENDING or UNDER_REVIEW)
+        pending_abstracts = db.session.query(db.func.count(Abstracts.id)).join(AbstractVerifiers, Abstracts.id == AbstractVerifiers.abstract_id).filter(
+            AbstractVerifiers.user_id == current_user_id,
+            Abstracts.status.in_([Status.PENDING, Status.UNDER_REVIEW])
+        ).scalar() or 0
+
+        pending_awards = db.session.query(db.func.count(Awards.id)).join(AwardVerifiers, Awards.id == AwardVerifiers.award_id).filter(
+            AwardVerifiers.user_id == current_user_id,
+            Awards.status.in_([Status.PENDING, Status.UNDER_REVIEW])
+        ).scalar() or 0
+
+        pending_bestpapers = db.session.query(db.func.count(BestPaper.id)).join(BestPaperVerifiers, BestPaper.id == BestPaperVerifiers.best_paper_id).filter(
+            BestPaperVerifiers.user_id == current_user_id,
+            BestPaper.status.in_([Status.PENDING, Status.UNDER_REVIEW])
+        ).scalar() or 0
+
+        total_pending = pending_abstracts + pending_awards + pending_bestpapers
+
+        # Recent assignments: fetch latest assigned items to this verifier
+        recent_tasks = []
+        recent_abs = db.session.query(Abstracts, AbstractVerifiers.assigned_at).join(AbstractVerifiers, Abstracts.id == AbstractVerifiers.abstract_id).filter(AbstractVerifiers.user_id == current_user_id).order_by(AbstractVerifiers.assigned_at.desc()).limit(5).all()
+        for a, at in recent_abs:
+            recent_tasks.append({
+                'type': 'Abstract',
+                'title': a.title[:100],
+                'ts': at.isoformat() if at else '',
+                'id': str(a.id)
+            })
+
+        recent_aw = db.session.query(Awards, AwardVerifiers.assigned_at).join(AwardVerifiers, Awards.id == AwardVerifiers.award_id).filter(AwardVerifiers.user_id == current_user_id).order_by(AwardVerifiers.assigned_at.desc()).limit(5).all()
+        for aw, at in recent_aw:
+            recent_tasks.append({
+                'type': 'Award',
+                'title': aw.title[:100],
+                'ts': at.isoformat() if at else '',
+                'id': str(aw.id)
+            })
+
+        recent_bp = db.session.query(BestPaper, BestPaperVerifiers.assigned_at).join(BestPaperVerifiers, BestPaper.id == BestPaperVerifiers.best_paper_id).filter(BestPaperVerifiers.user_id == current_user_id).order_by(BestPaperVerifiers.assigned_at.desc()).limit(5).all()
+        for bp, at in recent_bp:
+            recent_tasks.append({
+                'type': 'BestPaper',
+                'title': bp.title[:100],
+                'ts': at.isoformat() if at else '',
+                'id': str(bp.id)
+            })
+
+        recent_tasks = sorted(recent_tasks, key=lambda x: x.get('ts') or '', reverse=True)[:8]
+
+        return render_template(
+            'verifier/verifier_dashboard.html',
+            assigned_abstracts=assigned_abstracts,
+            assigned_awards=assigned_awards,
+            assigned_bestpapers=assigned_bestpapers,
+            total_pending=total_pending,
+            recent_tasks=recent_tasks
+        )
+    except Exception:
+        return render_template('verifier/verifier_dashboard.html', assigned_abstracts=0, assigned_awards=0, assigned_bestpapers=0, total_pending=0, recent_tasks=[])
 
 
 @view_bp.route('/admin/cycle-management')

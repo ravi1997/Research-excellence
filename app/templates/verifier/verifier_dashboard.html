@@ -1,0 +1,61 @@
+{% extends "components/layout.html" %}
+
+{% block title %}Verifier Dashboard - Research Excellence{% endblock %}
+
+{% block content %}
+<div class="container mx-auto py-6">
+  <div class="admin-container">
+    <div class="mb-6">
+      <h2 class="text-2xl font-bold text-gradient">Verifier Dashboard</h2>
+      <p class="text-gray-600">Tasks assigned to you for verification</p>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div class="bg-white shadow rounded-lg p-4">
+        <div class="text-sm text-gray-500">Assigned Abstracts</div>
+        <div class="mt-2 text-2xl font-semibold">{{ assigned_abstracts | default(0) }}</div>
+      </div>
+      <div class="bg-white shadow rounded-lg p-4">
+        <div class="text-sm text-gray-500">Assigned Awards</div>
+        <div class="mt-2 text-2xl font-semibold">{{ assigned_awards | default(0) }}</div>
+      </div>
+      <div class="bg-white shadow rounded-lg p-4">
+        <div class="text-sm text-gray-500">Assigned Best Papers</div>
+        <div class="mt-2 text-2xl font-semibold">{{ assigned_bestpapers | default(0) }}</div>
+      </div>
+      <div class="bg-white shadow rounded-lg p-4">
+        <div class="text-sm text-gray-500">Pending to Verify</div>
+        <div class="mt-2 text-2xl font-semibold text-amber-600">{{ total_pending | default(0) }}</div>
+      </div>
+    </div>
+
+    <div class="bg-white shadow rounded-lg p-4">
+      <h3 class="text-lg font-medium mb-3">Recent Assignments</h3>
+      {% if recent_tasks and recent_tasks|length > 0 %}
+        <div class="space-y-2">
+          {% for t in recent_tasks %}
+            <div class="flex items-start justify-between">
+              <div>
+                <div class="font-medium">[{{ t.type }}] {{ t.title }}</div>
+                <div class="text-sm text-gray-600">Assigned: {{ t.ts }}</div>
+              </div>
+              <div class="text-sm">
+                <a class="text-blue-600 hover:underline" href="/api/v1/research/{{ 'abstracts' if t.type=='Abstract' else ('awards' if t.type=='Award' else 'best-papers') }}/{{ t.id }}">View</a>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="text-gray-600">You have no recent assignments.</div>
+      {% endif %}
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Placeholder for verifier dashboard scripts
+</script>
+{% endblock %}
