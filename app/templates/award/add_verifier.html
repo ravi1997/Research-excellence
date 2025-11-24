@@ -1,0 +1,428 @@
+{% extends 'components/layout.html' %}
+{% block meta_description %}
+<meta name="description"
+    content="Assign research awards to verifiers, manage filters, and control reviewer workloads in the admin console." />
+{% endblock %}
+{% block title %}Assign Verifiers · Admin{% endblock %}
+{% block content %}
+<section class="mb-8">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div>
+            <h1 class="text-3xl font-extrabold flex items-center gap-3 tracking-tight">
+                <span
+                    class="inline-block bg-linear-to-r from-blue-600 to-purple-400 text-transparent bg-clip-text">Assign
+                    Verifiers to Research Award Papers</span>
+            </h1>
+            <p class="muted mt-2 text-base">Assign verifiers to research award papers for review and verification.</p>
+        </div>
+        <span
+            class="inline-flex items-center text-xs uppercase tracking-wider px-4 py-2 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 font-semibold shadow">
+            <svg class="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+            </svg>
+            Admin Tool
+        </span>
+    </div>
+</section>
+
+<!-- Global loading indicator -->
+<div id="globalLoading"
+    class="fixed top-0 left-0 right-0 h-1 bg-linear-to-r from-(--brand-600) via-(--brand-400) to-(--brand-600) animate-pulse hidden z-40">
+</div>
+
+<div class="grid lg:grid-cols-2 gap-8 items-start">
+    <div
+        class="glass rounded-2xl flex flex-col h-full shadow-xl border border-(--border)/60 overflow-hidden transition-all duration-300 hover:shadow-2xl bg-white dark:bg-gray-900">
+        <div
+            class="p-4 border-b border-(--border)/60 bg-linear-to-br from-blue-50 to-blue-100 dark:from-blue-900 dark:to-blue-800">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <svg class="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Research Award Papers
+            </h2>
+            <p class="text-sm text-gray-600 dark:text-gray-300 mt-1">Select research award papers to assign verifiers</p>
+        </div>
+        <!-- Toolbar -->
+        <div
+            class="p-5 pb-4 space-y-4 border-b border-(--border)/60 bg-linear-to-br from-blue-50 to-blue-100 dark:from-blue-900 dark:to-blue-800 sticky top-0 z-20 backdrop-blur supports-backdrop-filter:bg-blue-50/85 dark:supports-backdrop-filter:bg-blue-900/85">
+            <div class="flex gap-4 w-full">
+                <div class="relative flex-1">
+                    <label for="awardSearch" class="sr-only">Search research award papers</label>
+                    <input id="awardSearch" placeholder="Search research award papers by title, author, or ID"
+                        class="input pl-10 w-full focus:ring-2 focus:ring-blue-500"
+                        aria-label="Search research award papers by title, author, or ID" />
+                </div>
+                <button id="awardSearchBtn" class="btn btn-primary text-sm shrink-0 px-5 shadow"
+                    aria-label="Search research award papers">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                </button>
+            </div>
+            <div class="flex flex-wrap gap-2 items-center mt-3">
+                <span class="font-semibold">Filter:</span>
+                <div id="awardLinkedGroup"
+                    class="flex gap-2 seg-group" role="group"
+                    aria-label="Research award paper verifier filter">
+                    <button type="button" class="seg px-2 rounded-md bg-blue-400 p-1 mx-1 active" data-val="" data-active="true"
+                        title="Show all research award papers">All</button>
+                    <button type="button" class="seg px-2 rounded-md bg-amber-400 p-1 mx-1" data-val="yes"
+                        title="Show research award papers that already have verifiers">With Verifiers</button>
+                    <button type="button" class="seg px-2 rounded-md bg-amber-600 p-1 mx-1" data-val="no" title="Show research award papers without any verifiers">Without
+                        Verifiers</button>
+                </div>
+                <span class="font-semibold">Sort:</span>
+                <div id="awardSortGroup"
+                    class="flex items-stretch overflow-hidden rounded-md border border-(--border) divide-x divide-(--border) bg-white/80 dark:bg-gray-800/70 text-xs">
+                    <button type="button" data-key="id" class="px-2.5 py-1.5 sort-btn flex items-center gap-1"
+                        title="Sort by ID">
+                        <span>ID</span><span class="sort-arrow opacity-40">↕</span>
+                    </button>
+                    <button type="button" data-key="title" class="px-2.5 py-1.5 sort-btn flex items-center gap-1"
+                        title="Sort by Title">
+                        <span>Title</span><span class="sort-arrow opacity-40">↕</span>
+                    </button>
+                    <button type="button" data-key="created_at" class="px-2.5 py-1.5 sort-btn flex items-center gap-1"
+                        title="Sort by Date">
+                        <span>Date</span><span class="sort-arrow opacity-40">↕</span>
+                    </button>
+                </div>
+                <span class="font-semibold">Page Size:</span>
+                <div id="awardPageSizeGroup"
+                    class="seg-group ring-1 ring-(--border) bg-white/80 dark:bg-gray-800/70" role="group"
+                    aria-label="Page size">
+                    <button type="button" class="seg" data-size="10" title="Show 10 per page">10</button>
+                    <button type="button" class="seg active" data-size="20" data-active="true"
+                        title="Show 20 per page">20</button>
+                    <button type="button" class="seg" data-size="50" title="Show 50 per page">50</button>
+                </div>
+            </div>
+            <div class="flex flex-wrap gap-3 text-xs items-center pt-2">
+                <button id="bulkAssignBtn"
+                    class="btn btn-ghost px-2.5 py-1 text-xs flex items-center gap-1 hover:ring-1 hover:ring-blue-400"
+                    title="Assign selected research award papers to the chosen verifier">
+                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                    Bulk Assign
+                </button>
+                <button id="bulkUnassignBtn"
+                    class="btn btn-ghost px-2.5 py-1 text-xs flex items-center gap-1 hover:ring-1 hover:ring-blue-400"
+                    title="Remove the chosen verifier from selected research award papers">
+                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    Bulk Unassign
+                </button>
+                <button id="awardSelectAll"
+                    class="btn btn-ghost px-2.5 py-1 text-xs hover:ring-1 hover:ring-blue-400"
+                    title="Select all items on the current page">Select Page</button>
+                <button id="awardClearSel" class="btn btn-ghost px-2.5 py-1 text-xs hover:ring-1 hover:ring-blue-400"
+                    title="Clear all selections">Clear</button>
+                <span id="bulkStatus" aria-live="polite"
+                    class="ml-1 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200"></span>
+            </div>
+            <div
+                class="flex items-center justify-between text-[11px] bg-blue-100/70 dark:bg-blue-900/70 backdrop-blur-sm px-4 py-2 rounded-md border border-(--border)/60">
+                <label class="flex items-center gap-2 cursor-pointer select-none">
+                    <input id="awardMasterChk" type="checkbox" class="accent-(--brand-600) rounded">
+                    <span class="font-medium">Select all on page</span>
+                </label>
+                <div class="flex gap-2">
+                    <button id="invertSelection" class="btn btn-ghost px-2.5 py-1 text-[11px] flex items-center gap-1"
+                        title="Invert current page selection">
+                        <svg class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path
+                                d="M4 3a1 1 0 000 2h8.586L3.293 14.293a1 1 0 101.414 1.414L14 6.414V15a1 1 0 102 0V3H4z" />
+                        </svg>
+                        Invert
+                    </button>
+                </div>
+            </div>
+            <div class="flex items-center justify-between text-xs mt-2">
+                <span id="awardStats" role="status" class="muted"></span>
+                <div class="flex items-center gap-2">
+                    <button id="awardPrev" class="btn btn-ghost px-2.5 py-1 text-xs flex items-center gap-1">
+                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                        </svg>
+                        Prev
+                    </button>
+                    <span id="awardPageInfo"
+                        class="muted px-2 py-0.5 rounded bg-white/60 dark:bg-gray-800/60"></span>
+                    <button id="awardNext" class="btn btn-ghost px-2.5 py-1 text-xs flex items-center gap-1">
+                        Next
+                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+        <!-- List -->
+        <ul id="awardList"
+            class="flex-1 overflow-auto max-h-[55vh] divide-y divide-(--border) text-sm px-3 py-2 bg-linear-to-b from-blue-50 via-blue-100/40 to-blue-50 dark:from-blue-900 dark:via-blue-800/40 dark:to-blue-900"
+            aria-label="Awards list"></ul>
+        <!-- Footer / Create -->
+    </div>
+
+    <!-- Verifiers Panel -->
+    <div
+        class="glass rounded-2xl flex flex-col h-full shadow-xl border border-(--border)/60 overflow-hidden transition-all duration-300 hover:shadow-2xl bg-white dark:bg-gray-900">
+        <div
+            class="p-6 border-b border-(--border)/60 bg-linear-to-br from-purple-50 to-purple-100 dark:from-purple-900 dark:to-purple-800">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <svg class="w-5 h-5 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0" />
+                </svg>
+                Research Verifiers
+            </h2>
+            <p class="text-sm text-gray-600 dark:text-gray-300 mt-1">Select verifiers to assign to research award papers</p>
+        </div>
+        <!-- Toolbar -->
+        <div
+            class="p-5 pb-4 space-y-4 border-b border-(--border)/60 bg-linear-to-br from-purple-50 to-purple-100 dark:from-purple-900 dark:to-purple-800 sticky top-0 z-20 backdrop-blur supports-backdrop-filter:bg-purple-50/85 dark:supports-backdrop-filter:bg-purple-900/85">
+            <div class="flex gap-4 w-full">
+                <div class="relative flex-1">
+                    <label for="verifierSearch" class="sr-only">Search verifiers</label>
+                    <input id="verifierSearch" placeholder="Search verifiers by name or email"
+                        class="input pl-10 w-full focus:ring-2 focus:ring-purple-500" aria-label="Search verifiers" />
+                </div>
+                <button id="verifierSearchBtn" class="btn btn-primary text-sm shrink-0 px-5 shadow"
+                    aria-label="Search verifiers">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                </button>
+            </div>
+            <div class="flex flex-wrap gap-2 items-center mt-3">
+                <span class="font-semibold">Filter:</span>
+                <div id="verifierLinkedGroup"
+                    class="flex gap-2 seg-group" role="group"
+                    aria-label="Verifier assignment filter">
+                    <button type="button" class="seg px-3 rounded-md bg-blue-400 p-1 mx-1 active" data-val="" data-active="true"
+                        title="Show all verifiers">All</button>
+                    <button type="button" class="seg px-2 rounded-md bg-amber-400 p-1 mx-1" data-val="yes"
+                        title="Show verifiers who are already assigned">Assigned</button>
+                    <button type="button" class="seg px-2 rounded-md bg-amber-600 p-1 mx-1" data-val="no"
+                        title="Show verifiers with no assignments">Unassigned</button>
+                </div>
+                <span class="font-semibold">Sort:</span>
+                <div id="verifierSortGroup"
+                    class="flex items-stretch overflow-hidden rounded-md border border-(--border) divide-x divide-(--border) bg-white/80 dark:bg-gray-800/70 text-xs">
+                    <button type="button" data-key="created_at" class="px-2.5 py-1.5 sort-btn flex items-center gap-1"
+                        title="Sort by Created date">
+                        <span>Created</span><span class="sort-arrow opacity-40">↕</span>
+                    </button>
+                    <button type="button" data-key="username" class="px-2.5 py-1.5 sort-btn flex items-center gap-1"
+                        title="Sort by Username">
+                        <span>Username</span><span class="sort-arrow opacity-40">↕</span>
+                    </button>
+                    <button type="button" data-key="email" class="px-2.5 py-1.5 sort-btn flex items-center gap-1"
+                        title="Sort by Email">
+                        <span>Email</span><span class="sort-arrow opacity-40">↕</span>
+                    </button>
+                </div>
+                <span class="font-semibold">Page Size:</span>
+                <div id="verifierPageSizeGroup"
+                    class="seg-group ring-1 ring-(--border) bg-white/80 dark:bg-gray-800/70" role="group"
+                    aria-label="Verifier page size">
+                    <button type="button" class="seg" data-size="10" title="Show 10 per page">10</button>
+                    <button type="button" class="seg active" data-size="20" data-active="true"
+                        title="Show 20 per page">20</button>
+                    <button type="button" class="seg" data-size="50" title="Show 50 per page">50</button>
+                </div>
+            </div>
+            <div class="flex items-center justify-between text-xs mt-2">
+                <span id="verifierStats" role="status" class="muted"></span>
+                <div class="flex items-center gap-2">
+                    <button id="verifierPrev" class="btn btn-ghost px-2.5 py-1 text-xs flex items-center gap-1">
+                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                        </svg>
+                        Prev
+                    </button>
+                    <span id="verifierPageInfo"
+                        class="muted px-2 py-0.5 rounded bg-white/60 dark:bg-gray-800/60"></span>
+                    <button id="verifierNext" class="btn btn-ghost px-2.5 py-1 text-xs flex items-center gap-1">
+                        Next
+                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+        <!-- List -->
+        <ul id="verifierList"
+            class="flex-1 overflow-auto max-h-[55vh] divide-y divide-(--border) text-sm px-3 py-2 bg-linear-to-b from-purple-50 via-purple-100/40 to-purple-50 dark:from-purple-900 dark:via-purple-800/40 dark:to-purple-900"
+            aria-label="Verifiers list"></ul>
+    </div>
+</div>
+
+<div class="mt-8 glass p-7 rounded-2xl border border-(--border)/60 shadow-xl transition-all duration-300 bg-white dark:bg-gray-900"
+    id="assignPanel" hidden>
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <h2 class="font-bold text-2xl text-gray-900 dark:text-white flex items-center gap-3">
+            <svg class="w-6 h-6 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+            </svg>
+            Assignment Details
+        </h2>
+        <span
+            class="hidden inline-flex items-center text-xs uppercase tracking-wide px-3 py-1.5 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 font-semibold w-fit shadow">
+            Selected Context
+        </span>
+    </div>
+
+    <div class="grid sm:grid-cols-2 gap-7 mb-7">
+        <div class="bg-blue-50 dark:bg-blue-900/30 rounded-xl p-5 border border-(--border)/60 shadow">
+            <div class="flex items-start gap-4 mb-4">
+                <div class="p-2 rounded-lg bg-blue-200 dark:bg-blue-900/60">
+                    <svg class="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                </div>
+                <div class="min-w-0 flex-1">
+                    <p class="text-xs uppercase tracking-wide muted mb-1">Research Award Paper</p>
+        
+                    <!-- Title (multi-line, no truncation) -->
+                    <p id="selAwardTitle" class="font-semibold text-gray-900 dark:text-white whitespace-normal wrap-break-word">
+                        No research award paper selected
+                    </p>
+        
+                    <!-- Meta badges -->
+                    <div id="selAwardMeta" class="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                        <!-- filled by JS -->
+                    </div>
+                </div>
+            </div>
+        
+            <!-- Submitted by -->
+            <div class="mt-3 text-sm">
+                <p class="uppercase tracking-wide font-semibold text-gray-900 dark:text-white mb-2">Submitted By</p>
+                <div id="selSubmittedBy"
+                    class="rounded-lg border border-(--border)/70 bg-white/60 dark:bg-white/5 p-3 text-[13px]">
+                    <!-- filled by JS -->
+                </div>
+            </div>
+        
+            <!-- Authors -->
+            <div class="mt-4">
+                <p class="uppercase tracking-wide font-semibold mb-2 text-gray-900 dark:text-white flex items-center gap-2">
+                    Authors
+                    <span class="h-px flex-1 bg-(--border)"></span>
+                </p>
+                <div class="rounded-lg border border-(--border) px-3 py-2 bg-blue-100/50 dark:bg-blue-900/30">
+                    <ul id="selAuthorsList" class="max-h-44 overflow-auto space-y-2 text-sm"></ul>
+                </div>
+            </div>
+        
+            <!-- Content preview -->
+            <div class="mt-4">
+                <p class="uppercase tracking-wide font-semibold text-gray-900 dark:text-white mb-2">Award Content</p>
+                <div id="selAwardDetails"
+                    class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap wrap-break-word max-h-56 overflow-auto">
+                    <!-- filled by JS -->
+                </div>
+            </div>
+        
+            <!-- PDF -->
+            <div class="mt-4 flex items-center gap-2 text-sm">
+                <span class="uppercase tracking-wide font-semibold text-gray-900 dark:text-white">PDF</span>
+                <a id="selPdfLink" href="#" target="_blank"
+                    class="underline underline-offset-4 decoration-(--brand-500) hover:opacity-80 break-all">
+                    —
+                </a>
+            </div>
+        
+            <!-- Verifiers -->
+            <div id="selAwardVerifiers" class="mt-5 text-xs">
+                <p class="uppercase tracking-wide font-semibold mb-2 text-gray-900 dark:text-white flex items-center gap-2">
+                    Assigned Verifiers
+                    <span class="h-px flex-1 bg-(--border)"></span>
+                </p>
+                <div class="rounded-lg border border-(--border) px-3 py-2 bg-blue-100/50 dark:bg-blue-900/30">
+                    <ul id="awardVerifiersList" class="max-h-40 overflow-auto space-y-2"></ul>
+                </div>
+            </div>
+
+            <div class="mt-4">
+                <button
+                    id="rejectAwardBtn"
+                    type="button"
+                    class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-1 transition duration-150 ease-in-out"
+                >
+                    Reject Award
+                </button>
+            </div>
+
+        </div>
+
+
+        <div class="bg-purple-50 dark:bg-purple-900/30 rounded-xl p-5 border border-(--border)/60 shadow">
+            <div class="flex items-start gap-4 mb-4">
+                <div class="p-2 rounded-lg bg-purple-200 dark:bg-purple-900/60">
+                    <svg class="w-5 h-5 text-purple-600 dark:text-purple-400" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0" />
+                    </svg>
+                </div>
+                <div>
+                    <p class="text-xs uppercase tracking-wide muted mb-1">Verifier</p>
+                    <p class="font-medium text-gray-900 dark:text-white" id="selVerifier">No verifier selected</p>
+                </div>
+            </div>
+            <p class="text-sm text-gray-600 dark:text-gray-300 mt-2" id="selVerifierStatus"></p>
+            <div id="selVerifierAwards" class="mt-5 text-xs hidden">
+                <p
+                    class="uppercase tracking-wide font-semibold mb-2 text-gray-900 dark:text-white flex items-center gap-2">
+                    Assigned Research Award Papers
+                    <span id="verifierAwardCount"
+                        class="badge bg-(--brand-600) text-white text-[10px] px-2 py-0.5 rounded-full"></span>
+                    <span class="h-px flex-1 bg-(--border)"></span>
+                </p>
+                <ul id="verifierAwardsList"
+                    class="max-h-40 overflow-auto rounded-lg border border-(--border) divide-y divide-(--border) bg-purple-100/40 dark:bg-purple-900/30 text-[13px]">
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex flex-wrap gap-4 pt-6 border-t border-(--border)/60">
+        <button id="assignBtn" class="btn btn-primary text-base flex items-center gap-2 px-5 py-2.5 shadow">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+            Assign Verifier
+        </button>
+        <button id="unassignBtn" class="btn btn-ghost text-base flex items-center gap-2 px-5 py-2.5">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            Unassign
+        </button>
+        <button id="clearSel" class="btn btn-ghost text-base flex items-center gap-2 px-5 py-2.5">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Clear Selection
+        </button>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/coordinator/add_verifier.js') }}" defer></script>
+{% endblock %}

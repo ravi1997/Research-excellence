@@ -76,6 +76,14 @@ def add_verifier_page():
 def coordinator_abstract_gradings_page():
     return render_template('coordinator/abstract_gradings.html')
 
+
+@view_bp.route('/coordinator/award-gradings')
+@jwt_required()
+@require_roles(Role.COORDINATOR.value, Role.ADMIN.value, Role.SUPERADMIN.value)
+def coordinator_award_gradings_page():
+    return render_template('coordinator/award_gradings.html')
+
+
 @view_bp.route('/admin/dashboard')        # canonical path
 @jwt_required()
 @require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)

@@ -214,7 +214,8 @@
   if (isCordinator) {
     const cordinatorLinks = [
         { href: BASE + '/coordinator/add-verifier', label: 'Add Abstract Verifier' },
-        { href: BASE + '/coordinator/abstract-gradings', label: 'Abstract Gradings' },
+      { href: BASE + '/coordinator/abstract-gradings', label: 'Abstract Gradings' },
+      { href: BASE + '/coordinator/award-gradings', label: 'Award Gradings' },
     ];
       const cordinatorLinksHtml = cordinatorLinks.map(l => `<a class="block px-3 py-2 rounded hover:bg-(--brand-50) no-underline" href="${escapeAttr(l.href)}">${escapeHtml(l.label)}</a>`).join('');
       cordinatorSection = `

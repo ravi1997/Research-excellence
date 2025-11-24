@@ -438,7 +438,7 @@ def get_award_gradings(award_id):
             ip_address=request.remote_addr
         )
         
-        return jsonify(gradings_schema.dump(gradings)), 20
+        return jsonify(gradings_schema.dump(gradings)), 200
     except Exception as e:
         current_app.logger.exception("Error getting award gradings")
         error_msg = str(e)
