@@ -2,14 +2,39 @@
     const BASE = '';
     const token = () => localStorage.getItem('token') || '';
     const headers = () => ({ 'Accept': 'application/json', 'Authorization': `Bearer ${token()}` });
-    const sQ = id => document.getElementById(id);
-    const awardList = sQ('awardList');
+    const fallbackIds = {
+        bestpaperList: 'bestPaperList',
+        bestpaperSearch: 'bestpaperSearch',
+        bestpaperSearchBtn: 'bestpaperSearchBtn',
+        bestpaperLinkedGroup: 'bestpaperLinkedGroup',
+        bestpaperSortGroup: 'bestpaperSortGroup',
+        bestpaperPageSizeGroup: 'bestpaperPageSizeGroup',
+        bestpaperStats: 'bestpaperStats',
+        bestpaperPageInfo: 'bestpaperPageInfo',
+        bestpaperPrev: 'bestpaperPrev',
+        bestpaperNext: 'bestpaperNext',
+        bestpaperMasterChk: 'bestpaperMasterChk',
+        bestpaperSelectAll: 'bestpaperSelectAll',
+        bestpaperClearSel: 'bestpaperClearSel',
+        selBestPaperTitle: 'selBestPaperTitle',
+        selBestPaperMeta: 'selBestPaperMeta',
+        selAuthorsList: 'selAuthorsList',
+        selBestPaperDetails: 'selBestPaperDetails',
+        selBestPaperVerifiers: 'selBestPaperVerifiers',
+        bestpaperVerifiersList: 'bestPaperVerifiersList',
+        rejectBestPaperBtn: 'rejectBestPaperBtn',
+        selBestPaper: 'selBestPaperTitle',
+        selBestPaperDetails: 'selBestPaperDetails',
+        selBestPaperVerifiersList: 'bestPaperVerifiersList'
+    };
+    const sQ = id => document.getElementById(id) || (fallbackIds[id] ? document.getElementById(fallbackIds[id]) : null);
+    const bestpaperList = sQ('bestpaperList') || sQ('bestPaperList');
     const verifierList = sQ('verifierList');
-    let selAward = null; let selVerifier = null;
-    const bulk = { awardIds: new Set() };
+    let selBestPaper = null; let selVerifier = null;
+    const bulk = { bestpaperIds: new Set() };
 
     const state = {
-        awards: { page: 1, pages: 1, pageSize: 20, filter: '', q: '', sort: 'id', dir: 'desc' },
+        bestpapers: { page: 1, pages: 1, pageSize: 20, filter: '', q: '', sort: 'id', dir: 'desc' },
         verifiers: { page: 1, pages: 1, pageSize: 20, filter: '', q: '', sort: 'created_at', dir: 'desc' }
     };
 
@@ -32,7 +57,7 @@
         return { raw, value: cleaned, label };
     }
 
-    function normalizeAward(raw = {}) {
+    function normalizeBestPaper(raw = {}) {
         const statusInfo = normalizeStatus(raw.status);
         const category = raw.category || raw.paper_category || raw.paperCategory;
         const categoryId = raw.category_id || raw.paper_category_id || raw.paperCategoryId;
@@ -40,7 +65,7 @@
 
         return {
             ...raw,
-            award_number: raw.award_number ?? raw.awardNumber ?? raw.awardnumber,
+            bestpaper_number: raw.bestpaper_number ?? raw.bestpaperNumber ?? raw.bestpapernumber ?? raw.bestpaper_number ?? raw.bestpaperNumber ?? raw.bestpapernumber,
             category,
             category_id: categoryId,
             paper_category: raw.paper_category || raw.category || category,
@@ -60,7 +85,7 @@
         };
     }
 
-    const normalizeAwardArray = (items) => (items || []).map(normalizeAward);
+    const normalizeBestPaperArray = (items) => (items || []).map(normalizeBestPaper);
 
     function statusBadgeTone(statusKey) {
         switch (statusKey) {
@@ -83,20 +108,20 @@
     }
 
     function wireSegmentedControls() {
-        const aLinkGroup = sQ('awardLinkedGroup');
+        const aLinkGroup = sQ('bestpaperLinkedGroup');
         aLinkGroup?.addEventListener('click', e => {
             const btn = e.target.closest('.seg'); if (!btn) return;
             activateSeg(aLinkGroup, btn);
-            state.awards.filter = btn.dataset.val || '';
-            state.awards.page = 1; searchAwards();
+            state.bestpapers.filter = btn.dataset.val || '';
+            state.bestpapers.page = 1; searchBestPapers();
         });
 
-        const aPageGroup = sQ('awardPageSizeGroup');
+        const aPageGroup = sQ('bestpaperPageSizeGroup');
         aPageGroup?.addEventListener('click', e => {
             const btn = e.target.closest('.seg'); if (!btn) return;
             activateSeg(aPageGroup, btn);
-            state.awards.pageSize = +btn.dataset.size;
-            state.awards.page = 1; searchAwards();
+            state.bestpapers.pageSize = +btn.dataset.size;
+            state.bestpapers.page = 1; searchBestPapers();
         });
 
         const vLinkGroup = sQ('verifierLinkedGroup');
@@ -132,23 +157,23 @@
         });
     }
 
-    // Attach sorting behavior to award & verifier sort button groups
+    // Attach sorting behavior to bestpaper & verifier sort button groups
     function wireSortGroups() {
-        const aGroup = sQ('awardSortGroup');
+        const aGroup = sQ('bestpaperSortGroup');
         if (aGroup) {
-            applySortStyles(aGroup, state.awards.sort, state.awards.dir);
+            applySortStyles(aGroup, state.bestpapers.sort, state.bestpapers.dir);
             aGroup.addEventListener('click', e => {
                 const btn = e.target.closest('.sort-btn');
                 if (!btn) return;
                 const key = btn.dataset.key;
-                if (state.awards.sort === key) {
-                    state.awards.dir = state.awards.dir === 'asc' ? 'desc' : 'asc';
+                if (state.bestpapers.sort === key) {
+                    state.bestpapers.dir = state.bestpapers.dir === 'asc' ? 'desc' : 'asc';
                 } else {
-                    state.awards.sort = key;
-                    state.awards.dir = 'asc';
+                    state.bestpapers.sort = key;
+                    state.bestpapers.dir = 'asc';
                 }
-                applySortStyles(aGroup, state.awards.sort, state.awards.dir);
-                searchAwards();
+                applySortStyles(aGroup, state.bestpapers.sort, state.bestpapers.dir);
+                searchBestPapers();
             });
         }
         const vGroup = sQ('verifierSortGroup');
@@ -190,7 +215,7 @@
         if (!items.length) {
             const empty = document.createElement('li');
             empty.className = 'py-8 text-center text-xs uppercase tracking-wide text-[color:var(--muted)]';
-            empty.textContent = type === 'award' ? 'No awards found' : 'No verifiers found';
+            empty.textContent = type === 'bestpaper' ? 'No best papers found' : 'No verifiers found';
             el.appendChild(empty);
             return;
         }
@@ -198,9 +223,9 @@
         const fragment = document.createDocumentFragment();
 
         items.forEach(rawItem => {
-            const it = type === 'award' ? normalizeAward(rawItem) : rawItem;
+            const it = type === 'bestpaper' ? normalizeBestPaper(rawItem) : rawItem;
             const li = document.createElement('li');
-            const selected = bulk.awardIds?.has?.(it.id) && type === 'award';
+            const selected = bulk.bestpaperIds?.has?.(it.id) && type === 'bestpaper';
 
             // Layout fixes: items start, gap, allow text to wrap, badge stays visible
             li.className =
@@ -209,7 +234,7 @@
                 (selected ? 'bg-[color:var(--brand-100)] dark:bg-[color:var(--brand-900)]' : '');
             li.dataset.id = it.id;
 
-            if (type === 'award') {
+            if (type === 'bestpaper') {
                 const left = document.createElement('div');
                 left.className = 'flex items-start gap-3 min-w-0 grow';
 
@@ -218,9 +243,9 @@
                 checkbox.className = 'bulkChk accent-[color:var(--brand-600)] rounded h-4 w-4 mt-1 shrink-0';
                 checkbox.dataset.id = it.id;
                 checkbox.checked = selected;
-                const awardLabel = `Select award ${it.title || `#${it.award_number || it.id}`}`;
-                checkbox.setAttribute('aria-label', awardLabel);
-                checkbox.setAttribute('title', awardLabel);
+                const bestpaperLabel = `Select best paper ${it.title || `#${it.bestpaper_number || it.id}`}`;
+                checkbox.setAttribute('aria-label', bestpaperLabel);
+                checkbox.setAttribute('title', bestpaperLabel);
 
                 const textCol = document.createElement('div');
                 textCol.className = 'min-w-0';
@@ -228,8 +253,8 @@
                 const titleSpan = document.createElement('div');
                 // Multi-line title: allow wrapping; avoid truncation; break long words
                 titleSpan.className = 'font-medium whitespace-normal break-words';
-                titleSpan.textContent = it.title || 'Untitled Award';
-                titleSpan.title = it.title || 'Untitled Award'; // tooltip for very long titles
+                titleSpan.textContent = it.title || 'Untitled Best Paper';
+                titleSpan.title = it.title || 'Untitled Best Paper'; // tooltip for very long titles
 
                 const meta = document.createElement('div');
                 meta.className = 'muted text-xs mt-1 space-x-2';
@@ -241,14 +266,14 @@
                 submittedBy.textContent = `Submitted by: ${it.submitted_by?.username || it.created_by?.username || it.author?.name || 'Unknown'}`;
                 const dot2 = document.createElement('span');
                 dot2.textContent = '•';
-                const awardNum = document.createElement('span');
-                awardNum.textContent = `Award #${it.award_number || 'N/A'}`;
+                const bestpaperNum = document.createElement('span');
+                bestpaperNum.textContent = `Best Paper #${it.bestpaper_number || 'N/A'}`;
 
                 meta.appendChild(cat);
                 meta.appendChild(dot);
                 meta.appendChild(submittedBy);
                 meta.appendChild(dot2);
-                meta.appendChild(awardNum);
+                meta.appendChild(bestpaperNum);
 
                 textCol.appendChild(titleSpan);
                 textCol.appendChild(meta);
@@ -272,7 +297,7 @@
                 // List item click (ignore checkbox)
                 li.addEventListener('click', (e) => {
                     if (e.target.classList.contains('bulkChk')) return;
-                    selAward = it;
+                    selBestPaper = it;
                     updatePanel();
                     highlightSelection();
                 });
@@ -280,7 +305,7 @@
                 // Checkbox behavior
                 checkbox.addEventListener('change', (e) => {
                     const id = e.target.dataset.id;
-                    if (e.target.checked) bulk.awardIds.add(id); else bulk.awardIds.delete(id);
+                    if (e.target.checked) bulk.bestpaperIds.add(id); else bulk.bestpaperIds.delete(id);
                     syncMasterChk();
                     updateBulkStatus();
                 });
@@ -327,12 +352,12 @@
 
                 const badge = document.createElement('span');
                 badge.className = 'text-[10px] uppercase tracking-wide px-2 py-1 rounded-full shrink-0 self-center';
-                if (it.awards_count && it.awards_count > 0) {
+                if (it.bestpapers_count && it.bestpapers_count > 0) {
                     badge.className += ' bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300';
-                    badge.textContent = `${it.awards_count} award${it.awards_count > 1 ? 's' : ''}`;
+                    badge.textContent = `${it.bestpapers_count} bestpaper${it.bestpapers_count > 1 ? 's' : ''}`;
                 } else {
                     badge.className += ' bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
-                    badge.textContent = 'no awards';
+                    badge.textContent = 'no bestpapers';
                 }
 
                 li.appendChild(left);
@@ -363,7 +388,7 @@
         el.appendChild(fragment);
 
         // Sync controls after rendering
-        if (type === 'award') {
+        if (type === 'bestpaper') {
             syncMasterChk();
         } else {
             syncVerifierRadios();
@@ -377,9 +402,9 @@
     }
     
     function syncMasterChk() {
-        const master = sQ('awardMasterChk');
+        const master = sQ('bestpaperMasterChk');
         if (!master) return;
-        const boxes = awardList.querySelectorAll('.bulkChk');
+        const boxes = bestpaperList.querySelectorAll('.bulkChk');
         const total = boxes.length;
         const checked = Array.from(boxes).filter(b => b.checked).length;
         master.indeterminate = checked > 0 && checked < total;
@@ -387,34 +412,34 @@
     }
     
     function selectAllPage() {
-        awardList.querySelectorAll('.bulkChk').forEach(chk => { chk.checked = true; bulk.awardIds.add(chk.dataset.id); });
+        bestpaperList.querySelectorAll('.bulkChk').forEach(chk => { chk.checked = true; bulk.bestpaperIds.add(chk.dataset.id); });
         syncMasterChk(); updateBulkStatus();
     }
     
     function clearAllPage() {
-        awardList.querySelectorAll('.bulkChk').forEach(chk => { chk.checked = false; bulk.awardIds.delete(chk.dataset.id); });
+        bestpaperList.querySelectorAll('.bulkChk').forEach(chk => { chk.checked = false; bulk.bestpaperIds.delete(chk.dataset.id); });
         syncMasterChk(); updateBulkStatus();
     }
     
     function invertSelection() {
-        awardList.querySelectorAll('.bulkChk').forEach(chk => {
+        bestpaperList.querySelectorAll('.bulkChk').forEach(chk => {
             const id = chk.dataset.id;
-            if (chk.checked) { chk.checked = false; bulk.awardIds.delete(id); }
-            else { chk.checked = true; bulk.awardIds.add(id); }
+            if (chk.checked) { chk.checked = false; bulk.bestpaperIds.delete(id); }
+            else { chk.checked = true; bulk.bestpaperIds.add(id); }
         });
         syncMasterChk(); updateBulkStatus();
     }
     
     function updateBulkStatus() {
         const el = sQ('bulkStatus');
-        if (el) el.textContent = bulk.awardIds.size ? `${bulk.awardIds.size} selected` : '';
+        if (el) el.textContent = bulk.bestpaperIds.size ? `${bulk.bestpaperIds.size} selected` : '';
     }
     
     function highlightSelection() {
         // Clear previous highlight
-        Array.from(awardList.children).forEach(li => li.classList.remove('ring', 'ring-[color:var(--brand-600)]', 'selected-row', 'bg-[color:var(--brand-200)]', 'dark:bg-[color:var(--brand-800)]'));
-        if (selAward) {
-            const el = awardList.querySelector(`[data-id='${selAward.id}']`);
+        Array.from(bestpaperList.children).forEach(li => li.classList.remove('ring', 'ring-[color:var(--brand-600)]', 'selected-row', 'bg-[color:var(--brand-200)]', 'dark:bg-[color:var(--brand-800)]'));
+        if (selBestPaper) {
+            const el = bestpaperList.querySelector(`[data-id='${selBestPaper.id}']`);
             if (el) el.classList.add('ring', 'ring-[color:var(--brand-600)]', 'selected-row', 'bg-[color:var(--brand-200)]', 'dark:bg-[color:var(--brand-800)]');
         }
         Array.from(verifierList.children).forEach(li => li.classList.remove('ring', 'ring-[color:var(--brand-600)]', 'selected-row', 'bg-[color:var(--brand-200)]', 'dark:bg-[color:var(--brand-800)]'));
@@ -440,40 +465,44 @@
         return `<span class="${base} ${extra}">${text}</span>`;
     }
 
-    function renderSelectedAward(a) {
-        const $ = (id) => document.getElementById(id);
-        const award = normalizeAward(a || {});
-        const statusInfo = normalizeStatus(award.status_key || award.status);
+    function renderSelectedBestPaper(a) {
+        const $ = (id) => sQ(id);
+        const bestpaper = normalizeBestPaper(a || {});
+        const statusInfo = normalizeStatus(bestpaper.status_key || bestpaper.status);
 
         // Title
-        $('selAwardTitle').textContent = award?.title || 'Untitled Award';
+        $('selBestPaperTitle').textContent = bestpaper?.title || 'Untitled Best Paper';
 
         // Meta badges (number, category, status, phase, created)
-        const num = award?.award_number ? `#${award.award_number}` : 'No Number';
-        const cat = award?.category?.name || award?.paper_category?.name || 'No Category';
+        const num = bestpaper?.bestpaper_number ? `#${bestpaper.bestpaper_number}` : (bestpaper?.bestpaper_number ? `#${bestpaper.bestpaper_number}` : 'No Number');
+        const cat = bestpaper?.category?.name || bestpaper?.paper_category?.name || 'No Category';
         const statusKey = statusInfo.value;
         const status = (statusInfo.label || 'Unknown').toUpperCase();
-        const phase = (award?.review_phase ?? '—');
+        const phase = (bestpaper?.review_phase ?? '—');
 
-        $('selAwardMeta').innerHTML = [
+        $('selBestPaperMeta').innerHTML = [
             badge(num, 'bg-white/60 dark:bg-white/5'),
             badge(cat, 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200'),
             badge(status, statusBadgeTone(statusKey)),
             badge(`Phase ${phase}`, 'bg-white/60 dark:bg-white/5'),
-            badge(`Submitted ${formatDateISO(award?.submitted_on)}`, 'bg-white/60 dark:bg-white/5')
+            badge(`Submitted ${formatDateISO(bestpaper?.submitted_on)}`, 'bg-white/60 dark:bg-white/5')
         ].join(' ');
 
         // Submitted By
-        const sb = award?.submitted_by || award?.created_by || award?.author || {};
+        const sb = bestpaper?.submitted_by || bestpaper?.created_by || bestpaper?.author || {};
         const sbLines = [
             `<div><span class="font-medium">${sb.username || sb.name || 'Unknown'}</span></div>`,
             `<div class="muted break-all">${sb.email || 'No email'}</div>`,
             `<div class="muted break-all">${sb.mobile || 'No mobile'}</div>`
         ].join('');
-        $('selSubmittedBy').innerHTML = sbLines;
+        const sbEl = $('selSubmittedBy');
+        if (sbEl) {
+            sbEl.setAttribute('data-loaded', 'true');
+            sbEl.innerHTML = sbLines;
+        }
 
         // Authors
-        const authors = Array.isArray(award?.authors) ? award.authors : [];
+        const authors = Array.isArray(bestpaper?.authors) ? bestpaper.authors : [];
         const $authors = $('selAuthorsList');
         $authors.innerHTML = '';
         if (!authors.length) {
@@ -501,20 +530,20 @@
         }
 
         // Content preview (full scrollable, no clamp)
-        const detailText = award?.content || award?.description || (award?.complete_pdf_path || award?.full_paper_path ? 'Full paper uploaded (no inline description available)' : '—');
-        $('selAwardDetails').textContent = detailText;
+        const detailText = bestpaper?.content || bestpaper?.description || (bestpaper?.complete_pdf_path || bestpaper?.full_paper_path ? 'Full paper uploaded (no inline description available)' : '—');
+        $('selBestPaperDetails').textContent = detailText;
 
         // PDF link
-        const pdfHref = '/api/v1/research/awards/' + (award?.id || '') + '/pdf';
+        const pdfHref = '/api/v1/research/best-papers/' + (bestpaper?.id || '') + '/pdf';
         const pdfEl = $('selPdfLink');
         pdfEl.href = pdfHref || '#';
         pdfEl.textContent = pdfHref && pdfHref !== '#' ? pdfHref : 'Not uploaded';
 
         // Verifiers section
-        const vWrap = document.getElementById('selAwardVerifiers');
-        const vList = document.getElementById('awardVerifiersList');
+        const vWrap = sQ('selBestPaperVerifiers');
+        const vList = sQ('bestPaperVerifiersList');
         vList.innerHTML = '';
-        const verifiers = Array.isArray(award?.verifiers) ? award.verifiers : [];
+        const verifiers = Array.isArray(bestpaper?.verifiers) ? bestpaper.verifiers : [];
         vWrap.classList.remove('hidden');
         if (!verifiers.length) {
             vList.innerHTML = `<li class="muted">No verifiers assigned</li>`;
@@ -534,22 +563,22 @@
             });
             vList.appendChild(frag);
         }
-        const rejectBtn = $('rejectAwardBtn');
+        const rejectBtn = $('rejectBestPaperBtn');
         if ((verifiers.length === 0) && (statusKey === 'pending'))
             rejectBtn.classList.remove('hidden');
         else
             rejectBtn.classList.add('hidden');
         rejectBtn.onclick = () => {
-            if (confirm('Are you sure you want to reject this award?')) {
-                // Call the API to reject the award
-                rejectAward(award);
+            if (confirm('Are you sure you want to reject this best paper?')) {
+                // Call the API to reject the bestpaper
+                rejectBestPaper(bestpaper);
             }
         };
     }
 
-    function rejectAward(award) {
-        // Call the API to reject the award
-        fetch(`/api/v1/research/awards/${award?.id}/reject`, {
+    function rejectBestPaper(bestpaper) {
+        // Call the API to reject the bestpaper
+        fetch(`/api/v1/research/best-papers/${bestpaper?.id}/reject`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -562,44 +591,44 @@
             return response.json();
         })
         .then(data => {
-            console.log('Award rejected:', data);
+            console.log('Best paper rejected:', data);
             // Update the UI accordingly
             init();
-            selAward = null;
+            selBestPaper = null;
             updatePanel();
         })
         .catch(error => {
-            console.error('Error rejecting award:', error);
+            console.error('Error rejecting bestpaper:', error);
         });
     }
 
     function updatePanel() {
         const panel = sQ('assignPanel');
-        const aSpan = sQ('selAward') || sQ('selAwardTitle');   // legacy or new title
-        const aDetails = sQ('selAwardDetails');
+        const aSpan = sQ('selBestPaperTitle');   // title
+        const aDetails = sQ('selBestPaperDetails');
         const vSpan = sQ('selVerifier');
         const vStatus = sQ('selVerifierStatus');
 
         // ----- ABSTRACT SIDE -----
-        if (selAward) {
-            const normalizedAward = normalizeAward(selAward);
+        if (selBestPaper) {
+            const normalizedBestPaper = normalizeBestPaper(selBestPaper);
             // Use the rich renderer if present (from the upgraded UI)
-            if (typeof renderSelectedAward === 'function') {
-                renderSelectedAward(normalizedAward);
+            if (typeof renderSelectedBestPaper === 'function') {
+                renderSelectedBestPaper(normalizedBestPaper);
             }
             // Keep legacy fields in sync (safe no-ops if missing)
-            if (aSpan) aSpan.textContent = normalizedAward.title || 'Untitled Award';
+            if (aSpan) aSpan.textContent = normalizedBestPaper.title || 'Untitled Best Paper';
             if (aDetails) {
-                const detailText = normalizedAward.content || normalizedAward.description || (normalizedAward.complete_pdf_path || normalizedAward.full_paper_path ? 'Full paper uploaded (no inline description available)' : 'No content available');
+                const detailText = normalizedBestPaper.content || normalizedBestPaper.description || (normalizedBestPaper.complete_pdf_path || normalizedBestPaper.full_paper_path ? 'Full paper uploaded (no inline description available)' : 'No content available');
                 aDetails.textContent = detailText;
             }
 
-            // Load verifiers list for this award
-            loadAwardVerifiers(normalizedAward.id);
+            // Load verifiers list for this best paper
+            loadBestPaperVerifiers(normalizedBestPaper.id);
         } else {
-            // Reset award UI (both new and legacy)
-            if (aSpan) aSpan.textContent = 'No award selected';
-            if (aDetails) aDetails.textContent = 'Select an award to view details';
+            // Reset bestpaper UI (both new and legacy)
+            if (aSpan) aSpan.textContent = 'No best paper selected';
+            if (aDetails) aDetails.textContent = 'Select a best paper to view details';
 
             const sb = document.getElementById('selSubmittedBy');
             if (sb) sb.innerHTML = '';
@@ -607,18 +636,18 @@
             const authors = document.getElementById('selAuthorsList');
             if (authors) authors.innerHTML = '';
 
-            const meta = document.getElementById('selAwardMeta');
+            const meta = document.getElementById('selBestPaperMeta');
             if (meta) meta.innerHTML = '';
 
             const pdf = document.getElementById('selPdfLink');
             if (pdf) { pdf.href = '#'; pdf.textContent = 'Not uploaded'; }
 
-            const vWrap = document.getElementById('selAwardVerifiers');
-            const vList = document.getElementById('awardVerifiersList');
+            const vWrap = document.getElementById('selBestPaperVerifiers');
+            const vList = document.getElementById('bestPaperVerifiersList');
             if (vList) vList.innerHTML = '';
             if (vWrap) vWrap.classList.add('hidden');
 
-            hideAwardVerifiers();
+            hideBestPaperVerifiers();
         }
 
         // ----- VERIFIER SIDE -----
@@ -630,34 +659,34 @@
                 if (selVerifier.mobile) bits.push(selVerifier.mobile);
                 vStatus.textContent = bits.join(' • ');
             }
-            loadVerifierAwards(selVerifier.id);
+            loadVerifierBestPapers(selVerifier.id);
         } else {
             if (vSpan) vSpan.textContent = 'No verifier selected';
             if (vStatus) vStatus.textContent = 'Select a verifier to assign';
-            hideVerifierAwards();
+            hideVerifierBestPapers();
         }
 
         // Show panel if either side has a selection
-        panel.hidden = !(selAward || selVerifier);
+        panel.hidden = !(selBestPaper || selVerifier);
     }
 
     
-    function hideAwardVerifiers() {
-        const box = sQ('selAwardVerifiers');
+    function hideBestPaperVerifiers() {
+        const box = sQ('selBestPaperVerifiers');
         if (box) { box.classList.add('hidden'); }
     }
     
-    function hideVerifierAwards() {
-        const box = sQ('selVerifierAwards');
+    function hideVerifierBestPapers() {
+        const box = sQ('selVerifierBestPapers');
         if (box) { box.classList.add('hidden'); }
     }
 
-    async function loadAwardVerifiers(awardId) {
+    async function loadBestPaperVerifiers(bestpaperId) {
         try {
-            const data = await fetchJSON(`${BASE}/api/v1/research/awards/${awardId}/verifiers`);
-            const box = sQ('selAwardVerifiers');
+            const data = await fetchJSON(`${BASE}/api/v1/research/best-papers/${bestpaperId}/verifiers`);
+            const box = sQ('selBestPaperVerifiers');
             if (!box) return;
-            const list = sQ('awardVerifiersList');
+            const list = sQ('bestPaperVerifiersList');
             
             // Clear the list efficiently
             while (list.firstChild) {
@@ -703,7 +732,7 @@
             } else {
                 const li = document.createElement('li');
                 li.className = 'px-3 py-2 text-muted text-sm';
-                li.textContent = 'No verifiers assigned to this award';
+                li.textContent = 'No verifiers assigned to this best paper';
                 list.appendChild(li);
                 box.classList.remove('hidden');
             }
@@ -714,14 +743,14 @@
                     e.stopPropagation();
                     const verifierId = btn.dataset.id;
                     try {
-                        const r = await fetch(`${BASE}/api/v1/research/awards/${awardId}/verifiers/${verifierId}`, { 
+                        const r = await fetch(`${BASE}/api/v1/research/best-papers/${bestpaperId}/verifiers/${verifierId}`, { 
                             method: 'DELETE', 
                             headers: headers() 
                         });
                         if (!r.ok) throw new Error(await r.text() || r.status);
                         toast('Verifier unassigned successfully', 'success');
-                        await searchAwards();
-                        await loadAwardVerifiers(awardId); // refresh list
+                        await searchBestPapers();
+                        await loadBestPaperVerifiers(bestpaperId); // refresh list
                         highlightSelection();
                     } catch (err) {
                         toast('Failed to unassign verifier: ' + (err.message || 'Unknown error'), 'error');
@@ -729,36 +758,36 @@
                 });
             });
         } catch (e) {
-            toast('Failed to load award verifiers: ' + (e.message || 'Unknown error'), 'error');
-            hideAwardVerifiers();
+            toast('Failed to load best paper verifiers: ' + (e.message || 'Unknown error'), 'error');
+            hideBestPaperVerifiers();
         }
     }
     
-    async function loadVerifierAwards(verifierId) {
+    async function loadVerifierBestPapers(verifierId) {
         try {
-            const data = await fetchJSON(`${BASE}/api/v1/research/verifiers/${verifierId}/awards`);
-            const box = sQ('selVerifierAwards');
+            const data = await fetchJSON(`${BASE}/api/v1/research/verifiers/${verifierId}/best-papers`);
+            const box = sQ('selVerifierBestPapers');
             if (!box) return;
-            const list = sQ('verifierAwardsList');
+            const list = sQ('verifierBestPapersList');
             
             // Clear the list efficiently
             while (list.firstChild) {
                 list.removeChild(list.firstChild);
             }
             
-            const awards = normalizeAwardArray(Array.isArray(data) ? data : (data.awards || []));
-            if (awards.length > 0) {
+            const bestpapers = normalizeBestPaperArray(Array.isArray(data) ? data : (data.bestpapers || data.best_papers || []));
+            if (bestpapers.length > 0) {
                 const fragment = document.createDocumentFragment();
-                awards.forEach(a => {
+                bestpapers.forEach(a => {
                     const li = document.createElement('li');
                     li.className = 'px-3 py-2 flex items-center justify-between gap-2 hover:bg-[color:var(--brand-50)] dark:hover:bg-[color:var(--brand-900)]/40 rounded';
                     
                     const titleSpan = document.createElement('span');
                     titleSpan.className = 'truncate font-medium';
-                    titleSpan.textContent = a.title || 'Untitled Award';
+                    titleSpan.textContent = a.title || 'Untitled Best Paper';
                     
                     const btn = document.createElement('button');
-                    btn.className = 'unassignAward btn btn-ghost px-2 py-1 text-[10px] flex items-center gap-1';
+                    btn.className = 'unassignBestPaper btn btn-ghost px-2 py-1 text-[10px] flex items-center gap-1';
                     btn.dataset.id = a.id;
                     
                     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -785,58 +814,59 @@
             } else {
                 const li = document.createElement('li');
                 li.className = 'px-3 py-2 text-muted text-sm';
-                li.textContent = 'No awards assigned to this verifier';
+                li.textContent = 'No best papers assigned to this verifier';
                 list.appendChild(li);
             }
             
-            sQ('verifierAwardCount').textContent = awards.length;
+            const countEl = sQ('verifierBestPaperCount') || sQ('verifierBestPaperCount');
+            if (countEl) countEl.textContent = bestpapers.length;
             box.classList.remove('hidden');
             
             // Wire inline unassign buttons
-            list.querySelectorAll('.unassignAward').forEach(btn => {
+            list.querySelectorAll('.unassignBestPaper').forEach(btn => {
                 btn.addEventListener('click', async (e) => {
                     e.stopPropagation();
-                    const awardId = btn.dataset.id;
+                    const bestpaperId = btn.dataset.id;
                     try {
-                        const r = await fetch(`${BASE}/api/v1/research/awards/${awardId}/verifiers/${verifierId}`, { 
+                        const r = await fetch(`${BASE}/api/v1/research/best-papers/${bestpaperId}/verifiers/${verifierId}`, { 
                             method: 'DELETE', 
                             headers: headers() 
                         });
                         if (!r.ok) throw new Error(await r.text() || r.status);
-                        toast('Award unassigned successfully', 'success');
-                        await searchAwards();
-                        await loadVerifierAwards(verifierId); // refresh list
+                        toast('Best paper unassigned successfully', 'success');
+                        await searchBestPapers();
+                        await loadVerifierBestPapers(verifierId); // refresh list
                         highlightSelection();
                     } catch (err) {
-                        toast('Failed to unassign award: ' + (err.message || 'Unknown error'), 'error');
+                        toast('Failed to unassign best paper: ' + (err.message || 'Unknown error'), 'error');
                     }
                 });
             });
         } catch (e) {
-            toast('Failed to load verifier awards: ' + (e.message || 'Unknown error'), 'error');
-            hideVerifierAwards();
+            toast('Failed to load verifier best papers: ' + (e.message || 'Unknown error'), 'error');
+            hideVerifierBestPapers();
         }
     }
     
-    async function searchAwards() {
-        state.awards.q = (sQ('awardSearch').value || '').trim();
-        const { q, filter, page, pageSize, sort, dir } = state.awards;
-        const url = `${BASE}/api/v1/research/awards?q=${encodeURIComponent(q)}&verifiers=${filter}&page=${page}&page_size=${pageSize}&sort=${sort}&dir=${dir}`;
+    async function searchBestPapers() {
+        state.bestpapers.q = (sQ('bestpaperSearch').value || '').trim();
+        const { q, filter, page, pageSize, sort, dir } = state.bestpapers;
+        const url = `${BASE}/api/v1/research/best-papers?q=${encodeURIComponent(q)}&verifiers=${filter}&page=${page}&page_size=${pageSize}&sort_by=${sort}&sort_dir=${dir}`;
         try {
             const data = await fetchJSON(url);
-            const normalizedItems = normalizeAwardArray(Array.isArray(data) ? data : (data.items || []));
-            renderList(awardList, normalizedItems, 'award');
-            updateAwardMeta(data);
+            const normalizedItems = normalizeBestPaperArray(Array.isArray(data) ? data : (data.items || []));
+            renderList(bestpaperList, normalizedItems, 'bestpaper');
+            updateBestPaperMeta(data);
         } catch (e) {
             console.error(e);
-            toast('Failed to load awards: ' + (e.message || 'Unknown error'), 'error');
+            toast('Failed to load best papers: ' + (e.message || 'Unknown error'), 'error');
         }
     }
     
     async function searchVerifiers() {
         state.verifiers.q = (sQ('verifierSearch').value || '').trim();
         const { q, filter, page, pageSize, sort, dir } = state.verifiers;
-        const url = `${BASE}/api/v1/user/users/verifiers?q=${encodeURIComponent(q)}&has_awards=${filter}&page=${page}&page_size=${pageSize}&sort_by=${sort}&sort_dir=${dir}`;
+        const url = `${BASE}/api/v1/user/users/verifiers?q=${encodeURIComponent(q)}&has_bestpapers=${filter}&page=${page}&page_size=${pageSize}&sort_by=${sort}&sort_dir=${dir}`;
         try {
             const data = await fetchJSON(url);
             renderList(verifierList, data.items || data || [], 'verifier');
@@ -848,18 +878,18 @@
     }
     
     async function assign() {
-        if (!(selAward && selVerifier)) {
-            toast('Please select both an award and a verifier', 'warn');
+        if (!(selBestPaper && selVerifier)) {
+            toast('Please select both a best paper and a verifier', 'warn');
             return;
         }
         try {
-            const r = await fetch(`${BASE}/api/v1/research/awards/${selAward.id}/verifiers/${selVerifier.id}`, {
+            const r = await fetch(`${BASE}/api/v1/research/best-papers/${selBestPaper.id}/verifiers/${selVerifier.id}`, {
                 method: 'POST',
                 headers: { ...headers(), 'Content-Type': 'application/json' }
             });
             if (!r.ok) throw new Error(await r.text() || r.status);
             toast('Verifier assigned successfully', 'success');
-            await searchAwards();
+            await searchBestPapers();
             await searchVerifiers();
             highlightSelection();
             updatePanel();
@@ -869,18 +899,18 @@
     }
     
     async function unassign() {
-        if (!(selAward && selVerifier)) {
-            toast('Please select both an award and a verifier', 'warn');
+        if (!(selBestPaper && selVerifier)) {
+            toast('Please select both a best paper and a verifier', 'warn');
             return;
         }
         try {
-            const r = await fetch(`${BASE}/api/v1/research/awards/${selAward.id}/verifiers/${selVerifier.id}`, {
+            const r = await fetch(`${BASE}/api/v1/research/best-papers/${selBestPaper.id}/verifiers/${selVerifier.id}`, {
                 method: 'DELETE',
                 headers: headers()
             });
             if (!r.ok) throw new Error(await r.text() || r.status);
             toast('Verifier unassigned successfully', 'success');
-            await searchAwards();
+            await searchBestPapers();
             await searchVerifiers();
             highlightSelection();
             updatePanel();
@@ -890,22 +920,22 @@
     }
     
     async function bulkAssign() {
-        if (!bulk.awardIds.size || !selVerifier) {
-            toast('Select awards and a verifier first', 'warn');
+        if (!bulk.bestpaperIds.size || !selVerifier) {
+            toast('Select best papers and a verifier first', 'warn');
             return;
         }
         
         // Show confirmation dialog for bulk operations
-        if (!confirm(`Are you sure you want to assign ${bulk.awardIds.size} award(s) to ${selVerifier.username}?`)) {
+        if (!confirm(`Are you sure you want to assign ${bulk.bestpaperIds.size} best paper(s) to ${selVerifier.username}?`)) {
             return;
         }
         
         try {
             const body = {
-                award_ids: Array.from(bulk.awardIds),
+                best_paper_ids: Array.from(bulk.bestpaperIds),
                 user_ids: [selVerifier.id]
             };
-            const r = await fetch(BASE + '/api/v1/research/awards/bulk-assign-verifiers', {
+            const r = await fetch(BASE + '/api/v1/research/best-papers/bulk-assign-verifiers', {
                 method: 'POST',
                 headers: { ...headers(), 'Content-Type': 'application/json' },
                 body: JSON.stringify(body)
@@ -913,11 +943,11 @@
             if (!r.ok) throw new Error(await r.text() || r.status);
             const result = await r.json();
             toast(`Bulk assigned: ${result.assignments_created} assignments created`, 'success');
-            await searchAwards();
+            await searchBestPapers();
             await searchVerifiers();
             highlightSelection();
             // Clear bulk selection after successful assignment
-            bulk.awardIds.clear();
+            bulk.bestpaperIds.clear();
             syncMasterChk();
             updateBulkStatus();
         } catch (e) {
@@ -926,22 +956,22 @@
     }
     
     async function bulkUnassign() {
-        if (!bulk.awardIds.size || !selVerifier) {
-            toast('Select awards and a verifier first', 'warn');
+        if (!bulk.bestpaperIds.size || !selVerifier) {
+            toast('Select best papers and a verifier first', 'warn');
             return;
         }
         
         // Show confirmation dialog for bulk operations
-        if (!confirm(`Are you sure you want to unassign ${bulk.awardIds.size} award(s) from ${selVerifier.username}?`)) {
+        if (!confirm(`Are you sure you want to unassign ${bulk.bestpaperIds.size} best paper(s) from ${selVerifier.username}?`)) {
             return;
         }
         
         try {
             const body = {
-                award_ids: Array.from(bulk.awardIds),
+                best_paper_ids: Array.from(bulk.bestpaperIds),
                 user_ids: [selVerifier.id]
             };
-            const r = await fetch(BASE + '/api/v1/research/awards/bulk-unassign-verifiers', {
+            const r = await fetch(BASE + '/api/v1/research/best-papers/bulk-unassign-verifiers', {
                 method: 'POST',
                 headers: { ...headers(), 'Content-Type': 'application/json' },
                 body: JSON.stringify(body)
@@ -949,11 +979,11 @@
             if (!r.ok) throw new Error(await r.text() || r.status);
             const result = await r.json();
             toast(`Bulk unassigned: ${result.assignments_deleted} assignments deleted`, 'success');
-            await searchAwards();
+            await searchBestPapers();
             await searchVerifiers();
             highlightSelection();
             // Clear bulk selection after successful unassignment
-            bulk.awardIds.clear();
+            bulk.bestpaperIds.clear();
             syncMasterChk();
             updateBulkStatus();
         } catch (e) {
@@ -962,23 +992,23 @@
     }
     
     function clearSel() {
-        selAward = null;
+        selBestPaper = null;
         selVerifier = null;
         updatePanel();
         highlightSelection();
         // Clear bulk selection when clearing selections
-        bulk.awardIds.clear();
+        bulk.bestpaperIds.clear();
         syncMasterChk();
         updateBulkStatus();
     }
 
-    function updateAwardMeta(data) {
-        state.awards.pages = data.pages || 1;
-        const info = sQ('awardPageInfo');
+    function updateBestPaperMeta(data) {
+        state.bestpapers.pages = data.pages || 1;
+        const info = sQ('bestpaperPageInfo');
         if (info) info.textContent = `Page ${data.page || 1} of ${data.pages || 1}`;
-        const stats = sQ('awardStats');
+        const stats = sQ('bestpaperStats');
         if (stats) {
-            const filterLabel = state.awards.filter === '' ? 'All' : (state.awards.filter === 'yes' ? 'With Verifiers' : 'Without Verifiers');
+            const filterLabel = state.bestpapers.filter === '' ? 'All' : (state.bestpapers.filter === 'yes' ? 'With Verifiers' : 'Without Verifiers');
             stats.textContent = `${data.total || 0} total • Filter: ${filterLabel}`;
         }
     }
@@ -994,9 +1024,9 @@
         }
     }
 
-    function changeAwardPage(delta) {
-        state.awards.page = Math.min(Math.max(1, state.awards.page + delta), state.awards.pages);
-        searchAwards();
+    function changeBestPaperPage(delta) {
+        state.bestpapers.page = Math.min(Math.max(1, state.bestpapers.page + delta), state.bestpapers.pages);
+        searchBestPapers();
     }
     
     function changeVerifierPage(delta) {
@@ -1026,9 +1056,9 @@
         };
     }
     
-    const debouncedSearchAwards = debounce(() => {
-        state.awards.page = 1;
-        searchAwards();
+    const debouncedSearchBestPapers = debounce(() => {
+        state.bestpapers.page = 1;
+        searchBestPapers();
     }, 300);
     
     const debouncedSearchVerifiers = debounce(() => {
@@ -1038,9 +1068,9 @@
 
     function init() {
         // Search buttons
-        sQ('awardSearchBtn')?.addEventListener('click', () => { 
-            state.awards.page = 1; 
-            searchAwards(); 
+        sQ('bestpaperSearchBtn')?.addEventListener('click', () => { 
+            state.bestpapers.page = 1; 
+            searchBestPapers(); 
         });
         sQ('verifierSearchBtn')?.addEventListener('click', () => { 
             state.verifiers.page = 1; 
@@ -1048,8 +1078,8 @@
         });
         
         // Pagination buttons
-        sQ('awardPrev')?.addEventListener('click', () => changeAwardPage(-1));
-        sQ('awardNext')?.addEventListener('click', () => changeAwardPage(1));
+        sQ('bestpaperPrev')?.addEventListener('click', () => changeBestPaperPage(-1));
+        sQ('bestpaperNext')?.addEventListener('click', () => changeBestPaperPage(1));
         sQ('verifierPrev')?.addEventListener('click', () => changeVerifierPage(-1));
         sQ('verifierNext')?.addEventListener('click', () => changeVerifierPage(1));
         
@@ -1063,17 +1093,17 @@
         sQ('clearSel')?.addEventListener('click', clearSel);
         
         // Selection controls
-        const master = sQ('awardMasterChk');
+        const master = sQ('bestpaperMasterChk');
         master?.addEventListener('change', e => { e.target.checked ? selectAllPage() : clearAllPage(); });
         sQ('invertSelection')?.addEventListener('click', invertSelection);
-        sQ('awardSelectAll')?.addEventListener('click', selectAllPage);
-        sQ('awardClearSel')?.addEventListener('click', clearAllPage);
+        sQ('bestpaperSelectAll')?.addEventListener('click', selectAllPage);
+        sQ('bestpaperClearSel')?.addEventListener('click', clearAllPage);
         
         // Enter key support for search
-        sQ('awardSearch')?.addEventListener('keypress', (e) => {
+        sQ('bestpaperSearch')?.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
-                state.awards.page = 1;
-                searchAwards();
+                state.bestpapers.page = 1;
+                searchBestPapers();
             }
         });
         sQ('verifierSearch')?.addEventListener('keypress', (e) => {
@@ -1084,13 +1114,13 @@
         });
         
         // Real-time search with debounce
-        sQ('awardSearch')?.addEventListener('input', debouncedSearchAwards);
+        sQ('bestpaperSearch')?.addEventListener('input', debouncedSearchBestPapers);
         sQ('verifierSearch')?.addEventListener('input', debouncedSearchVerifiers);
         
         // Initialize UI
         wireSortGroups();
         wireSegmentedControls();
-        searchAwards();
+        searchBestPapers();
         searchVerifiers();
     }
     

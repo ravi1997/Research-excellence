@@ -64,6 +64,20 @@ def privacy_page():
 def admin_unverified_page():  # injected by decorator
     return render_template('admin/admin_unverified.html')
 
+
+@view_bp.route('/coordinator/add-verifier-abstract')
+@jwt_required()
+@require_roles(Role.COORDINATOR.value, Role.ADMIN.value, Role.SUPERADMIN.value)
+def add_verifier_abstract_page():
+    return render_template('abstract/add_verifier.html')
+
+
+@view_bp.route('/coordinator/add-verifier-award')
+@jwt_required()
+@require_roles(Role.COORDINATOR.value, Role.ADMIN.value, Role.SUPERADMIN.value)
+def add_verifier_award_page():
+    return render_template('award/add_verifier.html')
+
 @view_bp.route('/coordinator/add-verifier')
 @jwt_required()
 @require_roles(Role.COORDINATOR.value, Role.ADMIN.value, Role.SUPERADMIN.value)

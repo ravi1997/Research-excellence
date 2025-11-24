@@ -1250,15 +1250,17 @@ def get_best_papers_for_verifier(user_id):
             return jsonify({"error": error_msg}), 404
         
         # Get all best papers assigned to this verifier using the relationship
-        best_papers = user.best_papers_assigned  # This assumes there's a relationship defined
-        
-        # If the relationship doesn't exist, we need to query manually
-        from sqlalchemy.orm import joinedload
-        best_papers = db.session.query(BestPaper).join(
-            BestPaperVerifiers, BestPaper.id == BestPaperVerifiers.best_paper_id
-        ).filter(
-            BestPaperVerifiers.user_id == user_id
-        ).options(joinedload(BestPaper.author)).all()
+        # (model relationship is named `best_papers_to_verify` on `User`).
+        best_papers = getattr(user, 'best_papers_to_verify', None)
+
+        # If the relationship is not present or empty (e.g., not loaded), fall back to a direct query
+        if not best_papers:
+            from sqlalchemy.orm import joinedload
+            best_papers = db.session.query(BestPaper).join(
+                BestPaperVerifiers, BestPaper.id == BestPaperVerifiers.best_paper_id
+            ).filter(
+                BestPaperVerifiers.user_id == user_id
+            ).options(joinedload(BestPaper.author)).all()
         
         # Log successful retrieval
         log_audit_event(
