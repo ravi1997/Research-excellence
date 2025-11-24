@@ -1257,15 +1257,17 @@ def get_awards_for_verifier(user_id):
             return jsonify({"error": error_msg}), 404
         
         # Get all awards assigned to this verifier using the relationship
-        awards = user.awards_assigned  # This assumes there's a relationship defined
-        
-        # If the relationship doesn't exist, we need to query manually
-        from sqlalchemy.orm import joinedload
-        awards = db.session.query(Awards).join(
-            AwardVerifiers, Awards.id == AwardVerifiers.award_id
-        ).filter(
-            AwardVerifiers.user_id == user_id
-        ).options(joinedload(Awards.author)).all()
+        # (model relationship is named `awards_to_verify` on `User`).
+        awards = getattr(user, 'awards_to_verify', None)
+
+        # If the relationship is not present or empty (e.g., not loaded), fall back to a direct query
+        if not awards:
+            from sqlalchemy.orm import joinedload
+            awards = db.session.query(Awards).join(
+                AwardVerifiers, Awards.id == AwardVerifiers.award_id
+            ).filter(
+                AwardVerifiers.user_id == user_id
+            ).options(joinedload(Awards.author)).all()
         
         # Log successful retrieval
         log_audit_event(

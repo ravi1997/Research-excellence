@@ -3,13 +3,13 @@
     const token = () => localStorage.getItem('token') || '';
     const headers = () => ({ 'Accept': 'application/json', 'Authorization': `Bearer ${token()}` });
     const sQ = id => document.getElementById(id);
-    const abstractList = sQ('abstractList');
+    const awardList = sQ('awardList');
     const verifierList = sQ('verifierList');
-    let selAbstract = null; let selVerifier = null;
-    const bulk = { abstractIds: new Set() };
+    let selAward = null; let selVerifier = null;
+    const bulk = { awardIds: new Set() };
 
     const state = {
-        abstracts: { page: 1, pages: 1, pageSize: 20, filter: '', q: '', sort: 'id', dir: 'desc' },
+        awards: { page: 1, pages: 1, pageSize: 20, filter: '', q: '', sort: 'id', dir: 'desc' },
         verifiers: { page: 1, pages: 1, pageSize: 20, filter: '', q: '', sort: 'created_at', dir: 'desc' }
     };
 
@@ -23,26 +23,80 @@
         return domCache.get(id);
     }
 
+    function normalizeStatus(statusVal) {
+        const raw = statusVal?.value || statusVal?.name || statusVal || '';
+        const cleaned = raw.toString().replace(/^Status\.?/i, '').toLowerCase();
+        const label = cleaned
+            ? cleaned.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+            : 'Unknown';
+        return { raw, value: cleaned, label };
+    }
+
+    function normalizeAward(raw = {}) {
+        const statusInfo = normalizeStatus(raw.status);
+        const category = raw.category || raw.paper_category || raw.paperCategory;
+        const categoryId = raw.category_id || raw.paper_category_id || raw.paperCategoryId;
+        const author = raw.author || (Array.isArray(raw.authors) ? raw.authors[0] : undefined);
+
+        return {
+            ...raw,
+            award_number: raw.award_number ?? raw.awardNumber ?? raw.awardnumber,
+            category,
+            category_id: categoryId,
+            paper_category: raw.paper_category || raw.category || category,
+            paper_category_id: raw.paper_category_id || raw.category_id || categoryId,
+            submitted_on: raw.submitted_on || raw.created_at || raw.created_on,
+            updated_on: raw.updated_on || raw.updated_at || raw.modified_on,
+            submitted_by: raw.submitted_by || raw.created_by || raw.user,
+            updated_by: raw.updated_by || raw.modified_by,
+            author,
+            authors: Array.isArray(raw.authors) ? raw.authors : (author ? [author] : []),
+            complete_pdf_path: raw.complete_pdf_path || raw.full_paper_path,
+            covering_letter_pdf_path: raw.covering_letter_pdf_path || raw.forwarding_letter_path,
+            work_of_aiims: raw.work_of_aiims ?? raw.is_aiims_work,
+            review_phase: raw.review_phase ?? raw.phase ?? 1,
+            status_key: statusInfo.value,
+            status_label: statusInfo.label,
+        };
+    }
+
+    const normalizeAwardArray = (items) => (items || []).map(normalizeAward);
+
+    function statusBadgeTone(statusKey) {
+        switch (statusKey) {
+            case 'pending':
+                return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200';
+            case 'under_review':
+                return 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200';
+            case 'rejected':
+                return 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200';
+            case 'accepted':
+                return 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200';
+            default:
+                return 'bg-white/60 dark:bg-white/5';
+        }
+    }
+
     function activateSeg(group, btn) {
         group.querySelectorAll('.seg').forEach(b => b.classList.remove('active', 'bg-[color:var(--brand-600)]', 'text-white', 'dark:bg-[color:var(--brand-500)]'));
         btn.classList.add('active', 'bg-[color:var(--brand-600)]', 'text-white', 'dark:bg-[color:var(--brand-500)]');
     }
 
     function wireSegmentedControls() {
-        const aLinkGroup = sQ('abstractLinkedGroup');
+        const aLinkGroup = sQ('awardLinkedGroup');
         aLinkGroup?.addEventListener('click', e => {
             const btn = e.target.closest('.seg'); if (!btn) return;
             activateSeg(aLinkGroup, btn);
-            state.abstracts.filter = btn.dataset.val || '';
-            state.abstracts.page = 1; searchAbstracts();
+            state.awards.filter = btn.dataset.val || '';
+            state.awards.page = 1; searchAwards();
         });
 
-        const aPageGroup = sQ('abstractPageSizeGroup');
+        const aPageGroup = sQ('awardPageSizeGroup');
         aPageGroup?.addEventListener('click', e => {
             const btn = e.target.closest('.seg'); if (!btn) return;
             activateSeg(aPageGroup, btn);
-            state.abstracts.pageSize = +btn.dataset.size;
-            state.abstracts.page = 1; searchAbstracts();
+            state.awards.pageSize = +btn.dataset.size;
+            state.awards.page = 1; searchAwards();
         });
 
         const vLinkGroup = sQ('verifierLinkedGroup');
@@ -78,23 +132,23 @@
         });
     }
 
-    // Attach sorting behavior to abstract & verifier sort button groups
+    // Attach sorting behavior to award & verifier sort button groups
     function wireSortGroups() {
-        const aGroup = sQ('abstractSortGroup');
+        const aGroup = sQ('awardSortGroup');
         if (aGroup) {
-            applySortStyles(aGroup, state.abstracts.sort, state.abstracts.dir);
+            applySortStyles(aGroup, state.awards.sort, state.awards.dir);
             aGroup.addEventListener('click', e => {
                 const btn = e.target.closest('.sort-btn');
                 if (!btn) return;
                 const key = btn.dataset.key;
-                if (state.abstracts.sort === key) {
-                    state.abstracts.dir = state.abstracts.dir === 'asc' ? 'desc' : 'asc';
+                if (state.awards.sort === key) {
+                    state.awards.dir = state.awards.dir === 'asc' ? 'desc' : 'asc';
                 } else {
-                    state.abstracts.sort = key;
-                    state.abstracts.dir = 'asc';
+                    state.awards.sort = key;
+                    state.awards.dir = 'asc';
                 }
-                applySortStyles(aGroup, state.abstracts.sort, state.abstracts.dir);
-                searchAbstracts();
+                applySortStyles(aGroup, state.awards.sort, state.awards.dir);
+                searchAwards();
             });
         }
         const vGroup = sQ('verifierSortGroup');
@@ -136,16 +190,17 @@
         if (!items.length) {
             const empty = document.createElement('li');
             empty.className = 'py-8 text-center text-xs uppercase tracking-wide text-[color:var(--muted)]';
-            empty.textContent = type === 'abstract' ? 'No abstracts found' : 'No verifiers found';
+            empty.textContent = type === 'award' ? 'No awards found' : 'No verifiers found';
             el.appendChild(empty);
             return;
         }
 
         const fragment = document.createDocumentFragment();
 
-        items.forEach(it => {
+        items.forEach(rawItem => {
+            const it = type === 'award' ? normalizeAward(rawItem) : rawItem;
             const li = document.createElement('li');
-            const selected = bulk.abstractIds?.has?.(it.id) && type === 'abstract';
+            const selected = bulk.awardIds?.has?.(it.id) && type === 'award';
 
             // Layout fixes: items start, gap, allow text to wrap, badge stays visible
             li.className =
@@ -154,7 +209,7 @@
                 (selected ? 'bg-[color:var(--brand-100)] dark:bg-[color:var(--brand-900)]' : '');
             li.dataset.id = it.id;
 
-            if (type === 'abstract') {
+            if (type === 'award') {
                 const left = document.createElement('div');
                 left.className = 'flex items-start gap-3 min-w-0 grow';
 
@@ -163,9 +218,9 @@
                 checkbox.className = 'bulkChk accent-[color:var(--brand-600)] rounded h-4 w-4 mt-1 shrink-0';
                 checkbox.dataset.id = it.id;
                 checkbox.checked = selected;
-                const abstractLabel = `Select abstract ${it.title || `#${it.abstract_number || it.id}`}`;
-                checkbox.setAttribute('aria-label', abstractLabel);
-                checkbox.setAttribute('title', abstractLabel);
+                const awardLabel = `Select award ${it.title || `#${it.award_number || it.id}`}`;
+                checkbox.setAttribute('aria-label', awardLabel);
+                checkbox.setAttribute('title', awardLabel);
 
                 const textCol = document.createElement('div');
                 textCol.className = 'min-w-0';
@@ -173,27 +228,27 @@
                 const titleSpan = document.createElement('div');
                 // Multi-line title: allow wrapping; avoid truncation; break long words
                 titleSpan.className = 'font-medium whitespace-normal break-words';
-                titleSpan.textContent = it.title || 'Untitled Abstract';
-                titleSpan.title = it.title || 'Untitled Abstract'; // tooltip for very long titles
+                titleSpan.textContent = it.title || 'Untitled Award';
+                titleSpan.title = it.title || 'Untitled Award'; // tooltip for very long titles
 
                 const meta = document.createElement('div');
                 meta.className = 'muted text-xs mt-1 space-x-2';
                 const cat = document.createElement('span');
-                cat.textContent = it.category?.name || 'No Category';
+                cat.textContent = it.category?.name || it.paper_category?.name || 'No Category';
                 const dot = document.createElement('span');
                 dot.textContent = '•';
                 const submittedBy = document.createElement('span');
-                submittedBy.textContent = `Submitted by: ${it.submitted_by?.username || it.created_by?.username || 'Unknown'}`;
+                submittedBy.textContent = `Submitted by: ${it.submitted_by?.username || it.created_by?.username || it.author?.name || 'Unknown'}`;
                 const dot2 = document.createElement('span');
                 dot2.textContent = '•';
-                const abstractNum = document.createElement('span');
-                abstractNum.textContent = `Abstract #${it.abstract_number || 'N/A'}`;
+                const awardNum = document.createElement('span');
+                awardNum.textContent = `Award #${it.award_number || 'N/A'}`;
 
                 meta.appendChild(cat);
                 meta.appendChild(dot);
                 meta.appendChild(submittedBy);
                 meta.appendChild(dot2);
-                meta.appendChild(abstractNum);
+                meta.appendChild(awardNum);
 
                 textCol.appendChild(titleSpan);
                 textCol.appendChild(meta);
@@ -217,7 +272,7 @@
                 // List item click (ignore checkbox)
                 li.addEventListener('click', (e) => {
                     if (e.target.classList.contains('bulkChk')) return;
-                    selAbstract = it;
+                    selAward = it;
                     updatePanel();
                     highlightSelection();
                 });
@@ -225,7 +280,7 @@
                 // Checkbox behavior
                 checkbox.addEventListener('change', (e) => {
                     const id = e.target.dataset.id;
-                    if (e.target.checked) bulk.abstractIds.add(id); else bulk.abstractIds.delete(id);
+                    if (e.target.checked) bulk.awardIds.add(id); else bulk.awardIds.delete(id);
                     syncMasterChk();
                     updateBulkStatus();
                 });
@@ -272,12 +327,12 @@
 
                 const badge = document.createElement('span');
                 badge.className = 'text-[10px] uppercase tracking-wide px-2 py-1 rounded-full shrink-0 self-center';
-                if (it.abstracts_count && it.abstracts_count > 0) {
+                if (it.awards_count && it.awards_count > 0) {
                     badge.className += ' bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300';
-                    badge.textContent = `${it.abstracts_count} abstract${it.abstracts_count > 1 ? 's' : ''}`;
+                    badge.textContent = `${it.awards_count} award${it.awards_count > 1 ? 's' : ''}`;
                 } else {
                     badge.className += ' bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
-                    badge.textContent = 'no abstracts';
+                    badge.textContent = 'no awards';
                 }
 
                 li.appendChild(left);
@@ -308,7 +363,7 @@
         el.appendChild(fragment);
 
         // Sync controls after rendering
-        if (type === 'abstract') {
+        if (type === 'award') {
             syncMasterChk();
         } else {
             syncVerifierRadios();
@@ -322,9 +377,9 @@
     }
     
     function syncMasterChk() {
-        const master = sQ('abstractMasterChk');
+        const master = sQ('awardMasterChk');
         if (!master) return;
-        const boxes = abstractList.querySelectorAll('.bulkChk');
+        const boxes = awardList.querySelectorAll('.bulkChk');
         const total = boxes.length;
         const checked = Array.from(boxes).filter(b => b.checked).length;
         master.indeterminate = checked > 0 && checked < total;
@@ -332,34 +387,34 @@
     }
     
     function selectAllPage() {
-        abstractList.querySelectorAll('.bulkChk').forEach(chk => { chk.checked = true; bulk.abstractIds.add(chk.dataset.id); });
+        awardList.querySelectorAll('.bulkChk').forEach(chk => { chk.checked = true; bulk.awardIds.add(chk.dataset.id); });
         syncMasterChk(); updateBulkStatus();
     }
     
     function clearAllPage() {
-        abstractList.querySelectorAll('.bulkChk').forEach(chk => { chk.checked = false; bulk.abstractIds.delete(chk.dataset.id); });
+        awardList.querySelectorAll('.bulkChk').forEach(chk => { chk.checked = false; bulk.awardIds.delete(chk.dataset.id); });
         syncMasterChk(); updateBulkStatus();
     }
     
     function invertSelection() {
-        abstractList.querySelectorAll('.bulkChk').forEach(chk => {
+        awardList.querySelectorAll('.bulkChk').forEach(chk => {
             const id = chk.dataset.id;
-            if (chk.checked) { chk.checked = false; bulk.abstractIds.delete(id); }
-            else { chk.checked = true; bulk.abstractIds.add(id); }
+            if (chk.checked) { chk.checked = false; bulk.awardIds.delete(id); }
+            else { chk.checked = true; bulk.awardIds.add(id); }
         });
         syncMasterChk(); updateBulkStatus();
     }
     
     function updateBulkStatus() {
         const el = sQ('bulkStatus');
-        if (el) el.textContent = bulk.abstractIds.size ? `${bulk.abstractIds.size} selected` : '';
+        if (el) el.textContent = bulk.awardIds.size ? `${bulk.awardIds.size} selected` : '';
     }
     
     function highlightSelection() {
         // Clear previous highlight
-        Array.from(abstractList.children).forEach(li => li.classList.remove('ring', 'ring-[color:var(--brand-600)]', 'selected-row', 'bg-[color:var(--brand-200)]', 'dark:bg-[color:var(--brand-800)]'));
-        if (selAbstract) {
-            const el = abstractList.querySelector(`[data-id='${selAbstract.id}']`);
+        Array.from(awardList.children).forEach(li => li.classList.remove('ring', 'ring-[color:var(--brand-600)]', 'selected-row', 'bg-[color:var(--brand-200)]', 'dark:bg-[color:var(--brand-800)]'));
+        if (selAward) {
+            const el = awardList.querySelector(`[data-id='${selAward.id}']`);
             if (el) el.classList.add('ring', 'ring-[color:var(--brand-600)]', 'selected-row', 'bg-[color:var(--brand-200)]', 'dark:bg-[color:var(--brand-800)]');
         }
         Array.from(verifierList.children).forEach(li => li.classList.remove('ring', 'ring-[color:var(--brand-600)]', 'selected-row', 'bg-[color:var(--brand-200)]', 'dark:bg-[color:var(--brand-800)]'));
@@ -385,39 +440,40 @@
         return `<span class="${base} ${extra}">${text}</span>`;
     }
 
-    function renderSelectedAbstract(a) {
+    function renderSelectedAward(a) {
         const $ = (id) => document.getElementById(id);
+        const award = normalizeAward(a || {});
+        const statusInfo = normalizeStatus(award.status_key || award.status);
 
         // Title
-        $('selAbstractTitle').textContent = a?.title || 'Untitled Abstract';
+        $('selAwardTitle').textContent = award?.title || 'Untitled Award';
 
         // Meta badges (number, category, status, phase, created)
-        const num = a?.abstract_number ? `#${a.abstract_number}` : 'No Number';
-        const cat = a?.category?.name || 'No Category';
-        const status = (a?.status || '').toString().replace(/^Status\./, '') || 'UNKNOWN';
-        const phase = (a?.review_phase ?? '—');
+        const num = award?.award_number ? `#${award.award_number}` : 'No Number';
+        const cat = award?.category?.name || award?.paper_category?.name || 'No Category';
+        const statusKey = statusInfo.value;
+        const status = (statusInfo.label || 'Unknown').toUpperCase();
+        const phase = (award?.review_phase ?? '—');
 
-        $('selAbstractMeta').innerHTML = [
+        $('selAwardMeta').innerHTML = [
             badge(num, 'bg-white/60 dark:bg-white/5'),
             badge(cat, 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200'),
-            badge(status, status === 'PENDING'
-                ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200'
-                : 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200'),
+            badge(status, statusBadgeTone(statusKey)),
             badge(`Phase ${phase}`, 'bg-white/60 dark:bg-white/5'),
-            badge(`Submitted ${formatDateISO(a?.submitted_on)}`, 'bg-white/60 dark:bg-white/5')
+            badge(`Submitted ${formatDateISO(award?.submitted_on)}`, 'bg-white/60 dark:bg-white/5')
         ].join(' ');
 
         // Submitted By
-        const sb = a?.submitted_by || a?.created_by || {};
+        const sb = award?.submitted_by || award?.created_by || award?.author || {};
         const sbLines = [
-            `<div><span class="font-medium">${sb.username || 'Unknown'}</span></div>`,
+            `<div><span class="font-medium">${sb.username || sb.name || 'Unknown'}</span></div>`,
             `<div class="muted break-all">${sb.email || 'No email'}</div>`,
             `<div class="muted break-all">${sb.mobile || 'No mobile'}</div>`
         ].join('');
         $('selSubmittedBy').innerHTML = sbLines;
 
         // Authors
-        const authors = Array.isArray(a?.authors) ? a.authors : [];
+        const authors = Array.isArray(award?.authors) ? award.authors : [];
         const $authors = $('selAuthorsList');
         $authors.innerHTML = '';
         if (!authors.length) {
@@ -445,19 +501,20 @@
         }
 
         // Content preview (full scrollable, no clamp)
-        $('selAbstractDetails').textContent = a?.content || '—';
+        const detailText = award?.content || award?.description || (award?.complete_pdf_path || award?.full_paper_path ? 'Full paper uploaded (no inline description available)' : '—');
+        $('selAwardDetails').textContent = detailText;
 
         // PDF link
-        const pdfHref = '/api/v1/research/abstracts/' + (a?.id || '') + '/pdf';
+        const pdfHref = '/api/v1/research/awards/' + (award?.id || '') + '/pdf';
         const pdfEl = $('selPdfLink');
         pdfEl.href = pdfHref || '#';
         pdfEl.textContent = pdfHref && pdfHref !== '#' ? pdfHref : 'Not uploaded';
 
         // Verifiers section
-        const vWrap = document.getElementById('selAbstractVerifiers');
-        const vList = document.getElementById('abstractVerifiersList');
+        const vWrap = document.getElementById('selAwardVerifiers');
+        const vList = document.getElementById('awardVerifiersList');
         vList.innerHTML = '';
-        const verifiers = Array.isArray(a?.verifiers) ? a.verifiers : [];
+        const verifiers = Array.isArray(award?.verifiers) ? award.verifiers : [];
         vWrap.classList.remove('hidden');
         if (!verifiers.length) {
             vList.innerHTML = `<li class="muted">No verifiers assigned</li>`;
@@ -477,22 +534,22 @@
             });
             vList.appendChild(frag);
         }
-        const rejectBtn = $('rejectAbstractBtn');
-        if ((verifiers.length === 0) && (a?.status === 'Status.PENDING'))
+        const rejectBtn = $('rejectAwardBtn');
+        if ((verifiers.length === 0) && (statusKey === 'pending'))
             rejectBtn.classList.remove('hidden');
         else
             rejectBtn.classList.add('hidden');
         rejectBtn.onclick = () => {
-            if (confirm('Are you sure you want to reject this abstract?')) {
-                // Call the API to reject the abstract
-                rejectAbstract(a);
+            if (confirm('Are you sure you want to reject this award?')) {
+                // Call the API to reject the award
+                rejectAward(award);
             }
         };
     }
 
-    function rejectAbstract(abstract) {
-        // Call the API to reject the abstract
-        fetch(`/api/v1/research/abstracts/${abstract?.id}/reject`, {
+    function rejectAward(award) {
+        // Call the API to reject the award
+        fetch(`/api/v1/research/awards/${award?.id}/reject`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -505,42 +562,44 @@
             return response.json();
         })
         .then(data => {
-            console.log('Abstract rejected:', data);
+            console.log('Award rejected:', data);
             // Update the UI accordingly
             init();
-            selAbstract = null;
+            selAward = null;
             updatePanel();
         })
         .catch(error => {
-            console.error('Error rejecting abstract:', error);
+            console.error('Error rejecting award:', error);
         });
     }
 
     function updatePanel() {
         const panel = sQ('assignPanel');
-        const aSpan = sQ('selAbstract') || sQ('selAbstractTitle');   // legacy or new title
-        const aDetails = sQ('selAbstractDetails');
+        const aSpan = sQ('selAward') || sQ('selAwardTitle');   // legacy or new title
+        const aDetails = sQ('selAwardDetails');
         const vSpan = sQ('selVerifier');
         const vStatus = sQ('selVerifierStatus');
 
         // ----- ABSTRACT SIDE -----
-        if (selAbstract) {
+        if (selAward) {
+            const normalizedAward = normalizeAward(selAward);
             // Use the rich renderer if present (from the upgraded UI)
-            if (typeof renderSelectedAbstract === 'function') {
-                renderSelectedAbstract(selAbstract);
+            if (typeof renderSelectedAward === 'function') {
+                renderSelectedAward(normalizedAward);
             }
             // Keep legacy fields in sync (safe no-ops if missing)
-            if (aSpan) aSpan.textContent = selAbstract.title || 'Untitled Abstract';
-            if (aDetails) aDetails.textContent = selAbstract.content
-                ? selAbstract.content
-                : 'No content available';
+            if (aSpan) aSpan.textContent = normalizedAward.title || 'Untitled Award';
+            if (aDetails) {
+                const detailText = normalizedAward.content || normalizedAward.description || (normalizedAward.complete_pdf_path || normalizedAward.full_paper_path ? 'Full paper uploaded (no inline description available)' : 'No content available');
+                aDetails.textContent = detailText;
+            }
 
-            // Load verifiers list for this abstract
-            loadAbstractVerifiers(selAbstract.id);
+            // Load verifiers list for this award
+            loadAwardVerifiers(normalizedAward.id);
         } else {
-            // Reset abstract UI (both new and legacy)
-            if (aSpan) aSpan.textContent = 'No abstract selected';
-            if (aDetails) aDetails.textContent = 'Select an abstract to view details';
+            // Reset award UI (both new and legacy)
+            if (aSpan) aSpan.textContent = 'No award selected';
+            if (aDetails) aDetails.textContent = 'Select an award to view details';
 
             const sb = document.getElementById('selSubmittedBy');
             if (sb) sb.innerHTML = '';
@@ -548,18 +607,18 @@
             const authors = document.getElementById('selAuthorsList');
             if (authors) authors.innerHTML = '';
 
-            const meta = document.getElementById('selAbstractMeta');
+            const meta = document.getElementById('selAwardMeta');
             if (meta) meta.innerHTML = '';
 
             const pdf = document.getElementById('selPdfLink');
             if (pdf) { pdf.href = '#'; pdf.textContent = 'Not uploaded'; }
 
-            const vWrap = document.getElementById('selAbstractVerifiers');
-            const vList = document.getElementById('abstractVerifiersList');
+            const vWrap = document.getElementById('selAwardVerifiers');
+            const vList = document.getElementById('awardVerifiersList');
             if (vList) vList.innerHTML = '';
             if (vWrap) vWrap.classList.add('hidden');
 
-            hideAbstractVerifiers();
+            hideAwardVerifiers();
         }
 
         // ----- VERIFIER SIDE -----
@@ -571,34 +630,34 @@
                 if (selVerifier.mobile) bits.push(selVerifier.mobile);
                 vStatus.textContent = bits.join(' • ');
             }
-            loadVerifierAbstracts(selVerifier.id);
+            loadVerifierAwards(selVerifier.id);
         } else {
             if (vSpan) vSpan.textContent = 'No verifier selected';
             if (vStatus) vStatus.textContent = 'Select a verifier to assign';
-            hideVerifierAbstracts();
+            hideVerifierAwards();
         }
 
         // Show panel if either side has a selection
-        panel.hidden = !(selAbstract || selVerifier);
+        panel.hidden = !(selAward || selVerifier);
     }
 
     
-    function hideAbstractVerifiers() {
-        const box = sQ('selAbstractVerifiers');
+    function hideAwardVerifiers() {
+        const box = sQ('selAwardVerifiers');
         if (box) { box.classList.add('hidden'); }
     }
     
-    function hideVerifierAbstracts() {
-        const box = sQ('selVerifierAbstracts');
+    function hideVerifierAwards() {
+        const box = sQ('selVerifierAwards');
         if (box) { box.classList.add('hidden'); }
     }
 
-    async function loadAbstractVerifiers(abstractId) {
+    async function loadAwardVerifiers(awardId) {
         try {
-            const data = await fetchJSON(`${BASE}/api/v1/research/abstracts/${abstractId}/verifiers`);
-            const box = sQ('selAbstractVerifiers');
+            const data = await fetchJSON(`${BASE}/api/v1/research/awards/${awardId}/verifiers`);
+            const box = sQ('selAwardVerifiers');
             if (!box) return;
-            const list = sQ('abstractVerifiersList');
+            const list = sQ('awardVerifiersList');
             
             // Clear the list efficiently
             while (list.firstChild) {
@@ -644,7 +703,7 @@
             } else {
                 const li = document.createElement('li');
                 li.className = 'px-3 py-2 text-muted text-sm';
-                li.textContent = 'No verifiers assigned to this abstract';
+                li.textContent = 'No verifiers assigned to this award';
                 list.appendChild(li);
                 box.classList.remove('hidden');
             }
@@ -655,14 +714,14 @@
                     e.stopPropagation();
                     const verifierId = btn.dataset.id;
                     try {
-                        const r = await fetch(`${BASE}/api/v1/research/abstracts/${abstractId}/verifiers/${verifierId}`, { 
+                        const r = await fetch(`${BASE}/api/v1/research/awards/${awardId}/verifiers/${verifierId}`, { 
                             method: 'DELETE', 
                             headers: headers() 
                         });
                         if (!r.ok) throw new Error(await r.text() || r.status);
                         toast('Verifier unassigned successfully', 'success');
-                        await searchAbstracts();
-                        await loadAbstractVerifiers(abstractId); // refresh list
+                        await searchAwards();
+                        await loadAwardVerifiers(awardId); // refresh list
                         highlightSelection();
                     } catch (err) {
                         toast('Failed to unassign verifier: ' + (err.message || 'Unknown error'), 'error');
@@ -670,36 +729,36 @@
                 });
             });
         } catch (e) {
-            toast('Failed to load abstract verifiers: ' + (e.message || 'Unknown error'), 'error');
-            hideAbstractVerifiers();
+            toast('Failed to load award verifiers: ' + (e.message || 'Unknown error'), 'error');
+            hideAwardVerifiers();
         }
     }
     
-    async function loadVerifierAbstracts(verifierId) {
+    async function loadVerifierAwards(verifierId) {
         try {
-            const data = await fetchJSON(`${BASE}/api/v1/research/verifiers/${verifierId}/abstracts`);
-            const box = sQ('selVerifierAbstracts');
+            const data = await fetchJSON(`${BASE}/api/v1/research/verifiers/${verifierId}/awards`);
+            const box = sQ('selVerifierAwards');
             if (!box) return;
-            const list = sQ('verifierAbstractsList');
+            const list = sQ('verifierAwardsList');
             
             // Clear the list efficiently
             while (list.firstChild) {
                 list.removeChild(list.firstChild);
             }
             
-            const abstracts = Array.isArray(data) ? data : (data.abstracts || []);
-            if (abstracts.length > 0) {
+            const awards = normalizeAwardArray(Array.isArray(data) ? data : (data.awards || []));
+            if (awards.length > 0) {
                 const fragment = document.createDocumentFragment();
-                abstracts.forEach(a => {
+                awards.forEach(a => {
                     const li = document.createElement('li');
                     li.className = 'px-3 py-2 flex items-center justify-between gap-2 hover:bg-[color:var(--brand-50)] dark:hover:bg-[color:var(--brand-900)]/40 rounded';
                     
                     const titleSpan = document.createElement('span');
                     titleSpan.className = 'truncate font-medium';
-                    titleSpan.textContent = a.title || 'Untitled Abstract';
+                    titleSpan.textContent = a.title || 'Untitled Award';
                     
                     const btn = document.createElement('button');
-                    btn.className = 'unassignAbstract btn btn-ghost px-2 py-1 text-[10px] flex items-center gap-1';
+                    btn.className = 'unassignAward btn btn-ghost px-2 py-1 text-[10px] flex items-center gap-1';
                     btn.dataset.id = a.id;
                     
                     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -726,57 +785,58 @@
             } else {
                 const li = document.createElement('li');
                 li.className = 'px-3 py-2 text-muted text-sm';
-                li.textContent = 'No abstracts assigned to this verifier';
+                li.textContent = 'No awards assigned to this verifier';
                 list.appendChild(li);
             }
             
-            sQ('verifierAbstractCount').textContent = abstracts.length;
+            sQ('verifierAwardCount').textContent = awards.length;
             box.classList.remove('hidden');
             
             // Wire inline unassign buttons
-            list.querySelectorAll('.unassignAbstract').forEach(btn => {
+            list.querySelectorAll('.unassignAward').forEach(btn => {
                 btn.addEventListener('click', async (e) => {
                     e.stopPropagation();
-                    const abstractId = btn.dataset.id;
+                    const awardId = btn.dataset.id;
                     try {
-                        const r = await fetch(`${BASE}/api/v1/research/abstracts/${abstractId}/verifiers/${verifierId}`, { 
+                        const r = await fetch(`${BASE}/api/v1/research/awards/${awardId}/verifiers/${verifierId}`, { 
                             method: 'DELETE', 
                             headers: headers() 
                         });
                         if (!r.ok) throw new Error(await r.text() || r.status);
-                        toast('Abstract unassigned successfully', 'success');
-                        await searchAbstracts();
-                        await loadVerifierAbstracts(verifierId); // refresh list
+                        toast('Award unassigned successfully', 'success');
+                        await searchAwards();
+                        await loadVerifierAwards(verifierId); // refresh list
                         highlightSelection();
                     } catch (err) {
-                        toast('Failed to unassign abstract: ' + (err.message || 'Unknown error'), 'error');
+                        toast('Failed to unassign award: ' + (err.message || 'Unknown error'), 'error');
                     }
                 });
             });
         } catch (e) {
-            toast('Failed to load verifier abstracts: ' + (e.message || 'Unknown error'), 'error');
-            hideVerifierAbstracts();
+            toast('Failed to load verifier awards: ' + (e.message || 'Unknown error'), 'error');
+            hideVerifierAwards();
         }
     }
     
-    async function searchAbstracts() {
-        state.abstracts.q = (sQ('abstractSearch').value || '').trim();
-        const { q, filter, page, pageSize, sort, dir } = state.abstracts;
-        const url = `${BASE}/api/v1/research/abstracts?q=${encodeURIComponent(q)}&verifiers=${filter}&page=${page}&page_size=${pageSize}&sort=${sort}&dir=${dir}`;
+    async function searchAwards() {
+        state.awards.q = (sQ('awardSearch').value || '').trim();
+        const { q, filter, page, pageSize, sort, dir } = state.awards;
+        const url = `${BASE}/api/v1/research/awards?q=${encodeURIComponent(q)}&verifiers=${filter}&page=${page}&page_size=${pageSize}&sort=${sort}&dir=${dir}`;
         try {
             const data = await fetchJSON(url);
-            renderList(abstractList, data.items || data || [], 'abstract');
-            updateAbstractMeta(data);
+            const normalizedItems = normalizeAwardArray(Array.isArray(data) ? data : (data.items || []));
+            renderList(awardList, normalizedItems, 'award');
+            updateAwardMeta(data);
         } catch (e) {
             console.error(e);
-            toast('Failed to load abstracts: ' + (e.message || 'Unknown error'), 'error');
+            toast('Failed to load awards: ' + (e.message || 'Unknown error'), 'error');
         }
     }
     
     async function searchVerifiers() {
         state.verifiers.q = (sQ('verifierSearch').value || '').trim();
         const { q, filter, page, pageSize, sort, dir } = state.verifiers;
-        const url = `${BASE}/api/v1/user/users/verifiers?q=${encodeURIComponent(q)}&has_abstracts=${filter}&page=${page}&page_size=${pageSize}&sort_by=${sort}&sort_dir=${dir}`;
+        const url = `${BASE}/api/v1/user/users/verifiers?q=${encodeURIComponent(q)}&has_awards=${filter}&page=${page}&page_size=${pageSize}&sort_by=${sort}&sort_dir=${dir}`;
         try {
             const data = await fetchJSON(url);
             renderList(verifierList, data.items || data || [], 'verifier');
@@ -788,18 +848,18 @@
     }
     
     async function assign() {
-        if (!(selAbstract && selVerifier)) {
-            toast('Please select both an abstract and a verifier', 'warn');
+        if (!(selAward && selVerifier)) {
+            toast('Please select both an award and a verifier', 'warn');
             return;
         }
         try {
-            const r = await fetch(`${BASE}/api/v1/research/abstracts/${selAbstract.id}/verifiers/${selVerifier.id}`, {
+            const r = await fetch(`${BASE}/api/v1/research/awards/${selAward.id}/verifiers/${selVerifier.id}`, {
                 method: 'POST',
                 headers: { ...headers(), 'Content-Type': 'application/json' }
             });
             if (!r.ok) throw new Error(await r.text() || r.status);
             toast('Verifier assigned successfully', 'success');
-            await searchAbstracts();
+            await searchAwards();
             await searchVerifiers();
             highlightSelection();
             updatePanel();
@@ -809,18 +869,18 @@
     }
     
     async function unassign() {
-        if (!(selAbstract && selVerifier)) {
-            toast('Please select both an abstract and a verifier', 'warn');
+        if (!(selAward && selVerifier)) {
+            toast('Please select both an award and a verifier', 'warn');
             return;
         }
         try {
-            const r = await fetch(`${BASE}/api/v1/research/abstracts/${selAbstract.id}/verifiers/${selVerifier.id}`, {
+            const r = await fetch(`${BASE}/api/v1/research/awards/${selAward.id}/verifiers/${selVerifier.id}`, {
                 method: 'DELETE',
                 headers: headers()
             });
             if (!r.ok) throw new Error(await r.text() || r.status);
             toast('Verifier unassigned successfully', 'success');
-            await searchAbstracts();
+            await searchAwards();
             await searchVerifiers();
             highlightSelection();
             updatePanel();
@@ -830,22 +890,22 @@
     }
     
     async function bulkAssign() {
-        if (!bulk.abstractIds.size || !selVerifier) {
-            toast('Select abstracts and a verifier first', 'warn');
+        if (!bulk.awardIds.size || !selVerifier) {
+            toast('Select awards and a verifier first', 'warn');
             return;
         }
         
         // Show confirmation dialog for bulk operations
-        if (!confirm(`Are you sure you want to assign ${bulk.abstractIds.size} abstract(s) to ${selVerifier.username}?`)) {
+        if (!confirm(`Are you sure you want to assign ${bulk.awardIds.size} award(s) to ${selVerifier.username}?`)) {
             return;
         }
         
         try {
             const body = {
-                abstract_ids: Array.from(bulk.abstractIds),
+                award_ids: Array.from(bulk.awardIds),
                 user_ids: [selVerifier.id]
             };
-            const r = await fetch(BASE + '/api/v1/research/abstracts/bulk-assign-verifiers', {
+            const r = await fetch(BASE + '/api/v1/research/awards/bulk-assign-verifiers', {
                 method: 'POST',
                 headers: { ...headers(), 'Content-Type': 'application/json' },
                 body: JSON.stringify(body)
@@ -853,11 +913,11 @@
             if (!r.ok) throw new Error(await r.text() || r.status);
             const result = await r.json();
             toast(`Bulk assigned: ${result.assignments_created} assignments created`, 'success');
-            await searchAbstracts();
+            await searchAwards();
             await searchVerifiers();
             highlightSelection();
             // Clear bulk selection after successful assignment
-            bulk.abstractIds.clear();
+            bulk.awardIds.clear();
             syncMasterChk();
             updateBulkStatus();
         } catch (e) {
@@ -866,22 +926,22 @@
     }
     
     async function bulkUnassign() {
-        if (!bulk.abstractIds.size || !selVerifier) {
-            toast('Select abstracts and a verifier first', 'warn');
+        if (!bulk.awardIds.size || !selVerifier) {
+            toast('Select awards and a verifier first', 'warn');
             return;
         }
         
         // Show confirmation dialog for bulk operations
-        if (!confirm(`Are you sure you want to unassign ${bulk.abstractIds.size} abstract(s) from ${selVerifier.username}?`)) {
+        if (!confirm(`Are you sure you want to unassign ${bulk.awardIds.size} award(s) from ${selVerifier.username}?`)) {
             return;
         }
         
         try {
             const body = {
-                abstract_ids: Array.from(bulk.abstractIds),
+                award_ids: Array.from(bulk.awardIds),
                 user_ids: [selVerifier.id]
             };
-            const r = await fetch(BASE + '/api/v1/research/abstracts/bulk-unassign-verifiers', {
+            const r = await fetch(BASE + '/api/v1/research/awards/bulk-unassign-verifiers', {
                 method: 'POST',
                 headers: { ...headers(), 'Content-Type': 'application/json' },
                 body: JSON.stringify(body)
@@ -889,11 +949,11 @@
             if (!r.ok) throw new Error(await r.text() || r.status);
             const result = await r.json();
             toast(`Bulk unassigned: ${result.assignments_deleted} assignments deleted`, 'success');
-            await searchAbstracts();
+            await searchAwards();
             await searchVerifiers();
             highlightSelection();
             // Clear bulk selection after successful unassignment
-            bulk.abstractIds.clear();
+            bulk.awardIds.clear();
             syncMasterChk();
             updateBulkStatus();
         } catch (e) {
@@ -902,23 +962,23 @@
     }
     
     function clearSel() {
-        selAbstract = null;
+        selAward = null;
         selVerifier = null;
         updatePanel();
         highlightSelection();
         // Clear bulk selection when clearing selections
-        bulk.abstractIds.clear();
+        bulk.awardIds.clear();
         syncMasterChk();
         updateBulkStatus();
     }
 
-    function updateAbstractMeta(data) {
-        state.abstracts.pages = data.pages || 1;
-        const info = sQ('abstractPageInfo');
+    function updateAwardMeta(data) {
+        state.awards.pages = data.pages || 1;
+        const info = sQ('awardPageInfo');
         if (info) info.textContent = `Page ${data.page || 1} of ${data.pages || 1}`;
-        const stats = sQ('abstractStats');
+        const stats = sQ('awardStats');
         if (stats) {
-            const filterLabel = state.abstracts.filter === '' ? 'All' : (state.abstracts.filter === 'yes' ? 'With Verifiers' : 'Without Verifiers');
+            const filterLabel = state.awards.filter === '' ? 'All' : (state.awards.filter === 'yes' ? 'With Verifiers' : 'Without Verifiers');
             stats.textContent = `${data.total || 0} total • Filter: ${filterLabel}`;
         }
     }
@@ -934,9 +994,9 @@
         }
     }
 
-    function changeAbstractPage(delta) {
-        state.abstracts.page = Math.min(Math.max(1, state.abstracts.page + delta), state.abstracts.pages);
-        searchAbstracts();
+    function changeAwardPage(delta) {
+        state.awards.page = Math.min(Math.max(1, state.awards.page + delta), state.awards.pages);
+        searchAwards();
     }
     
     function changeVerifierPage(delta) {
@@ -966,9 +1026,9 @@
         };
     }
     
-    const debouncedSearchAbstracts = debounce(() => {
-        state.abstracts.page = 1;
-        searchAbstracts();
+    const debouncedSearchAwards = debounce(() => {
+        state.awards.page = 1;
+        searchAwards();
     }, 300);
     
     const debouncedSearchVerifiers = debounce(() => {
@@ -978,9 +1038,9 @@
 
     function init() {
         // Search buttons
-        sQ('abstractSearchBtn')?.addEventListener('click', () => { 
-            state.abstracts.page = 1; 
-            searchAbstracts(); 
+        sQ('awardSearchBtn')?.addEventListener('click', () => { 
+            state.awards.page = 1; 
+            searchAwards(); 
         });
         sQ('verifierSearchBtn')?.addEventListener('click', () => { 
             state.verifiers.page = 1; 
@@ -988,8 +1048,8 @@
         });
         
         // Pagination buttons
-        sQ('abstractPrev')?.addEventListener('click', () => changeAbstractPage(-1));
-        sQ('abstractNext')?.addEventListener('click', () => changeAbstractPage(1));
+        sQ('awardPrev')?.addEventListener('click', () => changeAwardPage(-1));
+        sQ('awardNext')?.addEventListener('click', () => changeAwardPage(1));
         sQ('verifierPrev')?.addEventListener('click', () => changeVerifierPage(-1));
         sQ('verifierNext')?.addEventListener('click', () => changeVerifierPage(1));
         
@@ -1003,17 +1063,17 @@
         sQ('clearSel')?.addEventListener('click', clearSel);
         
         // Selection controls
-        const master = sQ('abstractMasterChk');
+        const master = sQ('awardMasterChk');
         master?.addEventListener('change', e => { e.target.checked ? selectAllPage() : clearAllPage(); });
         sQ('invertSelection')?.addEventListener('click', invertSelection);
-        sQ('abstractSelectAll')?.addEventListener('click', selectAllPage);
-        sQ('abstractClearSel')?.addEventListener('click', clearAllPage);
+        sQ('awardSelectAll')?.addEventListener('click', selectAllPage);
+        sQ('awardClearSel')?.addEventListener('click', clearAllPage);
         
         // Enter key support for search
-        sQ('abstractSearch')?.addEventListener('keypress', (e) => {
+        sQ('awardSearch')?.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
-                state.abstracts.page = 1;
-                searchAbstracts();
+                state.awards.page = 1;
+                searchAwards();
             }
         });
         sQ('verifierSearch')?.addEventListener('keypress', (e) => {
@@ -1024,13 +1084,13 @@
         });
         
         // Real-time search with debounce
-        sQ('abstractSearch')?.addEventListener('input', debouncedSearchAbstracts);
+        sQ('awardSearch')?.addEventListener('input', debouncedSearchAwards);
         sQ('verifierSearch')?.addEventListener('input', debouncedSearchVerifiers);
         
         // Initialize UI
         wireSortGroups();
         wireSegmentedControls();
-        searchAbstracts();
+        searchAwards();
         searchVerifiers();
     }
     

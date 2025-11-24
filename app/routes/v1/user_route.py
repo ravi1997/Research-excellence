@@ -1,5 +1,6 @@
 # routes/user_routes.py
 
+from app.models.Cycle import AwardVerifiers
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import or_
@@ -501,8 +502,12 @@ def list_verifiers_with_params():
             verifier_dict = verifier.to_dict()
             # Count abstracts assigned to this verifier
             from app.models.Cycle import AbstractVerifiers
-            abstracts_count = db.session.query(AbstractVerifiers).filter_by(user_id=verifier.id).count()
+            abstracts_count = db.session.query(
+                AbstractVerifiers).filter_by(user_id=verifier.id).count()
+            awards_count = db.session.query(
+                AwardVerifiers).filter_by(user_id=verifier.id).count()
             verifier_dict['abstracts_count'] = abstracts_count
+            verifier_dict['awards_count'] = awards_count
             verifiers_data.append(verifier_dict)
         
         # Prepare response
