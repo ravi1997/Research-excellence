@@ -213,9 +213,12 @@
     let cordinatorSection = '';
   if (isCordinator) {
     const cordinatorLinks = [
-        { href: BASE + '/coordinator/add-verifier', label: 'Add Abstract Verifier' },
+      { href: BASE + '/coordinator/add-verifier-abstract', label: 'Add Abstract Verifier' },
+      { href: BASE + '/coordinator/add-verifier-bestpaper', label: 'Add Best paper Verifier' },
+      { href: BASE + '/coordinator/add-verifier-award', label: 'Add Award Verifier' },
       { href: BASE + '/coordinator/abstract-gradings', label: 'Abstract Gradings' },
       { href: BASE + '/coordinator/award-gradings', label: 'Award Gradings' },
+      { href: BASE + '/coordinator/bestpaper-gradings', label: 'Best Paper Gradings' },
     ];
       const cordinatorLinksHtml = cordinatorLinks.map(l => `<a class="block px-3 py-2 rounded hover:bg-(--brand-50) no-underline" href="${escapeAttr(l.href)}">${escapeHtml(l.label)}</a>`).join('');
       cordinatorSection = `

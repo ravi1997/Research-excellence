@@ -78,11 +78,11 @@ def add_verifier_abstract_page():
 def add_verifier_award_page():
     return render_template('award/add_verifier.html')
 
-@view_bp.route('/coordinator/add-verifier')
+@view_bp.route('/coordinator/add-verifier-bestpaper')
 @jwt_required()
 @require_roles(Role.COORDINATOR.value, Role.ADMIN.value, Role.SUPERADMIN.value)
-def add_verifier_page():
-    return render_template('coordinator/add_verifier.html')
+def add_verifier_bestpaper_page():
+    return render_template('bestPaper/add_verifier.html')
 
 @view_bp.route('/coordinator/abstract-gradings')
 @jwt_required()
@@ -98,6 +98,11 @@ def coordinator_award_gradings_page():
     return render_template('coordinator/award_gradings.html')
 
 
+@view_bp.route('/coordinator/bestpaper-gradings')
+@jwt_required()
+@require_roles(Role.COORDINATOR.value, Role.ADMIN.value, Role.SUPERADMIN.value)
+def coordinator_bestpaper_gradings_page():
+    return render_template('coordinator/paper_gradings.html')
 @view_bp.route('/admin/dashboard')        # canonical path
 @jwt_required()
 @require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
