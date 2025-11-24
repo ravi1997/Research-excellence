@@ -1651,7 +1651,7 @@ def accept_abstract(abstract_id):
             return jsonify({"error": error_msg}), 403
 
         # Check if all required grades have been submitted for the current phase
-        if not abstract_utils.can_advance_to_next_phase(abstract):
+        if not abstract_utils.can_advance_to_next_phase(abstract,actor_id):
             error_msg = f"Cannot accept abstract: Not all required grades have been submitted for phase {abstract.review_phase}"
             log_audit_event(
                 event_type="abstract.accept.failed",

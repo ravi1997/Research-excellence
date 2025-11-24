@@ -516,7 +516,7 @@ def get_current_phase_verifiers(abstract: Abstracts) -> Sequence[User]:
         return []
 
 
-def can_advance_to_next_phase(abstract: Abstracts) -> bool:
+def can_advance_to_next_phase(abstract: Abstracts,actor_id) -> bool:
     """Check if an abstract can advance to the next review phase based on grading completeness"""
     from app.models.Cycle import AbstractVerifiers, Grading, GradingType
     current_phase = abstract.review_phase
@@ -538,6 +538,9 @@ def can_advance_to_next_phase(abstract: Abstracts) -> bool:
     for assignment in verifier_assignments:
         verifier_id = assignment.user_id
         
+        if verifier_id != actor_id:
+            continue
+
         # Check if all required grading types have been graded by this verifier in this phase
         for grading_type in grading_types:
             grade_exists = Grading.query.filter_by(

@@ -19,6 +19,7 @@ from openpyxl.utils import get_column_letter
 
 
 from app.utils.model_utils import award_utils
+from app.utils.model_utils import abstract_utils
 from app.utils.services.mail import send_mail
 from app.utils.services.sms import send_sms
 
@@ -514,7 +515,7 @@ def get_awards():
             
             # Search by ID if q is numeric
             if q_int:
-                search_filters.append(Awards.id == q_int)
+                search_filters.append(Awards.award_number == q_int)
             
             if search_filters:
                 from sqlalchemy import or_
@@ -942,6 +943,113 @@ def submit_award(award_id):
         )
         return jsonify({"error": error_msg}), 400
 
+
+# New endpoint to accept an abstract with grades
+@research_bp.route('/awards/<award_id>/accept', methods=['POST'])
+@jwt_required()
+@require_roles(Role.VERIFIER.value, Role.COORDINATOR.value, Role.ADMIN.value, Role.SUPERADMIN.value)
+def accept_award(award_id):
+    """Accept an award after review."""
+    actor_id, context = _resolve_actor_context("accept_award")
+    award = None
+    try:
+        award = award_utils.get_award_by_id(
+            award_id,
+            actor_id=actor_id,
+            context=context,
+        )
+        if award is None:
+            error_msg = f"Resource not found: Award with ID {award_id} does not exist"
+            log_audit_event(
+                event_type="award.accept.failed",
+                user_id=actor_id,
+                details={"error": error_msg, "award_id": award_id},
+                ip_address=request.remote_addr
+            )
+            abort(404, description="Award not found.")
+
+        # Check if user is authorized to accept this award (use utility lookup for consistency)
+        user = get_user_by_id_util(actor_id)
+        if not user:
+            error_msg = "Authentication failed: User not found"
+            log_audit_event(
+                event_type="award.accept.failed",
+                user_id=actor_id,
+                details={"error": error_msg, "award_id": award_id},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
+
+        # Allow if user is admin, superadmin, or a coordinator for this award   
+        privileged = any(
+            user.has_role(role)
+            for role in (Role.VERIFIER.value, Role.COORDINATOR.value, Role.ADMIN.value, Role.SUPERADMIN.value)
+        )
+
+        # Compare IDs as strings to avoid type mismatch between UUID and str
+        if not privileged and not any(str(coordinator.id) == str(actor_id) for coordinator in award.coordinators):
+            error_msg = f"Authorization failed: You are not authorized to accept award ID {award_id}"
+            log_audit_event(
+                event_type="award.accept.failed",
+                user_id=actor_id,
+                details={
+                    "error": error_msg,
+                    "award_id": award_id,
+                    "user_id": actor_id,
+                    "user_role": user.role_associations[0].role.value if user.role_associations else "no_role"
+                },
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 403
+
+        # Check if all required grades have been submitted for the current phase
+        if not award_utils.can_advance_to_next_phase(award, actor_id):
+            error_msg = f"Cannot accept award: Not all required grades have been submitted for phase {award.review_phase}"
+            log_audit_event(
+                event_type="award.accept.failed",
+                user_id=actor_id,
+                details={
+                    "error": error_msg,
+                    "award_id": award_id,
+                    "current_phase": award.review_phase
+                },
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 400
+
+        # Update the status to ACCEPTED
+        award_utils.update_award(
+            award,
+            actor_id=actor_id,
+            context=context,
+            status=Status.ACCEPTED,
+        )
+
+        # Log successful acceptance
+        log_audit_event(
+            event_type="award.accept.success",
+            user_id=actor_id,
+            details={
+                "award_id": award_id,
+                "new_status": "ACCEPTED",
+                "title": award.title
+            },
+            ip_address=request.remote_addr
+        )
+
+        return jsonify({"message": "Award accepted successfully"}), 200
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.exception("Error accepting award")
+        error_msg = f"System error occurred while accepting award: {str(exc)}"
+        log_audit_event(
+            event_type="award.accept.failed",
+            user_id=actor_id,
+            details={"error": error_msg, "award_id": award_id if award else award_id,
+                     "exception_type": type(exc).__name__, "exception_message": str(exc)},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 400
 
 @research_bp.route('/awards/status', methods=['GET'])
 @jwt_required()

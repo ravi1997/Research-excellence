@@ -347,3 +347,46 @@ def remove_coordinator(
         removed,
     )
     return award
+
+
+def can_advance_to_next_phase(award: Awards, actor_id) -> bool:
+    """Check if an award can advance to the next review phase based on grading completeness"""
+    from app.models.Cycle import AwardVerifiers, Grading, GradingType
+    current_phase = award.review_phase
+    
+    # Get all verifiers assigned to the current phase
+    verifier_assignments = AwardVerifiers.query.filter_by(
+        award_id=award.id,
+        review_phase=current_phase
+    ).all()
+    
+    if not verifier_assignments:
+        # If no verifiers are assigned to this phase, we can advance
+        return True
+    
+    # Get all grading types for awards
+    grading_types = GradingType.query.filter_by(grading_for='award').all()
+    
+    # For each verifier in the current phase, check if they have submitted grades
+    for assignment in verifier_assignments:
+        verifier_id = assignment.user_id
+        if verifier_id != actor_id:
+            continue
+
+        # Check if all required grading types have been graded by this verifier in this phase
+        for grading_type in grading_types:
+            grade_exists = Grading.query.filter_by(
+                award_id=award.id,
+                grading_type_id=grading_type.id,
+                graded_by_id=verifier_id,
+                review_phase=current_phase
+            ).first()
+            
+            if not grade_exists:
+                print(f"Missing grade for verifier {verifier_id}, grading type {grading_type.id} in phase {current_phase}")
+                
+                return False
+    
+    # If all verifiers have submitted all required grades for this phase, we can advance
+    print("All required grades submitted for phase", current_phase)
+    return True
