@@ -4,6 +4,9 @@ from datetime import datetime
 from flask import Blueprint, current_app, render_template, request, jsonify, abort, redirect, url_for
 from app.config import Config
 from app.models.User import User
+from app.extensions import db
+from app.models.Cycle import Abstracts, Awards, BestPaper
+from app.models.enumerations import Status
 from app.models.enumerations import Role
 # TokenBlocklist removed in favor of unified tokens model
 from app.schemas.user_schema import UserSchema
@@ -107,7 +110,83 @@ def coordinator_bestpaper_gradings_page():
 @jwt_required()
 @require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
 def admin_dashboard_page():
-    return render_template('admin/admin_dashboard.html')
+    # Compute basic dashboard stats
+    try:
+        total_users = db.session.query(db.func.count(User.id)).scalar() or 0
+        active_users = db.session.query(db.func.count(User.id)).filter(User.is_active == True).scalar() or 0
+        unverified_users = db.session.query(db.func.count(User.id)).filter(User.is_verified == False).scalar() or 0
+
+        # Count active submissions for key models (PENDING or UNDER_REVIEW)
+        active_statuses = [Status.PENDING, Status.UNDER_REVIEW]
+        abstracts_count = db.session.query(db.func.count(Abstracts.id)).filter(Abstracts.status.in_(active_statuses)).scalar() or 0
+        awards_count = db.session.query(db.func.count(Awards.id)).filter(Awards.status.in_(active_statuses)).scalar() or 0
+        best_papers_count = db.session.query(db.func.count(BestPaper.id)).filter(BestPaper.status.in_(active_statuses)).scalar() or 0
+        active_submissions = abstracts_count + awards_count + best_papers_count
+
+        # Build a short recent activity list by combining newest users, abstracts, awards
+        recent_activities = []
+        # latest users
+        recent_users = db.session.query(User).order_by(User.created_at.desc()).limit(3).all()
+        for u in recent_users:
+            recent_activities.append({
+                'title': f"New user: {u.username or u.email}",
+                'subtitle': f"Mobile: {u.mobile or 'N/A'}",
+                'ts': getattr(u, 'created_at', None).isoformat() if getattr(u, 'created_at', None) else '',
+                'icon': '👤'
+            })
+
+        # latest abstracts
+        recent_abstracts = db.session.query(Abstracts).order_by(Abstracts.created_at.desc()).limit(3).all()
+        for a in recent_abstracts:
+            recent_activities.append({
+                'title': f"Abstract submitted: {a.title[:80]}",
+                'subtitle': f"Category: {getattr(a, 'category', {}).name if getattr(a, 'category', None) else ''}",
+                'ts': getattr(a, 'created_at', None).isoformat() if getattr(a, 'created_at', None) else '',
+                'icon': '📝'
+            })
+
+        # latest awards
+        recent_awards = db.session.query(Awards).order_by(Awards.created_at.desc()).limit(3).all()
+        for aw in recent_awards:
+            recent_activities.append({
+                'title': f"Award submitted: {aw.title[:80]}",
+                'subtitle': f"Category: {getattr(aw, 'paper_category', {}).name if getattr(aw, 'paper_category', None) else ''}",
+                'ts': getattr(aw, 'created_at', None).isoformat() if getattr(aw, 'created_at', None) else '',
+                'icon': '🏆'
+            })
+
+        # Trim and sort recent_activities by timestamp descending (best-effort)
+        def _parse_ts(item):
+            try:
+                return item.get('ts') or ''
+            except Exception:
+                return ''
+
+        recent_activities = sorted(recent_activities, key=_parse_ts, reverse=True)[:8]
+
+        # Provide a sensible reports_url fallback (superadmin audit page)
+        reports_url = url_for('view_bp.super_audit_page') if 'view_bp' in globals() else '#'
+
+        return render_template(
+            'admin/admin_dashboard.html',
+            total_users=total_users,
+            active_users=active_users,
+            unverified_users=unverified_users,
+            active_submissions=active_submissions,
+            recent_activities=recent_activities,
+            reports_url=reports_url
+        )
+    except Exception:
+        # If anything goes wrong, render template with safe defaults
+        return render_template(
+            'admin/admin_dashboard.html',
+            total_users=0,
+            active_users=0,
+            unverified_users=0,
+            active_submissions=0,
+            recent_activities=[],
+            reports_url='#'
+        )
 
 
 @view_bp.route('/admin/cycle-management')
