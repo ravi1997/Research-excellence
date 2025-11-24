@@ -15,7 +15,25 @@
     
     const token = () => localStorage.getItem('token') || '';
     const headers = () => ({ 'Accept': 'application/json', 'Authorization': `Bearer ${token()}` });
-    const sQ = id => document.getElementById(id);
+    const fallbackIds = {
+        awardList: 'bestpaperList',
+        awardSearch: 'bestPaperSearch',
+        awardStatusGroup: 'bestpaperStatusGroup',
+        awardSortGroup: 'bestpaperSortGroup',
+        awardPageSizeGroup: 'bestpaperPageSizeGroup',
+        awardStats: 'bestpaperStats',
+        awardPageInfo: 'bestpaperPageInfo',
+        awardPrev: 'bestpaperPrev',
+        awardNext: 'bestpaperNext',
+        awardMasterChk: 'bestpaperMasterChk',
+        awardSelectAll: 'bestpaperSelectAll',
+        awardClearSel: 'bestpaperClearSel',
+        noAwardSelected: 'noBestPaperSelected',
+        awardContent: 'bestpaperContent',
+        awardDetails: 'bestpaperDetails',
+        gradingAwardTitle: 'gradingBestPaperTitle'
+    };
+    const sQ = id => document.getElementById(id) || (fallbackIds[id] ? document.getElementById(fallbackIds[id]) : null);
     const awardList = sQ('awardList');
     let selAward = null;
     const bulk = { awardIds: new Set() };
@@ -41,7 +59,7 @@
 
         return {
             ...raw,
-            award_number: raw.award_number ?? raw.awardNumber ?? raw.awardnumber,
+            award_number: raw.award_number ?? raw.awardNumber ?? raw.awardnumber ?? raw.bestpaper_number ?? raw.bestpaperNumber ?? raw.bestpapernumber,
             category,
             category_id: categoryId,
             paper_category: raw.paper_category || raw.category || category,
@@ -89,7 +107,7 @@
     
     async function updateStatsBar() {
         try {
-            const resp = await fetch(`${BASE}/awards/status`, {
+            const resp = await fetch(`${BASE}/best-papers/status`, {
                 headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
             });
             if (!resp.ok) throw new Error('Failed to fetch stats');
@@ -182,7 +200,7 @@
         if (!items.length) {
             const empty = document.createElement('li');
             empty.className = 'py-8 text-center text-xs uppercase tracking-wide text-[color:var(--muted)]';
-            empty.textContent = type === 'award' ? 'No awards found' : 'No items found';
+            empty.textContent = type === 'award' ? 'No best papers found' : 'No items found';
             el.appendChild(empty);
             return;
         }
@@ -197,7 +215,7 @@
                     <span class="flex items-center gap-3 w-full">
                         <input type="checkbox" class="hidden bulkChk accent-(--brand-600) rounded h-5 w-5" data-id="${it.id}" ${selected ? 'checked' : ''}/>
                         <div class="flex-1 min-w-0">
-                            <div class="font-medium text-gray-900 dark:text-white truncate">${escapeHtml(it.title || 'Untitled Award')}</div>
+                            <div class="font-medium text-gray-900 dark:text-white truncate">${escapeHtml(it.title || 'Untitled Best Paper')}</div>
                             <div class="flex flex-wrap gap-2 mt-1">
                                 <span class="text-xs text-gray-500 dark:text-gray-400 truncate">(${it.category?.name || it.paper_category?.name || 'No Category'})</span>
                                 <span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded ${getStatusClass(it.status_key || it.status)}">${escapeHtml((it.status_label || it.status || 'pending').toString().toUpperCase())}</span>
@@ -494,7 +512,7 @@
             return;
         }
         pdfjsLib.GlobalWorkerOptions.workerSrc = '/static/js/vendor/pdf.worker.min.js';
-        fetch(`${BASE}/awards/${awardId}/pdf`, {
+        fetch(`${BASE}/best-papers/${awardId}/pdf`, {
             headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
         })
             .then(response => {
@@ -548,17 +566,17 @@
     async function searchAwards() {
         state.awards.q = (sQ('awardSearch').value || '').trim();
         const { q, filter, page, pageSize, sort, dir } = state.awards;
-        const url = `${BASE}/awards?q=${encodeURIComponent(q)}&status=${filter}&page=${page}&page_size=${pageSize}&sort_by=${sort}&sort_dir=${dir}&verifier=true`;
-        log(`Searching awards with URL: ${url}`, 'info');
+        const url = `${BASE}/best-papers?q=${encodeURIComponent(q)}&status=${filter}&page=${page}&page_size=${pageSize}&sort_by=${sort}&sort_dir=${dir}&verifier=true`;
+        log(`Searching best papers with URL: ${url}`, 'info');
         try {
             const data = await fetchJSON(url);
-            log(`Received ${data.items?.length || 0} awards`, 'info');
+            log(`Received ${data.items?.length || 0} best papers`, 'info');
             const normalizedItems = normalizeAwardArray(Array.isArray(data) ? data : (data.items || []));
             renderList(awardList, normalizedItems, 'award');
             updateAwardMeta(data);
         } catch (e) {
-            logError('Failed to search awards:', e);
-            toast('Failed to search awards: ' + (e.message || 'Unknown error'), 'error');
+            logError('Failed to search best papers:', e);
+            toast('Failed to search best papers: ' + (e.message || 'Unknown error'), 'error');
         }
     }
     
@@ -567,16 +585,17 @@
     let gradingModalKeyHandler = null;
     async function openGradingModal() {
         if (!selAward) {
-            toast('Please select an award first', 'warn');
+            toast('Please select a best paper first', 'warn');
             return;
         }
 
-        // Set the award title in the modal
-        sQ('gradingAwardTitle').textContent = selAward.title || 'Untitled Award';
+        // Set the best paper title in the modal
+        const gradingTitleEl = sQ('gradingAwardTitle');
+        if (gradingTitleEl) gradingTitleEl.textContent = selAward.title || 'Untitled Best Paper';
         
-        // Fetch grading types for awards
+        // Fetch grading types for best papers
         try {
-            const gradingTypes = await fetchJSON(`${BASE}/grading-types?grading_for=award`);
+            const gradingTypes = await fetchJSON(`${BASE}/grading-types?grading_for=best_paper`);
             populateGradingForm(gradingTypes);
 
             const modal = sQ('gradingModal');
@@ -1008,7 +1027,7 @@
                         grading_type_id: gradingTypeId,
                         score: score,
                         comments: comments,
-                        award_id: selAward.id,
+                        best_paper_id: selAward.id,
                         review_phase: selAward.review_phase  // Include the current review phase
                     });
                 }
@@ -1033,7 +1052,7 @@
             const commentsEl = sQ('overallComments');
             if (commentsEl) commentsEl.value = '';  // Clear overall comments
             
-            toast('Award graded and accepted successfully!', 'success');
+            toast('Best paper graded and accepted successfully!', 'success');
         } catch (e) {
             console.error('Error submitting grading:', e);
             toast('Failed to submit grading: ' + (e.message || 'Unknown error'), 'error');
@@ -1048,19 +1067,19 @@
     }
 
     async function acceptAward(awardId) {
-        log(`Accepting award with ID: ${awardId}`, 'info');
+        log(`Accepting best paper with ID: ${awardId}`, 'info');
         try {
-            const r = await fetch(`${BASE}/awards/${awardId}/accept`, {
+            const r = await fetch(`${BASE}/best-papers/${awardId}/accept`, {
                 method: 'POST',
                 headers: { ...headers(), 'Content-Type': 'application/json' }
             });
             if (!r.ok) {
                 const errorText = await r.text();
-                logError(`Failed to accept award ${awardId}: ${r.status}`, new Error(errorText || r.status));
+                logError(`Failed to accept best paper ${awardId}: ${r.status}`, new Error(errorText || r.status));
                 throw new Error(errorText || r.status);
             }
-            log(`Award ${awardId} accepted successfully`, 'info');
-            toast('Award accepted successfully!', 'success');
+            log(`Best paper ${awardId} accepted successfully`, 'info');
+            toast('Best paper accepted successfully!', 'success');
             await searchAwards();
             if (selAward && selAward.id === awardId) {
                 selAward = null;
@@ -1069,27 +1088,27 @@
             }
             updateVerifyActionBtns('ACCEPTED');
         } catch (e) {
-            logError(`Failed to accept award ${awardId}:`, e);
-            toast('Failed to accept award: ' + (e.message || 'Unknown error'), 'error');
+            logError(`Failed to accept best paper ${awardId}:`, e);
+            toast('Failed to accept best paper: ' + (e.message || 'Unknown error'), 'error');
         }
     }
     
     async function rejectAward(awardId) {
-        log(`Prompting for rejection of award with ID: ${awardId}`, 'info');
-        if (!confirm('Are you sure you want to reject this award?')) return;
+        log(`Prompting for rejection of best paper with ID: ${awardId}`, 'info');
+        if (!confirm('Are you sure you want to reject this best paper?')) return;
         
         try {
-            const r = await fetch(`${BASE}/awards/${awardId}/reject`, {
+            const r = await fetch(`${BASE}/best-papers/${awardId}/reject`, {
                 method: 'POST',
                 headers: { ...headers(), 'Content-Type': 'application/json' }
             });
             if (!r.ok) {
                 const errorText = await r.text();
-                logError(`Failed to reject award ${awardId}: ${r.status}`, new Error(errorText || r.status));
+                logError(`Failed to reject best paper ${awardId}: ${r.status}`, new Error(errorText || r.status));
                 throw new Error(errorText || r.status);
             }
-            log(`Award ${awardId} rejected successfully`, 'info');
-            toast('Award rejected successfully!', 'success');
+            log(`Best paper ${awardId} rejected successfully`, 'info');
+            toast('Best paper rejected successfully!', 'success');
             await searchAwards();
             if (selAward && selAward.id === awardId) {
                 selAward = null;
@@ -1098,8 +1117,8 @@
             }
             updateVerifyActionBtns('REJECTED');
         } catch (e) {
-            logError(`Failed to reject award ${awardId}:`, e);
-            toast('Failed to reject award: ' + (e.message || 'Unknown error'), 'error');
+            logError(`Failed to reject best paper ${awardId}:`, e);
+            toast('Failed to reject best paper: ' + (e.message || 'Unknown error'), 'error');
         }
     }
     
@@ -1228,13 +1247,13 @@
         });
         sQ('bulkAcceptBtn')?.addEventListener('click', async () => {
             if (bulk.awardIds.size === 0) {
-                toast('Select awards to accept', 'warn');
+                toast('Select best papers to accept', 'warn');
                 return;
             }
             
-            if (!confirm(`Are you sure you want to accept ${bulk.awardIds.size} award(s)?`)) return;
+            if (!confirm(`Are you sure you want to accept ${bulk.awardIds.size} best paper(s)?`)) return;
             
-            log(`Bulk accepting ${bulk.awardIds.size} awards`, 'info');
+            log(`Bulk accepting ${bulk.awardIds.size} best papers`, 'info');
             
             // Show loading state
             const bulkStatus = sQ('bulkStatus');
@@ -1242,38 +1261,38 @@
             bulkStatus.textContent = 'Processing...';
             
             try {
-                // Get only pending awards
+                // Get only pending best papers
                 const ids = Array.from(bulk.awardIds);
                 let pendingIds = [];
                 
                 for (const id of ids) {
                     try {
-                        const data = await fetchJSON(`/api/v1/research/awards/${id}`);
+                        const data = await fetchJSON(`/api/v1/research/best-papers/${id}`);
                         if ((data.status || '').toUpperCase() === 'PENDING') {
                             pendingIds.push(id);
                         }
                     } catch (e) {
                         // skip if error
-                        logError(`Failed to fetch award ${id}:`, e);
+                        logError(`Failed to fetch best paper ${id}:`, e);
                     }
                 }
                 
                 if (pendingIds.length === 0) {
-                    toast('No selected awards are pending', 'warn');
+                    toast('No selected best papers are pending', 'warn');
                     return;
                 }
                 
                 if (pendingIds.length < ids.length) {
                     const skipped = ids.length - pendingIds.length;
-                    toast(`${skipped} award(s) are not pending and will be skipped.`, 'warn');
+                    toast(`${skipped} best paper(s) are not pending and will be skipped.`, 'warn');
                 }
                 
-                // Process pending awards
+                // Process pending best papers
                 let successCount = 0;
                 for (const id of pendingIds) {
                     try {
                         const body = { status: 'ACCEPTED' };
-                        const r = await fetch(`${BASE}/awards/${id}`, {
+                        const r = await fetch(`${BASE}/best-papers/${id}`, {
                             method: 'PUT',
                             headers: { ...headers(), 'Content-Type': 'application/json' },
                             body: JSON.stringify(body)
@@ -1283,7 +1302,7 @@
                             bulk.awardIds.delete(id); // Remove from selection
                         }
                     } catch (e) {
-                        logError(`Failed to accept award ${id}:`, e);
+                        logError(`Failed to accept best paper ${id}:`, e);
                     }
                 }
                 
@@ -1291,11 +1310,11 @@
                 syncMasterChk();
                 
                 if (successCount > 0) {
-                    toast(`Successfully accepted ${successCount} award(s)`, 'success');
-                    log(`Successfully bulk accepted ${successCount} awards`, 'info');
+                    toast(`Successfully accepted ${successCount} best paper(s)`, 'success');
+                    log(`Successfully bulk accepted ${successCount} best papers`, 'info');
                     await searchAwards(); // Refresh the list
                 } else {
-                    toast('Failed to accept any awards', 'error');
+                    toast('Failed to accept any best papers', 'error');
                 }
             } catch (e) {
                 logError('Error processing bulk accept:', e);
@@ -1307,13 +1326,13 @@
         
         sQ('bulkRejectBtn')?.addEventListener('click', async () => {
             if (bulk.awardIds.size === 0) {
-                toast('Select awards to reject', 'warn');
+                toast('Select best papers to reject', 'warn');
                 return;
             }
             
-            if (!confirm(`Are you sure you want to reject ${bulk.awardIds.size} award(s)?`)) return;
+            if (!confirm(`Are you sure you want to reject ${bulk.awardIds.size} best paper(s)?`)) return;
             
-            log(`Bulk rejecting ${bulk.awardIds.size} awards`, 'info');
+            log(`Bulk rejecting ${bulk.awardIds.size} best papers`, 'info');
             
             // Show loading state
             const bulkStatus = sQ('bulkStatus');
@@ -1321,38 +1340,38 @@
             bulkStatus.textContent = 'Processing...';
             
             try {
-                // Get only pending awards
+                // Get only pending best papers
                 const ids = Array.from(bulk.awardIds);
                 let pendingIds = [];
                 
                 for (const id of ids) {
                     try {
-                        const data = await fetchJSON(`/api/v1/research/awards/${id}`);
+                        const data = await fetchJSON(`/api/v1/research/best-papers/${id}`);
                         if ((data.status || '').toUpperCase() === 'PENDING') {
                             pendingIds.push(id);
                         }
                     } catch (e) {
                         // skip if error
-                        logError(`Failed to fetch award ${id}:`, e);
+                        logError(`Failed to fetch best paper ${id}:`, e);
                     }
                 }
                 
                 if (pendingIds.length === 0) {
-                    toast('No selected awards are pending', 'warn');
+                    toast('No selected best papers are pending', 'warn');
                     return;
                 }
                 
                 if (pendingIds.length < ids.length) {
                     const skipped = ids.length - pendingIds.length;
-                    toast(`${skipped} award(s) are not pending and will be skipped.`, 'warn');
+                    toast(`${skipped} best paper(s) are not pending and will be skipped.`, 'warn');
                 }
                 
-                // Process pending awards
+                // Process pending best papers
                 let successCount = 0;
                 for (const id of pendingIds) {
                     try {
                         const body = { status: 'REJECTED' };
-                        const r = await fetch(`${BASE}/awards/${id}`, {
+                        const r = await fetch(`${BASE}/best-papers/${id}`, {
                             method: 'PUT',
                             headers: { ...headers(), 'Content-Type': 'application/json' },
                             body: JSON.stringify(body)
@@ -1362,7 +1381,7 @@
                             bulk.awardIds.delete(id); // Remove from selection
                         }
                     } catch (e) {
-                        logError(`Failed to reject award ${id}:`, e);
+                        logError(`Failed to reject best paper ${id}:`, e);
                     }
                 }
                 
@@ -1370,11 +1389,11 @@
                 syncMasterChk();
                 
                 if (successCount > 0) {
-                    toast(`Successfully rejected ${successCount} award(s)`, 'success');
-                    log(`Successfully bulk rejected ${successCount} awards`, 'info');
+                    toast(`Successfully rejected ${successCount} best paper(s)`, 'success');
+                    log(`Successfully bulk rejected ${successCount} best papers`, 'info');
                     await searchAwards(); // Refresh the list
                 } else {
-                    toast('Failed to reject any awards', 'error');
+                    toast('Failed to reject any best papers', 'error');
                 }
             } catch (e) {
                 logError('Error processing bulk reject:', e);

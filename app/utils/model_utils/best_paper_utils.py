@@ -354,3 +354,43 @@ def remove_coordinator(
         removed,
     )
     return best_paper
+
+
+def can_advance_to_next_phase(best_paper: BestPaper, actor_id) -> bool:
+    """Check if an award can advance to the next review phase based on grading completeness"""
+    from app.models.Cycle import BestPaperVerifiers, Grading, GradingType
+    current_phase = best_paper.review_phase
+
+    # Get all verifiers assigned to the current phase
+    verifier_assignments = BestPaperVerifiers.query.filter_by(
+        best_paper_id=best_paper.id,
+        review_phase=current_phase
+    ).all()
+
+    if not verifier_assignments:
+        # If no verifiers are assigned to this phase, we can advance
+        return True
+
+    # Get all grading types for awards
+    grading_types = GradingType.query.filter_by(grading_for='best_paper').all()
+
+    # For each verifier in the current phase, check if they have submitted grades
+    for assignment in verifier_assignments:
+        verifier_id = assignment.user_id
+        if verifier_id != actor_id:
+            continue
+
+        # Check if all required grading types have been graded by this verifier in this phase
+        for grading_type in grading_types:
+            grade_exists = Grading.query.filter_by(
+                best_paper_id=best_paper.id,
+                grading_type_id=grading_type.id,
+                graded_by_id=verifier_id,
+                review_phase=current_phase
+            ).first()
+
+            if not grade_exists:
+                return False
+
+    # If all verifiers have submitted all required grades for this phase, we can advance
+    return True

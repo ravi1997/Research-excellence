@@ -383,10 +383,7 @@ def can_advance_to_next_phase(award: Awards, actor_id) -> bool:
             ).first()
             
             if not grade_exists:
-                print(f"Missing grade for verifier {verifier_id}, grading type {grading_type.id} in phase {current_phase}")
-                
                 return False
     
     # If all verifiers have submitted all required grades for this phase, we can advance
-    print("All required grades submitted for phase", current_phase)
     return True

@@ -1287,6 +1287,115 @@ def get_best_papers_for_verifier(user_id):
         return jsonify({"error": error_msg}), 400
 
 
+# New endpoint to accept an abstract with grades
+@research_bp.route('/best-papers/<paper_id>/accept', methods=['POST'])
+@jwt_required()
+@require_roles(Role.VERIFIER.value, Role.COORDINATOR.value, Role.ADMIN.value, Role.SUPERADMIN.value)
+def accept_paper(paper_id):
+    """Accept an paper after review."""
+    actor_id, context = _resolve_actor_context("accept_paper")
+    paper = None
+    try:
+        paper = best_paper_utils.get_best_paper_by_id(
+            paper_id,
+            actor_id=actor_id,
+            context=context,
+        )
+        if paper is None:
+            error_msg = f"Resource not found: Paper with ID {paper_id} does not exist"
+            log_audit_event(
+                event_type="paper.accept.failed",
+                user_id=actor_id,
+                details={"error": error_msg, "paper_id": paper_id},
+                ip_address=request.remote_addr
+            )
+            abort(404, description="Paper not found.")
+
+        # Check if user is authorized to accept this paper (use utility lookup for consistency)
+        user = get_user_by_id_util(actor_id)
+        if not user:
+            error_msg = "Authentication failed: User not found"
+            log_audit_event(
+                event_type="paper.accept.failed",
+                user_id=actor_id,
+                details={"error": error_msg, "paper_id": paper_id},
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 404
+
+        # Allow if user is admin, superadmin, or a coordinator for this paper
+        privileged = any(
+            user.has_role(role)
+            for role in (Role.VERIFIER.value, Role.COORDINATOR.value, Role.ADMIN.value, Role.SUPERADMIN.value)
+        )
+
+        # Compare IDs as strings to avoid type mismatch between UUID and str
+        if not privileged and not any(str(coordinator.id) == str(actor_id) for coordinator in paper.coordinators):
+            error_msg = f"Authorization failed: You are not authorized to accept paper ID {paper_id}"
+            log_audit_event(
+                event_type="paper.accept.failed",
+                user_id=actor_id,
+                details={
+                    "error": error_msg,
+                    "paper_id": paper_id,
+                    "user_id": actor_id,
+                    "user_role": user.role_associations[0].role.value if user.role_associations else "no_role"
+                },
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 403
+
+        # Check if all required grades have been submitted for the current phase
+        if not best_paper_utils.can_advance_to_next_phase(paper, actor_id):
+            error_msg = f"Cannot accept paper: Not all required grades have been submitted for phase {paper.review_phase}"
+            log_audit_event(
+                event_type="paper.accept.failed",
+                user_id=actor_id,
+                details={
+                    "error": error_msg,
+                    "paper_id": paper_id,
+                    "current_phase": paper.review_phase
+                },
+                ip_address=request.remote_addr
+            )
+            return jsonify({"error": error_msg}), 400
+
+        # Update the status to ACCEPTED
+        best_paper_utils.update_best_paper(
+            paper,
+            actor_id=actor_id,
+            context=context,
+            status=Status.ACCEPTED,
+        )
+
+        # Log successful acceptance
+        log_audit_event(
+            event_type="paper.accept.success",
+            user_id=actor_id,
+            details={
+                "paper_id": paper_id,
+                "new_status": "ACCEPTED",
+                "title": paper.title
+            },
+            ip_address=request.remote_addr
+        )
+
+        return jsonify({"message": "Paper accepted successfully"}), 200
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.exception("Error accepting paper")
+        error_msg = f"System error occurred while accepting paper: {str(exc)}"
+        log_audit_event(
+            event_type="paper.accept.failed",
+            user_id=actor_id,
+            details={"error": error_msg, "paper_id": paper_id,
+                     "exception_type": type(exc).__name__, "exception_message": str(exc)},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 400
+
+
+
 @research_bp.route('/best-papers/bulk-assign-verifiers', methods=['POST'])
 @jwt_required()
 @require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
