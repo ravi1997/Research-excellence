@@ -16,7 +16,11 @@ from sqlalchemy.orm import relationship, validates
 from flask import current_app
 
 from app.models.enumerations import Role, UserType
-from app.models.Cycle import user_categories
+from app.models.Cycle import (
+    user_categories,
+    user_paper_categories,
+    user_award_categories,
+)
 from app.security_utils import password_strong
 from app.utils.generators import generate_strong_password
 from app.utils.services.sms import send_sms
@@ -191,10 +195,39 @@ class User(db.Model):
         nullable=True,
     )
     category = db.relationship("Category", back_populates="primary_users")
+
     categories = db.relationship(
         "Category",
         secondary=user_categories,
         back_populates="users",
+        lazy=True,
+    )
+
+    award_categories_to_coordinate = db.relationship(
+        "PaperCategory",
+        secondary="award_category_coordinators",
+        back_populates="award_coordinators",
+        lazy=True,
+    )
+
+    paper_categories_to_coordinate = db.relationship(
+        "PaperCategory",
+        secondary="paper_category_coordinators",
+        back_populates="paper_coordinators",
+        lazy=True,
+    )
+
+    paper_categories = db.relationship(
+        "PaperCategory",
+        secondary=user_paper_categories,
+        back_populates="paper_users",
+        lazy=True,
+    )
+
+    award_categories = db.relationship(
+        "PaperCategory",
+        secondary=user_award_categories,
+        back_populates="award_users",
         lazy=True,
     )
 

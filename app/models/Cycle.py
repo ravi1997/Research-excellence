@@ -146,6 +146,50 @@ user_categories = db.Table(
     ),
 )
 
+user_paper_categories = db.Table(
+    "user_paper_categories",
+    db.Column(
+        "user_id",
+        UUID(as_uuid=True),
+        db.ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    db.Column(
+        "paper_category_id",
+        UUID(as_uuid=True),
+        db.ForeignKey("paper_categories.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    db.Column(
+        "assigned_at",
+        db.DateTime,
+        nullable=False,
+        server_default=db.func.current_timestamp(),
+    ),
+)
+
+user_award_categories = db.Table(
+    "user_award_categories",
+    db.Column(
+        "user_id",
+        UUID(as_uuid=True),
+        db.ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    db.Column(
+        "paper_category_id",
+        UUID(as_uuid=True),
+        db.ForeignKey("paper_categories.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    db.Column(
+        "assigned_at",
+        db.DateTime,
+        nullable=False,
+        server_default=db.func.current_timestamp(),
+    ),
+)
+
 
 class Category(db.Model):
     __tablename__ = "categories"
@@ -352,6 +396,38 @@ class AbstractCoordinators(db.Model):
     )
 
 
+paper_category_coordinators = db.Table(
+    "paper_category_coordinators",
+    db.Column(
+        "paper_category_id",
+        UUID(as_uuid=True),
+        db.ForeignKey("paper_categories.id"),
+        primary_key=True,
+    ),
+    db.Column(
+        "user_id",
+        UUID(as_uuid=True),
+        db.ForeignKey("users.id"),
+        primary_key=True,
+    ),
+)
+
+award_category_coordinators = db.Table(
+    "award_category_coordinators",
+    db.Column(
+        "paper_category_id",
+        UUID(as_uuid=True),
+        db.ForeignKey("paper_categories.id"),
+        primary_key=True,
+    ),
+    db.Column(
+        "user_id",
+        UUID(as_uuid=True),
+        db.ForeignKey("users.id"),
+        primary_key=True,
+    ),
+)
+
 class PaperCategory(db.Model):
     __tablename__ = "paper_categories"
 
@@ -364,7 +440,32 @@ class PaperCategory(db.Model):
         back_populates="paper_category",
         lazy=True,
     )
+    paper_users = db.relationship(
+        "User",
+        secondary="user_paper_categories",
+        back_populates="paper_categories",
+        lazy=True,
+    )
+    award_users = db.relationship(
+        "User",
+        secondary="user_award_categories",
+        back_populates="award_categories",
+        lazy=True,
+    )
 
+    paper_coordinators = db.relationship(
+        "User",
+        secondary="paper_category_coordinators",
+        back_populates="paper_categories_to_coordinate",
+        lazy=True,
+    )
+
+    award_coordinators = db.relationship(
+        "User",
+        secondary="award_category_coordinators",
+        back_populates="award_categories_to_coordinate",
+        lazy=True,
+    )
 
 class Awards(db.Model):
     __tablename__ = "awards"

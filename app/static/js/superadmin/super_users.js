@@ -61,12 +61,18 @@
   const rolesHelpText = document.getElementById("roles-help");
   const categoriesContainer = document.getElementById("categories");
   const categoriesHelpText = document.getElementById("categories-help");
+  const paperCategoriesContainer = document.getElementById("paper-categories");
+  const awardCategoriesContainer = document.getElementById("award-categories");
 
   const metricFallback = (el) => el && (el.textContent = "0");
   const getRoleInputs = () =>
     rolesContainer ? rolesContainer.querySelectorAll("input[name='roles']") : [];
   const getCategoryInputs = () =>
     categoriesContainer ? categoriesContainer.querySelectorAll("input[name='category_ids']") : [];
+  const getPaperCategoryInputs = () =>
+    paperCategoriesContainer ? paperCategoriesContainer.querySelectorAll("input[name='paper_category_ids']") : [];
+  const getAwardCategoryInputs = () =>
+    awardCategoriesContainer ? awardCategoriesContainer.querySelectorAll("input[name='award_category_ids']") : [];
 
   let availableRoles = [];
   let rolesReady = false;
@@ -75,6 +81,11 @@
   let availableCategories = [];
   let categoriesReady = false;
   let pendingCategorySelection = [];
+
+  let availablePaperCategories = [];
+  let paperCategoriesReady = false;
+  let pendingPaperCategoryIds = [];
+  let pendingAwardCategoryIds = [];
 
   // Utilities
   const debounce = (fn, delay = 300) => {
@@ -321,6 +332,96 @@
     }
   }
 
+  function setPaperCategorySelection(paperCategoryIds = [], awardCategoryIds = []) {
+    pendingPaperCategoryIds = Array.isArray(paperCategoryIds) ? paperCategoryIds.filter(Boolean) : [];
+    pendingAwardCategoryIds = Array.isArray(awardCategoryIds) ? awardCategoryIds.filter(Boolean) : [];
+    if (!paperCategoriesReady) return;
+    const paperSet = new Set(pendingPaperCategoryIds);
+    const awardSet = new Set(pendingAwardCategoryIds);
+    getPaperCategoryInputs().forEach((input) => {
+      input.checked = paperSet.has(input.value);
+    });
+    getAwardCategoryInputs().forEach((input) => {
+      input.checked = awardSet.has(input.value);
+    });
+  }
+
+  function renderPaperCategoryOptions() {
+    const renderInto = (container, type) => {
+      if (!container) return;
+      if (!availablePaperCategories.length) {
+        container.innerHTML = `<div class="col-span-full rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-500 dark:border-gray-700 dark:bg-gray-800/80 dark:text-gray-300">
+          No ${type} categories are currently configured.
+        </div>`;
+        return;
+      }
+
+      container.innerHTML = availablePaperCategories
+        .map(
+          (category) => `
+          <label class="flex w-full cursor-pointer items-start gap-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm transition hover:border-emerald-400 hover:shadow-md focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-emerald-400/60">
+            <input
+              type="checkbox"
+              name="${type === "paper" ? "paper_category_ids" : "award_category_ids"}"
+              value="${escapeHtml(category.id)}"
+              class="mt-1 h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 dark:border-gray-600"
+            >
+            <span class="flex flex-col">
+              <span class="text-sm font-semibold text-gray-900 dark:text-gray-100">${escapeHtml(category.name || "Untitled category")}</span>
+              <span class="text-xs text-gray-500 dark:text-gray-400">Assign this user to ${escapeHtml(category.name || "this category")}.</span>
+            </span>
+          </label>`
+        )
+        .join("");
+    };
+
+    renderInto(paperCategoriesContainer, "paper");
+    renderInto(awardCategoriesContainer, "award");
+
+    paperCategoriesReady = true;
+    setPaperCategorySelection(pendingPaperCategoryIds, pendingAwardCategoryIds);
+  }
+
+  async function fetchPaperCategories() {
+    if (!paperCategoriesContainer && !awardCategoriesContainer) return;
+
+    paperCategoriesReady = false;
+    const loadingMarkup = `<div class="col-span-full flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600 shadow-inner dark:border-gray-700 dark:bg-gray-800/80 dark:text-gray-300">
+      <svg class="h-4 w-4 animate-spin text-blue-500" viewBox="0 0 24 24" fill="none">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 00-8 8h4z"/>
+      </svg>
+      Loading categories…
+    </div>`;
+    if (paperCategoriesContainer) paperCategoriesContainer.innerHTML = loadingMarkup;
+    if (awardCategoriesContainer) awardCategoriesContainer.innerHTML = loadingMarkup;
+
+    try {
+      const response = await fetch(`${BASE}/api/v1/research/papercategories`, { headers: authHeader() });
+      if (!response.ok) throw new Error(`Failed with status ${response.status}`);
+      const data = await response.json();
+      availablePaperCategories = Array.isArray(data)
+        ? data
+        : Array.isArray(data.items)
+        ? data.items
+        : [];
+      renderPaperCategoryOptions();
+    } catch (error) {
+      console.error("Unable to load paper categories", error);
+      const fallback = `<div class="col-span-full space-y-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-600 shadow-sm dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-100">
+        <p class="font-medium">Unable to load categories</p>
+        <p class="text-xs text-red-500 dark:text-red-200">We could not fetch the available categories. Please try again.</p>
+        <button id="retry-load-paper-categories" type="button" class="inline-flex items-center gap-2 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:border-red-400/40 dark:bg-red-500/10 dark:text-red-100 dark:hover:bg-red-500/20">
+          Retry
+        </button>
+      </div>`;
+      if (paperCategoriesContainer) paperCategoriesContainer.innerHTML = fallback;
+      if (awardCategoriesContainer) awardCategoriesContainer.innerHTML = fallback;
+      paperCategoriesReady = false;
+      document.getElementById("retry-load-paper-categories")?.addEventListener("click", fetchPaperCategories);
+    }
+  }
+
   // Fetch & transform
   async function fetchUsers(page = 1) {
     showLoading();
@@ -495,6 +596,37 @@
         })
         .join("");
 
+      const paperCats = Array.isArray(user.paper_categories) && user.paper_categories.length
+        ? user.paper_categories
+        : user.paper_category
+        ? [user.paper_category]
+        : [];
+      const awardCats = Array.isArray(user.award_categories) && user.award_categories.length
+        ? user.award_categories
+        : user.award_category
+        ? [user.award_category]
+        : [];
+
+      const paperCatMarkup = paperCats
+        .map((cat) => {
+          const name = cat?.name || "—";
+          const badgeClass = "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200";
+          return `<span class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${badgeClass}">
+            ${escapeHtml(name)}
+          </span>`;
+        })
+        .join("");
+
+      const awardCatMarkup = awardCats
+        .map((cat) => {
+          const name = cat?.name || "—";
+          const badgeClass = "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200";
+          return `<span class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${badgeClass}">
+            ${escapeHtml(name)}
+          </span>`;
+        })
+        .join("");
+
       tr.className = [
         "bg-white dark:bg-gray-900/40",
         "hover:bg-gray-50 dark:hover:bg-gray-800/60 transition",
@@ -523,6 +655,12 @@
         </td>
         <td class="px-6 py-4 align-middle text-sm text-gray-600 dark:text-gray-300">
           <div class="flex flex-wrap gap-1">${categoriesMarkup || '<span class="text-xs text-gray-400 dark:text-gray-500">No category</span>'}</div>
+        </td>
+        <td class="px-6 py-4 align-middle text-sm text-gray-600 dark:text-gray-300">
+          <div class="flex flex-wrap gap-1">${paperCatMarkup || '<span class="text-xs text-gray-400 dark:text-gray-500">No paper category</span>'}</div>
+        </td>
+        <td class="px-6 py-4 align-middle text-sm text-gray-600 dark:text-gray-300">
+          <div class="flex flex-wrap gap-1">${awardCatMarkup || '<span class="text-xs text-gray-400 dark:text-gray-500">No award category</span>'}</div>
         </td>
         <td class="px-6 py-4 align-middle">
           <span class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusBadgeClass}">
@@ -664,6 +802,7 @@
 
     setRoleSelection([]);
     setCategorySelection([]);
+    setPaperCategorySelection([], []);
 
     const statusSelect = document.getElementById("status");
     if (statusSelect) statusSelect.value = "active";
@@ -705,6 +844,24 @@
         .map((value) => String(value));
       setCategorySelection(categoryIds);
 
+      const paperCatIds = (Array.isArray(user.paper_categories) ? user.paper_categories : [])
+        .map((cat) => cat && (cat.id || cat.paper_category_id || cat.category_id))
+        .filter(Boolean)
+        .map((val) => String(val));
+      if (!paperCatIds.length && user.paper_category_id) {
+        paperCatIds.push(String(user.paper_category_id));
+      }
+
+    const awardCatIds = (Array.isArray(user.award_categories) ? user.award_categories : [])
+      .map((cat) => cat && (cat.id || cat.paper_category_id || cat.category_id))
+      .filter(Boolean)
+      .map((val) => String(val));
+    if (!awardCatIds.length && user.award_category_id) {
+      awardCatIds.push(String(user.award_category_id));
+    }
+
+    setPaperCategorySelection(paperCatIds, awardCatIds);
+
       const statusSelect = document.getElementById("status");
       if (statusSelect) statusSelect.value = user.is_active ? "active" : user.lock_until ? "locked" : "inactive";
     } catch (error) {
@@ -739,6 +896,16 @@
       .filter((value, index, arr) => value && arr.indexOf(value) === index);
     payload.category_ids = selectedCategoryIds;
     payload.category_id = selectedCategoryIds[0] || null;
+    const paperCategoryIds = Array.from(getPaperCategoryInputs())
+      .filter((input) => input.checked)
+      .map((input) => input.value);
+    const awardCategoryIds = Array.from(getAwardCategoryInputs())
+      .filter((input) => input.checked)
+      .map((input) => input.value);
+    payload.paper_category_ids = paperCategoryIds;
+    payload.award_category_ids = awardCategoryIds;
+    payload.paper_category_id = paperCategoryIds[0] || null;
+    payload.award_category_id = awardCategoryIds[0] || null;
 
     if (!userId) {
       payload.password = "TempPass123!"; // Platform requires initial password; users prompted to change on first login
@@ -961,6 +1128,6 @@
   metricFallback(metricLockedEl);
   metricFallback(metricNewEl);
 
-  Promise.allSettled([fetchAvailableRoles(), fetchAvailableCategories()])
+  Promise.allSettled([fetchAvailableRoles(), fetchAvailableCategories(), fetchPaperCategories()])
     .finally(() => fetchUsers(1));
 })();

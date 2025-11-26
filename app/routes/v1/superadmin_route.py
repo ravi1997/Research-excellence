@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from app.models import AuditLog, User
 from app.models.User import UserRole
 from app.models.enumerations import Role
-from app.models.Cycle import Category
+from app.models.Cycle import Category, PaperCategory
 from app.utils.decorator import require_roles
 from app.extensions import db
 from app.schemas.user_schema import UserSchema
@@ -36,7 +36,11 @@ def list_users():
             limit = 100  # Maximum limit for performance reasons
         
         # Build query
-        query = User.query.options(joinedload(User.categories))
+        query = User.query.options(
+            joinedload(User.categories),
+            joinedload(User.paper_categories),
+            joinedload(User.award_categories),
+        )
         
         # Apply search filter
         if search:
@@ -130,7 +134,11 @@ def get_user(user_id):
     """API endpoint to get a specific user."""
     try:
         user = (
-            User.query.options(joinedload(User.categories))
+            User.query.options(
+                joinedload(User.categories),
+                joinedload(User.paper_categories),
+                joinedload(User.award_categories),
+            )
             .filter_by(id=user_id)
             .first()
         )
@@ -455,6 +463,12 @@ def create_user():
         try:
             category_ids = _extract_category_ids(data, default_none=False)
             _apply_user_categories(user, category_ids)
+
+            paper_category_ids = _extract_paper_category_ids(data, default_none=False)
+            _apply_user_paper_categories(user, paper_category_ids)
+
+            award_category_ids = _extract_award_category_ids(data, default_none=False)
+            _apply_user_award_categories(user, award_category_ids)
         except ValueError as exc:
             db.session.rollback()
             return jsonify({'error': str(exc)}), 400
@@ -550,6 +564,12 @@ def update_user(user_id):
         try:
             category_ids = _extract_category_ids(data)
             _apply_user_categories(user, category_ids)
+
+            paper_category_ids = _extract_paper_category_ids(data)
+            _apply_user_paper_categories(user, paper_category_ids)
+
+            award_category_ids = _extract_award_category_ids(data)
+            _apply_user_award_categories(user, award_category_ids)
         except ValueError as exc:
             db.session.rollback()
             return jsonify({'error': str(exc)}), 400
@@ -771,40 +791,52 @@ def get_unique_audit_events():
 _DB_ROLE_CACHE = None
 
 
-def _extract_category_ids(payload, *, default_none=True):
-    """Pull a flat list of category IDs from a payload."""
+def _extract_category_like_ids(payload, *, plural_key, singular_key, default_none=True):
+    """Pull a flat list of category-ish IDs from a payload."""
     if not isinstance(payload, dict):
         return None
 
     sentinel = object()
-    value = payload.get("category_ids", sentinel)
+    value = payload.get(plural_key, sentinel)
     if value is sentinel:
-        categories_field = payload.get("categories", sentinel)
-        if categories_field is not sentinel:
-            value = categories_field
-        elif "category_id" in payload:
-            single = payload.get("category_id")
-            value = [] if not single else [single]
-        else:
-            return None if default_none else []
+        plural_without_suffix = plural_key.replace("_ids", "")
+        value = payload.get(plural_without_suffix, sentinel)
+        if value is sentinel:
+            if singular_key in payload:
+                single = payload.get(singular_key)
+                value = [] if not single else [single]
+            else:
+                return None if default_none else []
 
     if value is None:
         return []
     if isinstance(value, (str, bytes)):
         return [value]
     if isinstance(value, dict):
-        candidate = value.get("id") or value.get("category_id")
+        candidate = value.get("id") or value.get(singular_key)
         return [candidate] if candidate else []
 
     result = []
     for item in value:
         candidate = item
         if isinstance(item, dict):
-            candidate = item.get("id") or item.get("category_id")
+            candidate = item.get("id") or item.get(singular_key)
         if candidate in (None, ""):
             continue
         result.append(candidate)
     return result
+
+
+def _extract_category_ids(payload, *, default_none=True):
+    return _extract_category_like_ids(payload, plural_key="category_ids", singular_key="category_id", default_none=default_none)
+
+
+def _extract_paper_category_ids(payload, *, default_none=True):
+    return _extract_category_like_ids(payload, plural_key="paper_category_ids", singular_key="paper_category_id", default_none=default_none)
+
+
+def _extract_award_category_ids(payload, *, default_none=True):
+    return _extract_category_like_ids(payload, plural_key="award_category_ids", singular_key="award_category_id", default_none=default_none)
 
 
 def _normalize_category_ids(category_ids):
@@ -847,6 +879,54 @@ def _apply_user_categories(user, category_ids):
 
     user.categories = ordered
     user.category_id = ordered[0].id if ordered else None
+
+
+def _apply_user_paper_categories(user, category_ids):
+    normalized = _normalize_category_ids(category_ids)
+    if normalized is None:
+        return
+
+    if not normalized:
+        user.paper_categories = []
+        return
+
+    categories = PaperCategory.query.filter(PaperCategory.id.in_(normalized)).all()
+    category_map = {str(cat.id): cat for cat in categories}
+    missing = [cid for cid in normalized if cid not in category_map]
+    if missing:
+        raise ValueError(f"Unknown paper category ids: {', '.join(missing)}")
+
+    ordered = []
+    for cid in normalized:
+        cat = category_map.get(cid)
+        if cat and cat not in ordered:
+            ordered.append(cat)
+
+    user.paper_categories = ordered
+
+
+def _apply_user_award_categories(user, category_ids):
+    normalized = _normalize_category_ids(category_ids)
+    if normalized is None:
+        return
+
+    if not normalized:
+        user.award_categories = []
+        return
+
+    categories = PaperCategory.query.filter(PaperCategory.id.in_(normalized)).all()
+    category_map = {str(cat.id): cat for cat in categories}
+    missing = [cid for cid in normalized if cid not in category_map]
+    if missing:
+        raise ValueError(f"Unknown award category ids: {', '.join(missing)}")
+
+    ordered = []
+    for cid in normalized:
+        cat = category_map.get(cid)
+        if cat and cat not in ordered:
+            ordered.append(cat)
+
+    user.award_categories = ordered
 
 
 def _get_db_role_values():

@@ -52,6 +52,8 @@ class UserSchema(ma.SQLAlchemyAutoSchema):
 
     # Category relationships
     categories = fields.Method("get_categories", dump_only=True)
+    paper_categories = fields.Method("get_paper_categories", dump_only=True)
+    award_categories = fields.Method("get_award_categories", dump_only=True)
     
     # Removed gradings nested relationship to prevent recursion depth during grading dumps
     # gradings = fields.Nested(GradingSchema, many=True, dump_only=True)
@@ -84,3 +86,24 @@ class UserSchema(ma.SQLAlchemyAutoSchema):
                 }
             )
         return category_list
+
+    def _serialize_category_list(self, collection):
+        if not collection:
+            return []
+        items = []
+        for category in collection:
+            if not category:
+                continue
+            items.append(
+                {
+                    "id": str(getattr(category, "id", None)) if getattr(category, "id", None) else None,
+                    "name": getattr(category, "name", None),
+                }
+            )
+        return items
+
+    def get_paper_categories(self, obj):
+        return self._serialize_category_list(getattr(obj, "paper_categories", None))
+
+    def get_award_categories(self, obj):
+        return self._serialize_category_list(getattr(obj, "award_categories", None))
