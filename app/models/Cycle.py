@@ -396,37 +396,7 @@ class AbstractCoordinators(db.Model):
     )
 
 
-paper_category_coordinators = db.Table(
-    "paper_category_coordinators",
-    db.Column(
-        "paper_category_id",
-        UUID(as_uuid=True),
-        db.ForeignKey("paper_categories.id"),
-        primary_key=True,
-    ),
-    db.Column(
-        "user_id",
-        UUID(as_uuid=True),
-        db.ForeignKey("users.id"),
-        primary_key=True,
-    ),
-)
 
-award_category_coordinators = db.Table(
-    "award_category_coordinators",
-    db.Column(
-        "paper_category_id",
-        UUID(as_uuid=True),
-        db.ForeignKey("paper_categories.id"),
-        primary_key=True,
-    ),
-    db.Column(
-        "user_id",
-        UUID(as_uuid=True),
-        db.ForeignKey("users.id"),
-        primary_key=True,
-    ),
-)
 
 class PaperCategory(db.Model):
     __tablename__ = "paper_categories"
@@ -450,20 +420,6 @@ class PaperCategory(db.Model):
         "User",
         secondary="user_award_categories",
         back_populates="award_categories",
-        lazy=True,
-    )
-
-    paper_coordinators = db.relationship(
-        "User",
-        secondary="paper_category_coordinators",
-        back_populates="paper_categories_to_coordinate",
-        lazy=True,
-    )
-
-    award_coordinators = db.relationship(
-        "User",
-        secondary="award_category_coordinators",
-        back_populates="award_categories_to_coordinate",
         lazy=True,
     )
 

@@ -695,7 +695,16 @@ def get_abstracts():
             filters.append(Abstracts.created_by_id == actor_id)
         else:
             if user.has_role(Role.COORDINATOR.value):
-                filters.append(User.categories.any(Category.id == Abstracts.category_id))
+                    current_app.logger.info("User is a coordinator, applying category filter")
+                    try:
+                        cat_ids = [c.id for c in user.categories if c is not None]
+                    except Exception:
+                        cat_ids = []
+
+                    if cat_ids:
+                        filters.append(Abstracts.category_id.in_(cat_ids))
+                    else:
+                        filters.append(Abstracts.id == None)
         if verifiers:
             if verifiers.lower() == 'yes':
                 filters.append(Abstracts.verifiers.any())
@@ -736,6 +745,7 @@ def get_abstracts():
         
         current_app.logger.info("Listing abstracts ready")
         
+
         abstracts_all = list(
             abstract_utils.list_abstracts(
                 filters=filters,

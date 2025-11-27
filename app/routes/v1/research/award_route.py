@@ -545,6 +545,19 @@ def get_awards():
             # Regular users can only see their own awards
             filters.append(Awards.created_by_id == current_user_id)
         
+        if user.has_role(Role.COORDINATOR.value):
+            # Coordinators can see awards in their categories
+            try:
+                cat_ids = [
+                    c.id for c in user.award_categories if c is not None]
+            except Exception:
+                cat_ids = []
+            if cat_ids:
+                filters.append(Awards.paper_category_id.in_(cat_ids))
+            else:
+                # If no categories assigned, coordinator sees no awards
+                filters.append(Awards.id == None)
+
         # Apply verifier filter (filter by current user if they are a verifier)
         if verifier_filter:
             # Only show awards assigned to the current user

@@ -181,7 +181,7 @@ def list_instances(
     filter_desc = [str(f) for f in filters] if filters else []
     with log_context(**_build_context(model_cls.__name__, "list", actor_id, context)):
         logger.info(
-            "Listing %s filters=%s order=%s limit=%s offset=%s options=%s",
+            "Listing info %s\n filters=%s\n order=%s\n limit=%s\n offset=%s\n options=%s",
             model_cls.__name__,
             filter_desc,
             str(order_by),
@@ -211,8 +211,12 @@ def list_instances(
 
         if limit is not None:
             query = query.limit(limit)
+        from sqlalchemy.dialects import postgresql
 
-        logger.info("Executing list query for %s",query)
+        logger.info("Executing list query for %s", query.statement.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True}
+        ))
         results = list(query)
         logger.info("Listed %s count=%s", model_cls.__name__, len(results))
         _emit_audit(

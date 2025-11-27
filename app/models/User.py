@@ -203,20 +203,6 @@ class User(db.Model):
         lazy=True,
     )
 
-    award_categories_to_coordinate = db.relationship(
-        "PaperCategory",
-        secondary="award_category_coordinators",
-        back_populates="award_coordinators",
-        lazy=True,
-    )
-
-    paper_categories_to_coordinate = db.relationship(
-        "PaperCategory",
-        secondary="paper_category_coordinators",
-        back_populates="paper_coordinators",
-        lazy=True,
-    )
-
     paper_categories = db.relationship(
         "PaperCategory",
         secondary=user_paper_categories,
