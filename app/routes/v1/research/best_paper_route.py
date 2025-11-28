@@ -7,7 +7,7 @@ import uuid
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.models.User import User
 from app.routes.v1.research import research_bp
-from app.models.Cycle import BestPaperVerifiers, BestPaper, Author, Category, PaperCategory, Cycle
+from app.models.Cycle import BestPaperVerifiers, BestPaper, Author, Category, PaperCategory, Cycle, GradingType, Grading, GradingFor
 from app.routes.v1.user_role_route import _resolve_actor_context
 from app.schemas.best_paper_schema import BestPaperSchema
 from app.extensions import db
@@ -517,7 +517,7 @@ def get_best_papers():
             
             # Search by ID if q is numeric
             if q_int:
-                search_filters.append(BestPaper.id == q_int)
+                search_filters.append(BestPaper.bestpaper_number == q_int)
             
             if search_filters:
                 from sqlalchemy import or_
@@ -1411,7 +1411,7 @@ def accept_paper(paper_id):
 
 @research_bp.route('/best-papers/bulk-assign-verifiers', methods=['POST'])
 @jwt_required()
-@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
+@require_roles(Role.COORDINATOR.value, Role.ADMIN.value, Role.SUPERADMIN.value)
 def bulk_assign_verifiers_to_best_papers():
     """Bulk assign verifiers to multiple best papers."""
     current_user_id = get_jwt_identity()
@@ -1519,7 +1519,7 @@ def bulk_assign_verifiers_to_best_papers():
 
 @research_bp.route('/best-papers/bulk-unassign-verifiers', methods=['POST'])
 @jwt_required()
-@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
+@require_roles(Role.COORDINATOR.value, Role.ADMIN.value, Role.SUPERADMIN.value)
 def bulk_unassign_verifiers_from_best_papers():
     """Bulk unassign verifiers from multiple best papers."""
     current_user_id = get_jwt_identity()
@@ -1972,3 +1972,152 @@ def export_papers_with_pdfs():
             ip_address=request.remote_addr
         )
         return jsonify({"error": error_msg}), 400
+
+
+@research_bp.route('/best-papers/export-with-grades', methods=['GET'])
+@jwt_required()
+def export_best_papers_with_grades():
+    """Export best papers with per-grader grades into an Excel workbook.
+
+    Optional query params: `grading_type_id`, `cycle_id`.
+    """
+    actor_id = get_jwt_identity()
+    try:
+        user = get_user_by_id_util(actor_id)
+
+        grading_type_id = request.args.get('grading_type_id')
+        cycle_id = request.args.get('cycle_id')
+
+        # Select grading types relevant to best papers
+        q = GradingType.query.filter(GradingType.grading_for == GradingFor.BEST_PAPER)
+        if grading_type_id:
+            q = q.filter(GradingType.id == grading_type_id)
+        grading_types = q.order_by(GradingType.criteria).all()
+
+        # Build filters for best papers
+        filters = []
+        if cycle_id:
+            filters.append(BestPaper.cycle_id == cycle_id)
+
+        # If user is a coordinator, limit to their paper categories
+        try:
+            if user and user.has_role(Role.COORDINATOR.value):
+                cat_ids = [pc.id for pc in (user.paper_categories or [])]
+                if cat_ids:
+                    filters.append(BestPaper.paper_category_id.in_(cat_ids))
+                else:
+                    return jsonify({'items': [], 'total': 0}), 200
+        except Exception:
+            pass
+
+        # Fetch best papers
+        best_papers = list_best_papers_util(filters=filters, actor_id=actor_id, eager=True)
+        best_paper_ids = [bp.id for bp in best_papers]
+
+        # Bulk fetch gradings for these best papers
+        grade_map = {}
+        graders_by_paper = {}
+        if best_paper_ids:
+            grades = Grading.query.filter(Grading.best_paper_id.in_(best_paper_ids)).all()
+            for g in grades:
+                key = (str(g.best_paper_id), str(g.graded_by_id), str(g.grading_type_id))
+                grade_map[key] = g
+                graders_by_paper.setdefault(str(g.best_paper_id), set()).add(str(g.graded_by_id))
+
+        # Build Excel workbook
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "BestPaper Grades"
+
+        headers = [
+            "Best Paper ID",
+            "Paper Number",
+            "Title",
+            "Graded By",
+        ]
+        headers += [gt.criteria for gt in grading_types]
+
+        for col_idx, header in enumerate(headers, start=1):
+            cell = ws.cell(row=1, column=col_idx, value=sanitize_excel_value(header))
+            cell.font = Font(bold=True)
+            cell.fill = PatternFill(start_color="EEEFF4", end_color="EEEFF4", fill_type="solid")
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+
+        row_index = 2
+        for bp in best_papers:
+            bp_id = str(bp.id)
+            graders = sorted(list(graders_by_paper.get(bp_id, [])))
+            if not graders:
+                row_values = [bp_id, getattr(bp, 'paper_number', '') or getattr(bp, 'bestpaper_number', '') or '', bp.title or '', '']
+                row_values += ["" for _ in grading_types]
+                for col_idx, val in enumerate(row_values, start=1):
+                    ws.cell(row=row_index, column=col_idx, value=sanitize_excel_value(val))
+                row_index += 1
+                continue
+
+            for grader_id in graders:
+                grader = get_user_by_id_util(grader_id)
+                graded_by_name = (
+                    getattr(grader, 'full_name', None) or getattr(grader, 'username', None) or getattr(grader, 'email', None) or grader_id
+                )
+                row_values = [bp_id, getattr(bp, 'paper_number', '') or getattr(bp, 'bestpaper_number', '') or '', bp.title or '', graded_by_name]
+                for gt in grading_types:
+                    g = grade_map.get((bp_id, grader_id, str(gt.id)))
+                    row_values.append(g.score if g else "")
+
+                for col_idx, val in enumerate(row_values, start=1):
+                    ws.cell(row=row_index, column=col_idx, value=sanitize_excel_value(val))
+                row_index += 1
+
+        # Auto-adjust column widths
+        for column in ws.columns:
+            max_length = 0
+            column_letter = get_column_letter(column[0].column)
+            for cell in column:
+                try:
+                    if cell.value:
+                        max_length = max(max_length, len(str(cell.value)))
+                except Exception:
+                    pass
+            adjusted_width = min(max_length + 2, 50)
+            ws.column_dimensions[column_letter].width = adjusted_width
+
+        ws.freeze_panes = ws["A2"]
+
+        # Stream workbook to user
+        from io import BytesIO
+        import uuid
+        stream = BytesIO()
+        wb.save(stream)
+        stream.seek(0)
+
+        # Log audit
+        try:
+            log_audit_event(
+                event_type="best_paper.export_with_grades.success",
+                user_id=actor_id,
+                details={"exported_count": len(best_papers)},
+                ip_address=request.remote_addr,
+            )
+        except Exception:
+            current_app.logger.debug("Failed to record audit for best papers export")
+
+        return send_file(
+            stream,
+            as_attachment=True,
+            download_name=f"bestpapers_grades_{uuid.uuid4().hex[:8]}.xlsx",
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+
+    except Exception as exc:
+        current_app.logger.exception("Error exporting best papers with grades")
+        try:
+            log_audit_event(
+                event_type="best_paper.export_with_grades.failed",
+                user_id=actor_id,
+                details={"error": str(exc)},
+                ip_address=request.remote_addr,
+            )
+        except Exception:
+            current_app.logger.debug("Failed to record audit for failed best papers export")
+        return jsonify({"error": str(exc)}), 400

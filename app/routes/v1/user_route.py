@@ -1,6 +1,6 @@
 # routes/user_routes.py
 
-from app.models.Cycle import AwardVerifiers
+from app.models.Cycle import AwardVerifiers, BestPaperVerifiers
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import or_
@@ -506,8 +506,11 @@ def list_verifiers_with_params():
                 AbstractVerifiers).filter_by(user_id=verifier.id).count()
             awards_count = db.session.query(
                 AwardVerifiers).filter_by(user_id=verifier.id).count()
+            best_papers_count = db.session.query(
+                BestPaperVerifiers).filter_by(user_id=verifier.id).count()
             verifier_dict['abstracts_count'] = abstracts_count
             verifier_dict['awards_count'] = awards_count
+            verifier_dict['bestpapers_count'] = best_papers_count
             verifiers_data.append(verifier_dict)
         
         # Prepare response
