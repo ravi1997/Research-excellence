@@ -7,6 +7,7 @@
   const phaseFilter = document.getElementById("phaseFilter");
   const statusFilter = document.getElementById("statusFilter");
   const refreshButton = document.getElementById("refreshButton");
+  const exportButton = document.getElementById("exportButton");
   const awardList = document.getElementById("awardList");
   const awardCount = document.getElementById("awardCount");
   const gradingPanel = document.getElementById("gradingPanel");
@@ -71,6 +72,8 @@
     });
 
     refreshButton?.addEventListener("click", () => fetchAwards());
+
+    exportButton?.addEventListener("click", () => exportAwards());
 
     prevPageBtn?.addEventListener("click", () => {
       if (state.page > 1) {
@@ -286,6 +289,48 @@
     }
   }
 
+  async function exportAwards() {
+    if (!exportButton) return;
+    const origText = exportButton.textContent;
+    try {
+      exportButton.disabled = true;
+      exportButton.textContent = "Exporting…";
+
+      const params = new URLSearchParams();
+      if (searchInput?.value) params.set("q", searchInput.value.trim());
+      if (phaseFilter?.value) params.set("review_phase", phaseFilter.value);
+      if (statusFilter?.value) params.set("status", statusFilter.value);
+      if (cycleFilter?.value) params.set("cycle_id", cycleFilter.value);
+
+      const url = `${BASE}/api/v1/research/awards/export-with-grades?${params.toString()}`;
+      const response = await fetch(url, { headers: authHeaders() });
+      if (!response.ok) {
+        throw new Error(`Export failed (${response.status})`);
+      }
+      const blob = await response.blob();
+      const cd = response.headers.get("content-disposition") || "";
+      let filename = "awards-grades.xlsx";
+      const match = cd.match(/filename\*=UTF-8''(.+)$|filename="?([^;\"]+)"?/);
+      if (match) {
+        filename = decodeURIComponent(match[1] || match[2] || filename);
+      }
+      const urlObj = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = urlObj;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(urlObj);
+    } catch (err) {
+      console.error("Export error", err);
+      alert("Failed to export awards: " + (err.message || "unknown error"));
+    } finally {
+      exportButton.disabled = false;
+      exportButton.textContent = origText;
+    }
+  }
+
   function renderGradings(gradings, award) {
     if (!gradingPanel) return;
     const cycleName = state.cycles.get(String(award?.cycle_id))?.name || "Unassigned";
@@ -367,7 +412,8 @@
           ${escapeHtml(label)}
         </th>`
       )
-      .join("");
+      .join("") + `
+      <th class="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Total</th>`;
 
     const bodyRows = rows.length
       ? rows
@@ -399,18 +445,31 @@
                 </td>`;
               })
               .join("");
+                // compute total of numeric scores for this verifier row
+                const numericScores = columns
+                  .map((criteria) => {
+                    const grade = row.grades.get(criteria);
+                    return typeof grade?.score === "number" ? grade.score : null;
+                  })
+                  .filter((v) => v !== null);
+                const total = numericScores.length ? numericScores.reduce((a, b) => a + b, 0) : null;
+                const totalCell =
+                  total === null
+                    ? `<td class="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">—</td>`
+                    : `<td class="px-3 py-3 align-top text-sm text-gray-900 dark:text-gray-100"><div class="font-semibold">${escapeHtml(String(total))}</div></td>`;
             return `
               <tr class="border-t border-gray-100 dark:border-gray-800">
                 <td class="px-3 py-3 align-top text-sm">
                   <p class="font-semibold text-gray-900 dark:text-white">${escapeHtml(verifierName)}</p>
                   ${verifierDetail ? `<p class="text-xs text-gray-500 dark:text-gray-400">${escapeHtml(verifierDetail)}</p>` : ""}
                 </td>
-                ${cells}
+                    ${cells}
+                    ${totalCell}
               </tr>
             `;
           })
           .join("")
-      : `<tr><td colspan="${columns.length + 1}" class="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">No gradings recorded for this phase.</td></tr>`;
+      : `<tr><td colspan="${columns.length + 2}" class="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">No gradings recorded for this phase.</td></tr>`;
 
     return `
       <section class="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-950/40">
