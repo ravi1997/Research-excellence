@@ -370,9 +370,6 @@ def can_advance_to_next_phase(award: Awards, actor_id) -> bool:
     # For each verifier in the current phase, check if they have submitted grades
     for assignment in verifier_assignments:
         verifier_id = assignment.user_id
-        if verifier_id != actor_id:
-            continue
-
         # Check if all required grading types have been graded by this verifier in this phase
         for grading_type in grading_types:
             grade_exists = Grading.query.filter_by(

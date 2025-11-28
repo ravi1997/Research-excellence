@@ -4,11 +4,12 @@ import json
 import os
 import uuid
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from io import BytesIO
 import openpyxl
 from app.models.User import User
 from app.routes.v1.audit_log_route import _resolve_actor_context
 from app.routes.v1.research import research_bp
-from app.models.Cycle import AwardVerifiers, Awards, Author, Category, PaperCategory, Cycle
+from app.models.Cycle import AwardVerifiers, Awards, Author, Category, PaperCategory, Cycle, GradingType, Grading, GradingFor
 from app.schemas.awards_schema import AwardsSchema
 from app.extensions import db
 from app.utils.decorator import require_roles
@@ -1689,6 +1690,198 @@ def create_awards_excel(awards):
         ws.column_dimensions[column_letter].width = adjusted_width
     
     return wb
+
+
+@research_bp.route('/awards/export-with-grades', methods=['GET'])
+@jwt_required()
+@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value, Role.COORDINATOR.value)
+def export_awards_with_grades():
+    """Export awards with their grades to Excel.
+
+    Query parameters (optional): grading_type_id, cycle_id
+    Produces one row per (award, grader) with grading-type columns.
+    """
+    actor_id, context = _resolve_actor_context("export_awards_with_grades")
+    try:
+        grading_type_id = request.args.get('grading_type_id', '').strip()
+        cycle_id = request.args.get('cycle_id', '').strip()
+
+        # Validate grading_type_id if provided
+        if grading_type_id:
+            try:
+                uuid.UUID(grading_type_id)
+            except ValueError:
+                error_msg = f"Validation failed: Invalid grading_type_id '{grading_type_id}'"
+                log_audit_event(
+                    event_type="award.grades.export.failed",
+                    user_id=actor_id,
+                    details={"error": error_msg},
+                    ip_address=request.remote_addr
+                )
+                return jsonify({"error": error_msg}), 400
+            grading_type = GradingType.query.get(grading_type_id)
+            if not grading_type:
+                error_msg = f"Resource not found: Grading type with ID {grading_type_id} does not exist"
+                log_audit_event(
+                    event_type="award.grades.export.failed",
+                    user_id=actor_id,
+                    details={"error": error_msg, "grading_type_id": grading_type_id},
+                    ip_address=request.remote_addr
+                )
+                return jsonify({"error": error_msg}), 404
+
+        # Validate cycle_id if provided
+        if cycle_id:
+            try:
+                uuid.UUID(cycle_id)
+            except ValueError:
+                cycle_id = ''
+
+        # Get awards
+        awards = award_utils.list_awards(actor_id=actor_id, context=context)
+
+        # Coordinator filter: only awards in user's award_categories
+        user = get_user_by_id_util(actor_id)
+        if user and user.has_role(Role.COORDINATOR.value):
+            try:
+                cat_ids = [c.id for c in user.award_categories if c is not None]
+            except Exception:
+                cat_ids = []
+            if cat_ids:
+                awards = [a for a in awards if a.paper_category_id in cat_ids]
+            else:
+                awards = []
+
+        # Cycle filter
+        if cycle_id:
+            awards = [a for a in awards if str(a.cycle_id) == cycle_id]
+
+        # Build grading type columns for AWARD
+        grading_types = GradingType.query.filter(GradingType.grading_for == GradingFor.AWARD).order_by(GradingType.criteria).all()
+
+        # Create workbook
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Award Grades"
+
+        base_headers = [
+            "Award ID", "Award Number", "Title", "Category", "Cycle",
+            "Status", "Created At", "Graded By"
+        ]
+        gt_headers = [gt.criteria for gt in grading_types]
+        headers = base_headers + gt_headers
+
+        for col_num, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col_num, value=header)
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+
+        # Bulk fetch grades
+        award_ids = [a.id for a in awards]
+        gt_ids = [gt.id for gt in grading_types]
+
+        grades = []
+        if award_ids and gt_ids:
+            grades = Grading.query.filter(
+                Grading.award_id.in_(award_ids),
+                Grading.grading_type_id.in_(gt_ids)
+            ).all()
+
+        # Map (award_id, grader_id, grading_type_id) -> score
+        grade_map = {}
+        graders_by_award = {}
+        for g in grades:
+            aid = str(g.award_id)
+            gid = str(g.graded_by_id) if g.graded_by_id else "Unknown"
+            tid = str(g.grading_type_id)
+            grade_map[(aid, gid, tid)] = g.score
+            graders_by_award.setdefault(aid, set()).add(gid)
+
+        # Grader names
+        grader_map = {}
+        if grades:
+            grader_ids = {str(g.graded_by_id) for g in grades if g.graded_by_id}
+            if grader_ids:
+                graders = User.query.filter(User.id.in_(grader_ids)).all()
+                grader_map = {str(u.id): u.username for u in graders}
+
+        # Fill rows
+        row_num = 2
+        for award in awards:
+            aid = str(award.id)
+            grader_ids = graders_by_award.get(aid, set())
+            if not grader_ids:
+                grader_ids = [None]
+            for gid in sorted(grader_ids):
+                grader_name = grader_map.get(gid, "Unknown") if gid else "No grades"
+                row_values = [
+                    aid,
+                    award.award_number or "N/A",
+                    award.title or "N/A",
+                    award.category.name if award.category else "N/A",
+                    award.cycle.name if award.cycle else "N/A",
+                    award.status.name if award.status else "N/A",
+                    award.created_at.isoformat() if award.created_at else "N/A",
+                    grader_name
+                ]
+                for gt in grading_types:
+                    key = (aid, gid if gid else "Unknown", str(gt.id))
+                    score = grade_map.get(key)
+                    row_values.append(score if score is not None else "N/A")
+
+                for col_num, value in enumerate(row_values, 1):
+                    cell = ws.cell(row=row_num, column=col_num, value=value)
+                    cell.alignment = Alignment(horizontal="left", vertical="center")
+                row_num += 1
+
+        # Auto-adjust widths
+        for column in ws.columns:
+            max_length = 0
+            column_letter = get_column_letter(column[0].column)
+            for cell in column:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(str(cell.value))
+                except:
+                    pass
+            adjusted_width = min(max_length + 2, 50)
+            ws.column_dimensions[column_letter].width = adjusted_width
+
+        ws.freeze_panes = "A2"
+
+        # Convert to bytes and send
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        log_audit_event(
+            event_type="award.grades.export.success",
+            user_id=actor_id,
+            details={
+                "grading_type_id": grading_type_id if grading_type_id else "all",
+                "cycle_filter": cycle_id if cycle_id else "all",
+                "awards_count": len(awards)
+            },
+            ip_address=request.remote_addr
+        )
+
+        return send_file(
+            output,
+            download_name=f"awards_grades_{uuid.uuid4().hex[:8]}.xlsx",
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+
+    except Exception as exc:
+        current_app.logger.exception("Error exporting awards with grades")
+        error_msg = f"System error occurred while exporting awards with grades: {str(exc)}"
+        log_audit_event(
+            event_type="award.grades.export.failed",
+            user_id=actor_id,
+            details={"error": error_msg, "exception_type": type(exc).__name__, "exception_message": str(exc)},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 500
 
 
 

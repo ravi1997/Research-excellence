@@ -1070,7 +1070,7 @@
             updateVerifyActionBtns('ACCEPTED');
         } catch (e) {
             logError(`Failed to accept award ${awardId}:`, e);
-            toast('Failed to accept award: ' + (e.message || 'Unknown error'), 'error');
+            // toast('Failed to accept award: ' + (e.message || 'Unknown error'), 'error');
         }
     }
     
