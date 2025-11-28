@@ -12,7 +12,7 @@ from typing import Dict, Optional, Tuple
 
 from flask import request, jsonify, current_app
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
-from sqlalchemy import or_
+from sqlalchemy import or_, and_
 
 from app.extensions import db
 from app.models.Cycle import (
@@ -21,6 +21,9 @@ from app.models.Cycle import (
     Author,
     Category,
     Cycle,
+    GradingType,
+    Grading,
+    GradingFor,
 )
 from app.models.Token import Token
 from app.models.User import User
@@ -2158,4 +2161,230 @@ def export_abstracts_with_pdfs():
             details={"error": error_msg, "exception_type": type(exc).__name__, "exception_message": str(exc)},
             ip_address=request.remote_addr
         )
-        return jsonify({"error": error_msg}), 400
+
+
+@research_bp.route('/abstracts/export-with-grades', methods=['GET'])
+@jwt_required()
+@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value, Role.COORDINATOR.value)
+def export_abstracts_with_grades():
+    """Export abstracts with their grades to Excel.
+    
+    Query Parameters (all optional):
+    - grading_type_id: Filter by specific grading type UUID (if not provided, includes all grading types)
+    - cycle_id: Filter by specific cycle UUID (if not provided, includes all cycles)
+    
+    Returns Excel file with abstract data and grade statistics for the specified/all grading types.
+    """
+    actor_id, context = _resolve_actor_context("export_abstracts_with_grades")
+    try:
+        grading_type_id = request.args.get('grading_type_id', '').strip()
+        cycle_id = request.args.get('cycle_id', '').strip()
+        
+        # Validate grading_type_id if provided
+        if grading_type_id:
+            try:
+                uuid.UUID(grading_type_id)
+            except ValueError:
+                error_msg = f"Validation failed: Invalid grading_type_id '{grading_type_id}'"
+                log_audit_event(
+                    event_type="abstract.grades.export.failed",
+                    user_id=actor_id,
+                    details={"error": error_msg},
+                    ip_address=request.remote_addr
+                )
+                return jsonify({"error": error_msg}), 400
+            
+            # Get grading type
+            grading_type = GradingType.query.get(grading_type_id)
+            if not grading_type:
+                error_msg = f"Resource not found: Grading type with ID {grading_type_id} does not exist"
+                log_audit_event(
+                    event_type="abstract.grades.export.failed",
+                    user_id=actor_id,
+                    details={"error": error_msg, "grading_type_id": grading_type_id},
+                    ip_address=request.remote_addr
+                )
+                return jsonify({"error": error_msg}), 404
+        
+        # Validate cycle_id if provided
+        if cycle_id:
+            try:
+                uuid.UUID(cycle_id)
+            except ValueError:
+                cycle_id = ''  # Invalid cycle_id, ignore it
+        
+        # Get all abstracts with all their grading data
+        all_abstracts = abstract_utils.list_abstracts(
+            actor_id=actor_id,
+            context=context
+        )
+        
+        # For coordinator, filter by their categories
+        user = User.query.get(actor_id)
+        if user and user.has_role(Role.COORDINATOR.value):
+            cat_ids = [c.id for c in user.categories if c is not None]
+            if cat_ids:
+                all_abstracts = [a for a in all_abstracts if a.category_id in cat_ids]
+        
+        # Filter by cycle if provided
+        if cycle_id:
+            all_abstracts = [a for a in all_abstracts if str(a.cycle_id) == cycle_id]
+        
+        # Build grading type columns: only those with grading_for == ABSTRACT
+        grading_types = GradingType.query.filter(GradingType.grading_for == GradingFor.ABSTRACT).order_by(GradingType.criteria).all()
+
+        # Create Excel workbook and sheet
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Abstract Grades"
+
+        # Sheet name for filenames/logging
+        if grading_type_id and 'grading_type' in locals():
+            sheet_name = grading_type.criteria
+        else:
+            sheet_name = "All Grading Types"
+
+        # Base headers
+        base_headers = [
+            "Abstract ID", "Abstract Number", "Title", "Category", "Cycle",
+            "Status", "Created At", "Graded By"
+        ]
+
+        # Dynamic grading type headers (criteria text)
+        gt_headers = [gt.criteria for gt in grading_types]
+
+        headers = base_headers + gt_headers
+
+        # Add headers to worksheet
+        for col_num, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col_num, value=header)
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+
+        # Prepare bulk grades query to avoid N+1: get all relevant grades with grader info
+        abstract_ids = [a.id for a in all_abstracts]
+        gt_ids = [gt.id for gt in grading_types]
+
+        grades = []
+        if abstract_ids and gt_ids:
+            grades = Grading.query.filter(
+                Grading.abstract_id.in_(abstract_ids),
+                Grading.grading_type_id.in_(gt_ids)
+            ).all()
+
+        # Map (abstract_id, graded_by_id, grading_type_id) -> score
+        # Collect unique grader set per abstract
+        graders_by_abstract = {}
+        grade_map = {}
+        
+        for g in grades:
+            abs_id = str(g.abstract_id)
+            grader_id = str(g.graded_by_id) if g.graded_by_id else "Unknown"
+            gt_id = str(g.grading_type_id)
+            
+            # Track all graders for this abstract
+            if abs_id not in graders_by_abstract:
+                graders_by_abstract[abs_id] = set()
+            graders_by_abstract[abs_id].add(grader_id)
+            
+            # Store score keyed by (abstract_id, grader_id, grading_type_id)
+            key = (abs_id, grader_id, gt_id)
+            grade_map[key] = g.score
+
+        # Get grader details (username) for display
+        grader_map = {}
+        if grades:
+            grader_ids = {str(g.graded_by_id) for g in grades if g.graded_by_id}
+            if grader_ids:
+                graders = User.query.filter(User.id.in_(grader_ids)).all()
+                grader_map = {str(u.id): u.username for u in graders}
+
+        # Fill rows: one row per (abstract, grader) combination
+        row_num = 2
+        for abstract in all_abstracts:
+            abs_id = str(abstract.id)
+            grader_ids_for_abstract = graders_by_abstract.get(abs_id, set())
+            
+            # If no graders, still show one row for the abstract
+            if not grader_ids_for_abstract:
+                grader_ids_for_abstract = [None]
+            
+            for grader_id in sorted(grader_ids_for_abstract):
+                grader_name = grader_map.get(grader_id, "Unknown") if grader_id else "No grades"
+                
+                row_values = [
+                    str(abstract.id),
+                    abstract.abstract_number,
+                    abstract.title,
+                    abstract.category.name if abstract.category else "N/A",
+                    abstract.cycle.name if abstract.cycle else "N/A",
+                    abstract.status.name if abstract.status else "N/A",
+                    abstract.created_at.isoformat() if abstract.created_at else "N/A",
+                    grader_name
+                ]
+
+                # For each grading type column, show this grader's score (or 'N/A')
+                for gt in grading_types:
+                    gt_id = str(gt.id)
+                    key = (abs_id, grader_id if grader_id else "Unknown", gt_id)
+                    score = grade_map.get(key)
+                    row_values.append(score if score is not None else "N/A")
+
+                # Write row to sheet
+                for col_num, value in enumerate(row_values, 1):
+                    cell = ws.cell(row=row_num, column=col_num, value=value)
+                    cell.alignment = Alignment(horizontal="left", vertical="center")
+                
+                row_num += 1
+        
+        # Auto-adjust column widths
+        for column in ws.columns:
+            max_length = 0
+            column_letter = get_column_letter(column[0].column)
+            for cell in column:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(str(cell.value))
+                except:
+                    pass
+            adjusted_width = min(max_length + 2, 50)
+            ws.column_dimensions[column_letter].width = adjusted_width
+        
+        # Freeze header row
+        ws.freeze_panes = "A2"
+        
+        # Convert to bytes
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
+        
+        # Log successful export
+        log_audit_event(
+            event_type="abstract.grades.export.success",
+            user_id=actor_id,
+            details={
+                "grading_type_id": grading_type_id if grading_type_id else "all",
+                "grading_criteria": sheet_name,
+                "cycle_filter": cycle_id if cycle_id else "all",
+                "abstracts_count": len(all_abstracts)
+            },
+            ip_address=request.remote_addr
+        )
+        
+        return send_file(
+            output,
+            download_name=f"abstracts_grades_{sheet_name.replace(' ', '_')}_{uuid.uuid4().hex[:8]}.xlsx",
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        
+    except Exception as exc:
+        current_app.logger.exception("Error exporting abstracts with grades")
+        error_msg = f"System error occurred while exporting abstracts with grades: {str(exc)}"
+        log_audit_event(
+            event_type="abstract.grades.export.failed",
+            user_id=actor_id,
+            details={"error": error_msg, "exception_type": type(exc).__name__, "exception_message": str(exc)},
+            ip_address=request.remote_addr
+        )
+        return jsonify({"error": error_msg}), 500

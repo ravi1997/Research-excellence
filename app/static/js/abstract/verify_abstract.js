@@ -1020,7 +1020,7 @@
             updateVerifyActionBtns('ACCEPTED');
         } catch (e) {
             logError(`Failed to accept abstract ${abstractId}:`, e);
-            toast('Failed to accept abstract: ' + (e.message || 'Unknown error'), 'error');
+            // toast('Failed to accept abstract: ' + (e.message || 'Unknown error'), 'error');
         }
     }
     

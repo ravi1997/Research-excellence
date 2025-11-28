@@ -1417,7 +1417,7 @@ def get_awards_for_verifier(user_id):
 
 @research_bp.route('/awards/bulk-assign-verifiers', methods=['POST'])
 @jwt_required()
-@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
+@require_roles(Role.COORDINATOR.value, Role.ADMIN.value, Role.SUPERADMIN.value)
 def bulk_assign_verifiers_to_awards():
     """Bulk assign verifiers to multiple awards."""
     current_user_id = get_jwt_identity()
@@ -1525,7 +1525,7 @@ def bulk_assign_verifiers_to_awards():
 
 @research_bp.route('/awards/bulk-unassign-verifiers', methods=['POST'])
 @jwt_required()
-@require_roles(Role.ADMIN.value, Role.SUPERADMIN.value)
+@require_roles(Role.COORDINATOR.value, Role.ADMIN.value, Role.SUPERADMIN.value)
 def bulk_unassign_verifiers_from_awards():
     """Bulk unassign verifiers from multiple awards."""
     current_user_id = get_jwt_identity()

@@ -7,6 +7,7 @@
   const phaseFilter = document.getElementById("phaseFilter");
   const statusFilter = document.getElementById("statusFilter");
   const refreshButton = document.getElementById("refreshButton");
+  const exportButton = document.getElementById("exportButton");
   const abstractList = document.getElementById("abstractList");
   const abstractCount = document.getElementById("abstractCount");
   const gradingPanel = document.getElementById("gradingPanel");
@@ -71,6 +72,7 @@
     });
 
     refreshButton?.addEventListener("click", () => fetchAbstracts());
+    exportButton?.addEventListener("click", () => exportAbstracts());
 
     prevPageBtn?.addEventListener("click", () => {
       if (state.page > 1) {
@@ -166,6 +168,30 @@
       state.isLoading = false;
     }
   }
+
+  async function exportAbstracts() {
+
+    const response = await fetch(`${BASE}/api/v1/research/abstracts/export-with-grades`, {
+      method: 'GET',
+      headers: authHeaders()
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to load abstracts ${response.status}`);
+    }
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = 'abstracts_with_gradings.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+
+  }
+
 
   function renderAbstracts() {
     if (!abstractList) return;
@@ -367,7 +393,7 @@
           ${escapeHtml(label)}
         </th>`
       )
-      .join("");
+      .join("") + `<th class="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Total</th>`;
 
     const bodyRows = rows.length
       ? rows
@@ -399,13 +425,26 @@
                 </td>`;
               })
               .join("");
-            return `
+
+            // Calculate total numeric score for this row (sum of available numeric scores)
+            let total = 0;
+            let hasNumeric = false;
+            for (const criteria of columns) {
+              const grade = row.grades.get(criteria);
+              if (grade && typeof grade.score === 'number') {
+                total += Number(grade.score);
+                hasNumeric = true;
+              }
+            }
+            const totalCell = `<td class="px-3 py-3 align-top text-sm"><div class="font-semibold">${hasNumeric ? escapeHtml(String(total)) : "—"}</div></td>`;
+                return `
               <tr class="border-t border-gray-100 dark:border-gray-800">
                 <td class="px-3 py-3 align-top text-sm">
                   <p class="font-semibold text-gray-900 dark:text-white">${escapeHtml(verifierName)}</p>
                   ${verifierDetail ? `<p class="text-xs text-gray-500 dark:text-gray-400">${escapeHtml(verifierDetail)}</p>` : ""}
                 </td>
                 ${cells}
+                ${totalCell}
               </tr>
             `;
           })
